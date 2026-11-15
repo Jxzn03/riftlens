@@ -11,6 +11,7 @@ import com.leaguetool.draft.DraftAnalyzer.PairResult;
 import com.leaguetool.draft.DraftAnalyzer.Result;
 import com.leaguetool.draft.DraftAnalyzer.Suggestion;
 import com.leaguetool.draft.DraftDataLoader;
+import com.leaguetool.draft.DraftDataset;
 import com.leaguetool.draft.DraftDataset.Pick;
 import com.leaguetool.draft.DraftDataset.Stat;
 import com.leaguetool.draft.RolePredictor.Prediction;
@@ -89,7 +90,8 @@ final class DraftEndpoint {
                 "patch", loaded.patch(),
                 "side", forEnemy ? "enemy" : "ally",
                 "minGames", minGames,
-                "slots", Dto.obj("ally", slotResults(ally, loaded.allyRoles()), "enemy", slotResults(enemy, loaded.enemyRoles())),
+                "slots", Dto.obj("ally", slotResults(ally, loaded.allyRoles(), loaded.dataset()),
+                        "enemy", slotResults(enemy, loaded.enemyRoles(), loaded.dataset())),
                 "analysis", analysis(analyzer.analyze(allyTeam, enemyTeam)),
                 "profiles", Dto.obj(
                         "ally", profile(allyTeam, loaded, config),
@@ -177,13 +179,22 @@ final class DraftEndpoint {
 
     // ------------------------------------------------------------------ Antwort
 
-    private static List<Map<String, Object>> slotResults(List<Slot> slots, Prediction prediction) {
+    /**
+     * Je Slot die verwendete Rolle, ob sie automatisch gewählt wurde, die Wahrscheinlichkeit der Zuteilung und der
+     * Anteil der Spiele des Champions je Rolle (30 Tage) für die Rollenauswahl.
+     */
+    private static List<Map<String, Object>> slotResults(List<Slot> slots, Prediction prediction, DraftDataset dataset) {
         return slots.stream().map(slot -> {
             Map<String, Double> probabilities = new LinkedHashMap<>();
             prediction.probabilities().getOrDefault(slot.champion(), Map.of())
                     .forEach((role, value) -> probabilities.put(role.name(), value));
+            double total = Arrays.stream(Role.values()).mapToDouble(r -> dataset.full(new Pick(slot.champion(), r)).games()).sum();
+            Map<String, Double> shares = new LinkedHashMap<>();
+            for (Role role : Role.values()) {
+                shares.put(role.name(), total > 0 ? dataset.full(new Pick(slot.champion(), role)).games() / total : 0);
+            }
             return Dto.obj("champion", slot.champion(), "role", prediction.roles().get(slot.champion()).name(),
-                    "probabilities", probabilities);
+                    "auto", slot.forcedRole() == null, "probabilities", probabilities, "shares", shares);
         }).toList();
     }
 

@@ -1,7 +1,7 @@
 // Draft-Assistent: Eingabe der Picks und Bans, die fünf besten nächsten Picks und die Gesamteinschätzung.
 import { html, useState, useEffect, useMemo, useRef } from '/vendor/htm-preact.js';
-import { useStore, useViewState, useSourceLabel, api, normalize, percent } from './core.js';
-import { Icon, Img, Button, Select, Segmented, Switch, Card, Empty, ErrorNote, Loading, Tag } from './ui.js';
+import { store, useStore, useViewState, useSourceLabel, api, normalize, percent, sortRows, activeSort } from './core.js';
+import { Icon, Img, Button, Select, Segmented, Switch, Card, Empty, ErrorNote, Loading, Tag, Spinner } from './ui.js';
 
 const ROLES = [
   { value: 'TOP', label: 'Top' }, { value: 'JUNGLE', label: 'Jungle' }, { value: 'MIDDLE', label: 'Mid' },
@@ -14,8 +14,8 @@ const TOP_PICKS = 5;
 const MAX_TABLE_ROWS = 40;
 
 const RISKS = [
-  { value: 'VERY_LOW', label: 'Sehr niedrig (3000)' }, { value: 'LOW', label: 'Niedrig (2000)' },
-  { value: 'MEDIUM', label: 'Mittel (1000)' }, { value: 'HIGH', label: 'Hoch (500)' }, { value: 'VERY_HIGH', label: 'Sehr hoch (250)' },
+  { value: 'VERY_LOW', label: 'Sehr niedrig (×3)' }, { value: 'LOW', label: 'Niedrig (×2)' },
+  { value: 'MEDIUM', label: 'Mittel (×1)' }, { value: 'HIGH', label: 'Hoch (×½)' }, { value: 'VERY_HIGH', label: 'Sehr hoch (×¼)' },
 ];
 const AUTO_MIN_GAMES = 'auto';
 const MIN_GAMES = [0, 1000, 2500, 4300, 10000, 25000].map((n) => ({ value: String(n), label: `ab ${n.toLocaleString('de-DE')} Spiele` }));
@@ -65,12 +65,86 @@ function useDraftResult(view, dataSource) {
   return state;
 }
 
+/**
+ * Abgleich mit dem League-Client (nur lesend, im Backend). Ändert sich die Champion-Auswahl, werden Picks, Bans und die
+ * eigenen Rollen übernommen. Eine von Hand geänderte Rolle eines schon übernommenen Champions bleibt erhalten.
+ */
+function useClientSync(view, setView, data) {
+  const lcu = useStore((s) => s.lcu);
+  useEffect(() => {
+    // Anfangszustand einmal holen, danach kommen Änderungen als Ereignis.
+    api.get('/api/lcu').then((state) => store.set({ lcu: state })).catch(() => {});
+  }, []);
+  const applied = useRef(null);
+  const champSelect = lcu && lcu.status === 'CHAMP_SELECT' ? lcu.champSelect : null;
+  const signature = champSelect ? JSON.stringify([champSelect.gameId, champSelect.ally.map((m) => [m.champion, m.role]),
+    champSelect.enemy.map((m) => m.champion), champSelect.bans]) : null;
+  useEffect(() => {
+    if (!champSelect || !data || signature === applied.current) {
+      return;
+    }
+    const sameGame = applied.current !== null && JSON.parse(applied.current)[0] === champSelect.gameId;
+    applied.current = signature;
+    const known = (key) => data.championByKey.has(key);
+    const toSlots = (members, previous) => {
+      const slots = Array(TEAM_SIZE).fill(null);
+      const taken = new Set();
+      members.slice(0, TEAM_SIZE).forEach((m, i) => {
+        if (!m.champion || !known(m.champion)) {
+          return;
+        }
+        const before = sameGame ? previous.find((s) => s && s.champion === m.champion) : null;
+        let role = before ? before.role : m.role || null;
+        // Eine Rolle darf nur einmal fest vergeben sein; sonst wird der spätere Platz automatisch zugeteilt.
+        if (role && taken.has(role)) {
+          role = null;
+        }
+        if (role) {
+          taken.add(role);
+        }
+        slots[i] = { champion: m.champion, role };
+      });
+      return slots;
+    };
+    setView({
+      ally: toSlots(champSelect.ally, view.ally), enemy: toSlots(champSelect.enemy, view.enemy),
+      bans: champSelect.bans.filter(known).slice(0, MAX_BANS), picker: null,
+    });
+  }, [signature, data]);
+  const toggle = (enabled) => api.post('/api/lcu', { enabled }).then((state) => store.set({ lcu: state }))
+    .catch((error) => store.set({ lcu: { status: 'UNREACHABLE', message: error.message, pickable: [] } }));
+  return { lcu, champSelect, toggle };
+}
+
+const CLIENT_STATUS = {
+  CONNECTING: 'Suche den League-Client …',
+  NO_CLIENT: 'League-Client nicht gefunden',
+  IDLE: 'Verbunden, wartet auf die Champion-Auswahl',
+  CHAMP_SELECT: 'Champion-Auswahl wird übernommen',
+};
+
+function ClientSync({ lcu, onToggle }) {
+  const enabled = Boolean(lcu) && lcu.status !== 'OFF';
+  const text = enabled ? CLIENT_STATUS[lcu.status] || lcu.message : '';
+  return html`<div class="draft-client">
+    <${Switch} checked=${enabled} onChange=${onToggle}
+      tip="Liest während der Champion-Auswahl Picks, Bans und eure Rollen aus dem League-Client (nur lesend, wie DraftGap). Keine Namen, keine Aktionen im Client.">Mit League-Client abgleichen<//>
+    ${text ? html`<span class=${`small draft-client-status ${lcu.status === 'CHAMP_SELECT' ? 'live' : 'muted'}`}>${text}</span>` : null}
+  </div>`;
+}
+
 export function DraftView() {
   const data = useStore((s) => s.data);
   const dataSource = useStore((s) => s.dataSource);
   const [view, setView] = useViewState('draft', DEFAULTS);
   const { result, error, loading, requestId } = useDraftResult(view, dataSource);
   const sourceLabel = useSourceLabel();
+  const client = useClientSync(view, setView, data);
+  const owned = useMemo(() => new Set(client.champSelect ? client.lcu.pickable : []), [client.champSelect, client.lcu]);
+  const hints = useMemo(() => {
+    const cs = client.champSelect;
+    return cs ? { ally: cs.ally.map((m) => m), enemy: cs.enemy.map((m) => m) } : { ally: [], enemy: [] };
+  }, [client.champSelect]);
 
   const used = useMemo(() => new Set([...view.ally, ...view.enemy].filter(Boolean).map((s) => s.champion).concat(view.bans)),
     [view.ally, view.enemy, view.bans]);
@@ -85,7 +159,16 @@ export function DraftView() {
     }
   };
 
+  // Pick, dessen Rolle gerade geändert wurde: Er zeigt einen Spinner, bis seine Daten nachgeladen sind.
+  const [pendingRole, setPendingRole] = useState(null);
+  useEffect(() => {
+    if (!loading) {
+      setPendingRole(null);
+    }
+  }, [loading]);
+
   const setSlotRole = (teamName, index, role) => {
+    setPendingRole(`${teamName}:${view[teamName][index].champion}`);
     // Eine fest vergebene Rolle wandert: Der bisherige Champion dieser Rolle wird wieder automatisch zugeteilt.
     const team = view[teamName].map((slot, i) => {
       if (i === index) {
@@ -120,7 +203,7 @@ export function DraftView() {
 
   return html`<div class="page draft">
     <section class="draft-board">
-      <${TeamColumn} title="Dein Team" team="ally" slots=${view.ally} result=${result} data=${data}
+      <${TeamColumn} title="Dein Team" team="ally" slots=${view.ally} result=${result} data=${data} pending=${pendingRole} hints=${hints.ally}
         onPick=${(index) => setView({ picker: { team: 'ally', index } })} onRole=${setSlotRole} onClear=${clearSlot} />
       <div class="draft-center">
         <${WinPanel} analysis=${result?.analysis} picks=${picks} loading=${loading} />
@@ -130,8 +213,9 @@ export function DraftView() {
           <${Button} icon="trash" onClick=${reset} disabled=${picks === 0 && view.bans.length === 0}>Draft leeren<//>
           <span class="muted small">${sourceLabel}</span>
         </div>
+        <${ClientSync} lcu=${client.lcu} onToggle=${client.toggle} />
       </div>
-      <${TeamColumn} title="Gegner" team="enemy" slots=${view.enemy} result=${result} data=${data}
+      <${TeamColumn} title="Gegner" team="enemy" slots=${view.enemy} result=${result} data=${data} pending=${pendingRole} hints=${hints.enemy}
         onPick=${(index) => setView({ picker: { team: 'enemy', index } })} onRole=${setSlotRole} onClear=${clearSlot} />
     </section>
 
@@ -145,7 +229,7 @@ export function DraftView() {
       <${Segmented} label="Bereich" value=${view.tab} onChange=${(tab) => setView({ tab })}
         options=${[{ value: 'picks', label: 'Beste Picks' }, { value: 'analysis', label: 'Draft-Analyse' }]} />
       <div class="draft-options">
-        <label class="draft-option" data-tip="Wie stark kleine Stichproben zur Erwartung gezogen werden; in Klammern die Spiele des Priors">
+        <label class="draft-option" data-tip="Wie stark kleine Stichproben zur Erwartung gezogen werden. Die Prior-Spiele je Rollenpaar kommen aus der gemessenen Streuung (Lane-Matchup etwa 700, Duo Top+Mid etwa 14.000); der Faktor vervielfacht sie. Mittel entspricht der Stärke von DraftGap bei Champions.">
           <span class="muted small">Risiko</span>
           <${Select} label="Risiko" value=${view.risk} options=${RISKS} onChange=${(risk) => setView({ risk })} />
         </label>
@@ -161,7 +245,7 @@ export function DraftView() {
 
     ${!result ? (loading ? null : html`<${Empty} title="Noch keine Daten" />`)
       : view.tab === 'picks'
-        ? html`<${Suggestions} result=${result} data=${data} view=${view} setView=${setView} onTake=${takeSuggestion} busy=${loading} />`
+        ? html`<${Suggestions} result=${result} data=${data} view=${view} setView=${setView} onTake=${takeSuggestion} busy=${loading} owned=${owned} />`
         : html`<${Analysis} result=${result} data=${data} picks=${picks} />`}
 
     ${view.picker ? html`<${ChampionPicker} data=${data} used=${used}
@@ -180,29 +264,89 @@ function ProgressNote({ requestId }) {
 
 // ------------------------------------------------------------------ Eingabe
 
-function TeamColumn({ title, team, slots, result, data, onPick, onRole, onClear }) {
+const sharePercent = (share) => (share > 0 && share < 0.005 ? '<1 %' : `${Math.round((share || 0) * 100)} %`);
+
+/**
+ * Rolle eines Picks: Ohne Vorgabe gilt die häufigste Rolle des Champions (bei Doppelbelegung die wahrscheinlichste
+ * Verteilung im Team). Ein Klick öffnet die Auswahl; danach lädt nur dieser Pick seine Daten neu.
+ */
+function RolePicker({ champion, slot, prediction, shares, pending, onChoose }) {
+  const [open, setOpen] = useState(false);
+  const box = useRef();
+  useEffect(() => {
+    if (!open) {
+      return undefined;
+    }
+    const outside = (e) => !box.current?.contains(e.target) && setOpen(false);
+    const escape = (e) => e.key === 'Escape' && setOpen(false);
+    document.addEventListener('pointerdown', outside);
+    document.addEventListener('keydown', escape);
+    return () => {
+      document.removeEventListener('pointerdown', outside);
+      document.removeEventListener('keydown', escape);
+    };
+  }, [open]);
+
+  const auto = !slot.role;
+  const role = slot.role || prediction?.role || null;
+  const choose = (value) => {
+    setOpen(false);
+    if (value !== (slot.role || '')) {
+      onChoose(value);
+    }
+  };
+  const tip = !role ? 'Rolle wird ermittelt'
+    : auto ? `Automatisch: ${roleLabel(role)}${shares ? `, ${sharePercent(shares[role])} der Spiele` : ''}. Klicken, um eine andere Rolle zu wählen.`
+      : `Fest gewählt: ${roleLabel(role)}. Klicken zum Ändern.`;
+  return html`<div class="draft-role" ref=${box}>
+    <button type="button" class=${`draft-role-chip ${auto ? 'auto' : 'fixed'}`} aria-haspopup="menu" aria-expanded=${open}
+      aria-label=${`Rolle von ${champion.name}: ${role ? roleLabel(role) : 'wird ermittelt'}${auto ? ', automatisch' : ''}`}
+      data-tip=${open ? undefined : tip} onClick=${() => setOpen(!open)}>
+      ${pending ? html`<${Spinner} small />` : null}
+      <span>${role ? roleLabel(role) : '…'}</span>
+      ${auto && role ? html`<span class="draft-role-auto">Auto</span>` : null}
+      <span class="draft-role-caret" aria-hidden="true">▾</span>
+    </button>
+    ${open ? html`<div class="draft-role-menu" role="menu" aria-label=${`Rolle von ${champion.name}`}>
+      ${ROLES.map((r) => html`<button type="button" key=${r.value} role="menuitemradio" aria-checked=${role === r.value}
+        class=${`${role === r.value ? 'active' : ''} ${shares && shares[r.value] < 0.02 ? 'rare' : ''}`}
+        onClick=${() => choose(r.value)}>
+        <span>${r.label}</span>${shares ? html`<span class="small">${sharePercent(shares[r.value])}</span>` : null}
+      </button>`)}
+      ${!auto ? html`<button type="button" role="menuitem" class="draft-role-reset" onClick=${() => choose('')}>Automatisch</button>` : null}
+    </div>` : null}
+  </div>`;
+}
+
+function TeamColumn({ title, team, slots, result, data, pending, hints = [], onPick, onRole, onClear }) {
   const predicted = new Map((result?.slots[team] || []).map((s) => [s.champion, s]));
   return html`<section class=${`draft-team ${team}`}>
     <h3>${title}</h3>
     ${slots.map((slot, index) => {
       if (!slot) {
-        return html`<button type="button" key=${index} class="draft-slot empty-slot" onClick=${() => onPick(index)}>
-          <span class="draft-plus"><${Icon} name="plus" size=${18} /></span><span class="muted">Champion wählen</span>
+        // Aus dem Client: Ansage oder Hover eines eigenen Mitspielers, der noch nicht gesperrt hat.
+        const hint = hints[index];
+        const intent = hint && hint.intent ? data.championByKey.get(hint.intent) : null;
+        const label = intent ? `${hint.picking ? 'Zeigt' : 'Ansage'}: ${intent.name}`
+          : hint && hint.picking ? 'Wählt gerade …' : 'Champion wählen';
+        return html`<button type="button" key=${index} class=${`draft-slot empty-slot ${hint && hint.picking ? 'picking' : ''}`}
+          onClick=${() => onPick(index)} data-tip=${intent ? 'Noch nicht gesperrt, zählt nicht zur Analyse' : undefined}>
+          ${intent ? html`<span class="draft-intent"><${Img} src=${intent.icon} size=${40} /></span>`
+            : html`<span class="draft-plus"><${Icon} name="plus" size=${18} /></span>`}
+          <span class="muted">${label}</span>
+          ${hint && hint.local ? html`<${Tag} kind="soft">Du<//>` : null}
         </button>`;
       }
       const champion = data.championByKey.get(slot.champion);
+      // Die Antwort kann noch zum vorherigen Draft gehören: nur verwenden, wenn sie die gewählte Rolle schon kennt.
       const prediction = predicted.get(slot.champion);
-      const share = prediction && !slot.role ? prediction.probabilities[prediction.role] : null;
-      // Bei automatischer Rolle die Vorhersage zeigen; eine fest gewählte Rolle steht ohne Prozentwert in der Liste.
-      const autoLabel = prediction && !slot.role
-        ? `${roleLabel(prediction.role)}${share !== undefined && share !== null ? ` · ${Math.round(share * 100)} %` : ''}`
-        : 'Auto';
+      const current = prediction && (!slot.role || prediction.role === slot.role) ? prediction : null;
       return html`<div key=${index} class="draft-slot">
         <button type="button" class="draft-slot-champion" onClick=${() => onPick(index)} data-tip="Champion ändern">
           <${Img} src=${champion.icon} size=${40} /><span class="draft-name">${champion.name}</span>
         </button>
-        <${Select} label=${`Rolle von ${champion.name}`} cls="draft-role" value=${slot.role || ''}
-          options=${[{ value: '', label: autoLabel }, ...ROLES]} onChange=${(role) => onRole(team, index, role)} />
+        <${RolePicker} champion=${champion} slot=${slot} prediction=${current} shares=${prediction?.shares}
+          pending=${pending === `${team}:${slot.champion}`} onChoose=${(role) => onRole(team, index, role)} />
         <${Button} icon="x" kind="icon" title=${`${champion.name} entfernen`} onClick=${() => onClear(team, index)} />
       </div>`;
     })}
@@ -309,12 +453,45 @@ function Part({ label, rating, tip }) {
 
 // ------------------------------------------------------------------ Vorschläge
 
-function Suggestions({ result, data, view, setView, onTake, busy }) {
+/** Spalten der Tabelle „Weitere Picks“; Klick auf den Kopf sortiert, Zahlen zuerst absteigend. */
+function suggestionColumns(data) {
+  return [
+    { key: 'rank', title: '#', firstDir: 1, tip: 'Rang in der Gesamtwertung', value: (s) => s.rank },
+    { key: 'name', title: 'Champion', firstDir: 1, value: (s) => data.championByKey.get(s.champion)?.name ?? String(s.champion) },
+    { key: 'role', title: 'Rolle', firstDir: 1, value: (s) => ROLES.findIndex((r) => r.value === s.role) },
+    { key: 'winRate', title: 'Team-WR', tip: 'Winrate des Teams mit diesem Pick', value: (s) => s.winRate },
+    { key: 'delta', title: 'Δ', tip: 'Änderung gegenüber dem Draft ohne diesen Pick', value: (s) => s.delta },
+    { key: 'championRating', title: 'Champion', tip: 'Beitrag der Champion-Stärke', value: (s) => s.championRating },
+    { key: 'duoRating', title: 'Duos', tip: 'Beitrag der Synergien mit dem eigenen Team', value: (s) => s.duoRating },
+    { key: 'matchupRating', title: 'Matchups', tip: 'Beitrag der Matchups gegen den Gegner', value: (s) => s.matchupRating },
+    { key: 'games', title: 'Spiele', tip: 'Spiele auf dieser Rolle in den letzten 30 Tagen', value: (s) => s.games },
+  ];
+}
+
+function Suggestions({ result, data, view, setView, onTake, busy, owned }) {
   const openRoles = ROLES.filter((r) => result.openRoles.includes(r.value));
   const role = view.role && result.openRoles.includes(view.role) ? view.role : '';
-  const rows = useMemo(() => (role ? result.suggestions.filter((s) => s.role === role) : result.suggestions), [result, role]);
+  // Aus dem Client bekannt, welche Champions der eigene Account spielen darf; gilt nur für Vorschläge ans eigene Team.
+  const canFilterOwned = owned.size > 0 && result.side === 'ally';
+  const ownedOnly = canFilterOwned && view.ownedOnly !== false;
+  const rows = useMemo(() => result.suggestions.filter((s) => (!role || s.role === role) && (!ownedOnly || owned.has(s.champion))),
+    [result, role, ownedOnly, owned]);
   const top = rows.slice(0, TOP_PICKS);
-  const rest = rows.slice(TOP_PICKS, TOP_PICKS + MAX_TABLE_ROWS);
+  const columns = useMemo(() => suggestionColumns(data), [data]);
+  const sort = activeSort(columns, { key: view.restSort || 'rank', dir: view.restDir || 1 });
+  // Sortiert werden alle übrigen Vorschläge, angezeigt die ersten; der Rang bleibt der aus der Gesamtwertung.
+  const rest = useMemo(() => sortRows(rows.slice(TOP_PICKS).map((s, i) => ({ ...s, rank: i + TOP_PICKS + 1 })), columns, sort)
+    .slice(0, MAX_TABLE_ROWS), [rows, columns, sort.key, sort.dir]);
+  const headCell = (column) => {
+    const active = sort.key === column.key;
+    const next = active ? -sort.dir : (column.firstDir || -1);
+    return html`<th key=${column.key} aria-sort=${active ? (sort.dir === 1 ? 'ascending' : 'descending') : 'none'}>
+      <button type="button" class=${`sort-head ${active ? 'active' : ''}`} data-tip=${column.tip}
+        onClick=${() => setView({ restSort: column.key, restDir: next })}>
+        <span>${column.title}</span>${active ? html`<${Icon} name=${sort.dir === 1 ? 'up' : 'down'} size=${12} />` : null}
+      </button>
+    </th>`;
+  };
   const sideText = result.side === 'ally' ? 'dein Team' : 'den Gegner';
   const baseText = result.side === 'ally' ? 'deines Teams' : 'des Gegners';
 
@@ -324,6 +501,8 @@ function Suggestions({ result, data, view, setView, onTake, busy }) {
         options=${[{ value: 'ally', label: 'Für mein Team' }, { value: 'enemy', label: 'Für den Gegner' }]} />
       <${Segmented} label="Rolle" value=${role} onChange=${(value) => setView({ role: value })}
         options=${[{ value: '', label: 'Alle offenen' }, ...openRoles]} />
+      ${canFilterOwned ? html`<${Switch} checked=${ownedOnly} onChange=${(value) => setView({ ownedOnly: value })}
+        tip="Laut League-Client in dieser Auswahl spielbar (eigene und kostenlose Champions)">Nur spielbare Champions<//>` : null}
     </div>
     ${rows.length === 0 ? html`<${Empty} title="Keine Vorschläge">
       ${result.openRoles.length === 0 ? 'Dieses Team ist vollständig.' : 'Senke die Mindestspiele oder wähle eine andere Rolle.'}<//>` : html`
@@ -333,14 +512,11 @@ function Suggestions({ result, data, view, setView, onTake, busy }) {
       </div>
       ${rest.length ? html`<${Card} title="Weitere Picks">
         <div class="grid-scroll"><table class="data draft-table">
-          <thead><tr>
-            <th>#</th><th>Champion</th><th>Rolle</th><th data-tip="Winrate des Teams mit diesem Pick">Team-WR</th><th data-tip="Änderung gegenüber dem Draft ohne diesen Pick">Δ</th>
-            <th>Champion</th><th>Duos</th><th>Matchups</th><th>Spiele</th>
-          </tr></thead>
-          <tbody>${rest.map((s, i) => {
+          <thead><tr>${columns.map(headCell)}</tr></thead>
+          <tbody>${rest.map((s) => {
             const champion = data.championByKey.get(s.champion);
             return html`<tr key=${`${s.champion}-${s.role}`} class="draft-row" onClick=${() => onTake(s)} data-tip="Pick übernehmen">
-              <td class="muted">${i + TOP_PICKS + 1}</td>
+              <td class="muted">${s.rank}</td>
               <td><span class="draft-cell-champion">${champion ? html`<${Img} src=${champion.icon} size=${26} />` : null}${champion?.name || s.champion}</span></td>
               <td>${roleLabel(s.role)}</td><td><strong>${percent(s.winRate)}</strong></td>
               <td class=${toneOf(s.delta * 100)}>${signed(s.delta * 100)}</td>

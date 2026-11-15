@@ -11,6 +11,7 @@ import com.leaguetool.calc.StatCalculator;
 import com.leaguetool.config.AppSettings;
 import com.leaguetool.data.GameData;
 import com.leaguetool.data.lolalytics.LolalyticsBuild;
+import com.leaguetool.data.lcu.LcuLocator;
 import com.leaguetool.data.lolalytics.LolalyticsClient;
 import com.leaguetool.data.lolalytics.LolalyticsFullTierList;
 import com.leaguetool.data.lolalytics.LolalyticsPeriod;
@@ -81,6 +82,8 @@ final class ApiRoutes {
             case "GET stats" -> stats(path, params);
             case "GET champions" -> champion(path, params);
             case "POST draft" -> draft(body);
+            case "GET lcu" -> ClientSyncEndpoint.get(ctx);
+            case "POST lcu" -> ClientSyncEndpoint.set(ctx, parse(body));
             default -> throw new ApiException(404, "Unbekannter Endpunkt");
         };
     }
@@ -339,12 +342,16 @@ final class ApiRoutes {
                 "envKeyName", AppSettings.ENV_RIOT_KEY,
                 "platform", Platform.fromId(s.platform()).orElse(Platform.EUW1).id(),
                 "platforms", Arrays.stream(Platform.values()).map(Platform::id).toList(),
+                "lcuFolder", s.lcuFolder(),
+                "lcuDetected", ctx.lcuLocator().detectedInstallFolder().map(Path::toString).orElse(null),
                 "file", s.file().toString());
     }
 
     private Object saveSettings(byte[] body) throws IOException {
         JsonNode n = parse(body);
         AppSettings s = ctx.settings();
+        // Erst prüfen, dann ändern: Ein abgelehnter Ordner darf keine anderen Einstellungen verstellen.
+        String lcuFolder = lcuFolder(n.get("lcuFolder"));
         String locale = n.path("locale").asText("");
         if (locale.matches("[a-z]{2}_[A-Z]{2}")) {
             s.setLocale(locale);
@@ -365,10 +372,34 @@ final class ApiRoutes {
             s.setStoredRiotApiKey(AppSettings.load(s.home()).storedRiotApiKey());
         }
         Platform.fromId(n.path("platform").asText("")).ifPresent(p -> s.setPlatform(p.id()));
+        if (lcuFolder != null) {
+            s.setLcuFolder(lcuFolder);
+        }
         s.save();
         ctx.rebuildServices();
         ctx.reload();
         return settings();
+    }
+
+    /**
+     * League-Ordner für den Client-Abgleich: {@code null} bei fehlendem Feld (unverändert), leer = automatisch suchen.
+     *
+     * @throws ApiException wenn im angegebenen Ordner kein Client liegt
+     */
+    private static String lcuFolder(JsonNode field) {
+        if (field == null || field.isNull()) {
+            return null;
+        }
+        String input = field.asText("").trim();
+        if (input.isEmpty()) {
+            return "";
+        }
+        Path folder = LcuLocator.normalize(input)
+                .orElseThrow(() -> new ApiException(400, "Ungültiger Pfad für den League-Ordner"));
+        if (!LcuLocator.isInstallFolder(folder)) {
+            throw new ApiException(400, "Im Ordner " + folder + " liegt kein LeagueClient.exe");
+        }
+        return folder.toString();
     }
 
     // ------------------------------------------------------------------ Oberflächen-Zustand

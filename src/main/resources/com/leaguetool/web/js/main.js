@@ -17,6 +17,7 @@ function connectEvents() {
   });
   events.addEventListener('summoner-progress', (e) => store.set({ summonerProgress: JSON.parse(e.data) }));
   events.addEventListener('draft-progress', (e) => store.set({ draftProgress: JSON.parse(e.data) }));
+  events.addEventListener('lcu', (e) => store.set({ lcu: JSON.parse(e.data) }));
 }
 
 function installShortcuts() {

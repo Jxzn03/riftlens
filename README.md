@@ -112,12 +112,23 @@ und je Rolle gefiltert. Ein Klick übernimmt den Pick.
 **Draft-Analyse:** erwartete Winrate, Gesamteinschätzung, alle Matchups und Duos, Schadensverteilung und Vorsprung
 nach Spieldauer.
 
+**Abgleich mit dem League-Client** (Schalter im Draft-Tab, Standard aus, sein Stand bleibt über Neustarts erhalten;
+ausgeschaltet wird der Client nie abgefragt): Während der Champion-Auswahl übernimmt das
+Tool gesperrte Picks, Bans und eure zugewiesenen Rollen automatisch, wie DraftGap. Ansagen von Mitspielern erscheinen
+als Hinweis. „Nur spielbare Champions“ zeigt nur Vorschläge, die dein Account in dieser Auswahl spielen darf.
+Der Abgleich liest nur, und zwar ausschließlich die Champion-Auswahl. Er klickt nichts im Client, übernimmt keine
+Spielernamen und liest nichts im laufenden Spiel. Den League-Ordner findet das Tool über Riots eigene Dateien, auch auf
+anderen Laufwerken; liegt League ungewöhnlich, lässt er sich in den Optionen eintragen. Details und Bewertung des
+Ban-Risikos: `docs/client-sync.md`.
+
 **Rechenmodell**
 
 Es folgt [DraftGap](https://github.com/vigovlugt/draftgap) (MIT-Lizenz): Winrates werden zu Rating-Punkten, Champions,
-Duos und Matchups addieren sich. Kleine Stichproben werden über das **Risiko** geglättet. Abweichungen:
+Duos und Matchups addieren sich. Kleine Stichproben werden zur Erwartung hin geglättet. Abweichungen:
 
-- Der Durchschnitt des Datensatzes wird herausgerechnet, weil er bei Lolalytics über 50 % liegt.
+- Die Glättung richtet sich je Rollenpaar nach der gemessenen Streuung echter Effekte. Lane-Matchups und das
+  Botlane-Duo zählen schon bei wenigen Spielen, Duos über die Map erst bei sehr vielen. Das **Risiko** vervielfacht
+  diese Glättung.
 - Die Champion-Winrate wird auch bei „30 Tage“ zum Durchschnitt hin geglättet.
 
 **Bewertung der Vorschläge**
@@ -203,6 +214,7 @@ Pakete unter `com.leaguetool`:
 | `data.wiki` | MediaWiki-Client (`wiki.leagueoflegends.com/en-us/api.php`): Base-Stats, Ability-Details |
 | `data.riot` | Riot-API-Client (league-v4, summoner-v4, account-v1, match-v5), Rate-Limiter, Verifizierung |
 | `data.http` | HTTP-Abstraktion (testbar mit Fakes), Offline-Schalter |
+| `data.lcu` | Lesender Abgleich mit der Champion-Auswahl des League-Clients |
 | `cache` | Datei-Cache pro Patch-Version |
 | `model` | Records: Champion, Ability, Item, RuneTree/Rune, SummonerSpell, … |
 | `calc` | Stats nach Level, Item-Stat-Summen, Cooldowns mit Ability Haste, Schadensvorschau |

@@ -166,6 +166,34 @@ class DraftAnalyzerTest {
     }
 
     @Test
+    void botlaneDuoCountsMoreThanAnOffLaneDuoWithTheSameData() {
+        Pick bot = new Pick(3, Role.BOTTOM);
+        Pick sup = new Pick(4, Role.UTILITY);
+        Pick top = new Pick(5, Role.TOP);
+        for (Pick p : List.of(A_MID, bot, sup, top)) {
+            base.put(p, stat(AVERAGE, 50_000));
+        }
+        synergies.put(bot, Map.of(sup, stat(0.57, 3_000)));
+        synergies.put(A_MID, Map.of(top, stat(0.57, 3_000)));
+        double botlane = analyzer().analyze(Map.of(Role.BOTTOM, 3, Role.UTILITY, 4), Map.of()).duoRating();
+        double offLane = analyzer().analyze(Map.of(Role.MIDDLE, A, Role.TOP, 5), Map.of()).duoRating();
+        assertTrue(botlane > 4 * offLane, "Botlane " + botlane + " gegenüber Top+Mid " + offLane);
+        assertTrue(offLane > 0);
+    }
+
+    @Test
+    void riskScalesThePairPriors() {
+        base.put(A_MID, stat(AVERAGE, 50_000));
+        base.put(E_MID, stat(AVERAGE, 50_000));
+        matchups.put(A_MID, Map.of(E_MID, stat(0.58, 1_500)));
+        double cautious = new DraftAnalyzer(dataset(), new Config(Risk.VERY_LOW, false, 0))
+                .analyze(Map.of(Role.MIDDLE, A), Map.of(Role.MIDDLE, E)).matchupRating();
+        double bold = new DraftAnalyzer(dataset(), new Config(Risk.VERY_HIGH, false, 0))
+                .analyze(Map.of(Role.MIDDLE, A), Map.of(Role.MIDDLE, E)).matchupRating();
+        assertTrue(bold > cautious && cautious > 0, bold + " > " + cautious);
+    }
+
+    @Test
     void ignoringChampionWinRatesKeepsOnlyPairs() {
         base.put(A_MID, stat(0.60, 50_000));
         Result result = new DraftAnalyzer(dataset(), new Config(Risk.MEDIUM, true, 0)).analyze(Map.of(Role.MIDDLE, A), Map.of());

@@ -517,7 +517,22 @@ table.data.compact td { padding: 3px 10px 3px 0; font-size: 12.5px; }
 .draft-plus { display: grid; place-items: center; width: 40px; height: 40px; color: var(--text-3); }
 .draft-slot-champion { display: flex; align-items: center; gap: 9px; flex: 1; min-width: 0; text-align: left; }
 .draft-name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.draft-role { flex: none; width: 118px; }
+.draft-client { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.draft-client-status.live { color: var(--good, var(--accent)); font-weight: 600; }
+.draft-intent { display: grid; place-items: center; width: 40px; height: 40px; opacity: .55; filter: grayscale(.4); }
+.draft-slot.empty-slot.picking { border-style: solid; border-color: var(--accent); }
+.draft-role { position: relative; flex: none; }
+.draft-role-chip { display: inline-flex; align-items: center; gap: 5px; height: 30px; padding: 0 8px; border-radius: var(--radius-s); border: 1px solid var(--line-2); background: var(--surface); font-weight: 600; font-size: 12.5px; white-space: nowrap; transition: border-color var(--ease), background var(--ease); }
+.draft-role-chip:hover, .draft-role-chip[aria-expanded="true"] { border-color: var(--accent); }
+.draft-role-chip.fixed { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+.draft-role-auto { padding: 0 4px; border-radius: 4px; background: var(--surface-3); color: var(--text-3); font-size: 10.5px; font-weight: 600; }
+.draft-role-caret { color: var(--text-3); font-size: 10px; }
+.draft-role-menu { position: absolute; z-index: 20; top: calc(100% + 4px); right: 0; display: flex; flex-direction: column; min-width: 140px; padding: 4px; border-radius: var(--radius-s); background: var(--surface); border: 1px solid var(--line-2); box-shadow: var(--shadow); }
+.draft-role-menu button { display: flex; justify-content: space-between; gap: 12px; padding: 6px 8px; border-radius: 6px; text-align: left; font-size: 12.5px; color: var(--text-2); }
+.draft-role-menu button:hover { background: var(--row-hover); color: var(--text); }
+.draft-role-menu button.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.draft-role-menu button.rare { opacity: .6; }
+.draft-role-menu .draft-role-reset { margin-top: 2px; border-top: 1px solid var(--line); border-radius: 0 0 6px 6px; color: var(--text-3); }
 .draft-center { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 .draft-win { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 12px; padding: 16px; border-radius: var(--radius); background: var(--surface); border: 1px solid var(--line); }
 .draft-win-numbers { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }

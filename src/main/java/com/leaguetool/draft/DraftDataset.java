@@ -76,6 +76,21 @@ public final class DraftDataset {
         return synergies.getOrDefault(source, Map.of()).getOrDefault(teammate, Stat.NONE);
     }
 
+    /** Werte je Champion und Rolle der letzten 30 Tage. */
+    Map<Pick, Stat> fullStats() {
+        return full;
+    }
+
+    /** Quelle → Gegner → Werte der Quelle gegen diesen Gegner. */
+    Map<Pick, Map<Pick, Stat>> matchups() {
+        return matchups;
+    }
+
+    /** Quelle → Mitspieler → Werte der Quelle mit diesem Mitspieler. */
+    Map<Pick, Map<Pick, Stat>> synergies() {
+        return synergies;
+    }
+
     /** Alle Champions mit Daten auf mindestens einer Rolle. */
     public Set<Integer> champions() {
         Set<Integer> champions = new HashSet<>();

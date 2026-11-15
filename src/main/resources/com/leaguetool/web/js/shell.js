@@ -251,7 +251,7 @@ function SettingsDialog() {
       const body = {
         locale: form.locale, offline: form.offline, wikiEnabled: form.wikiEnabled,
         lolalyticsEnabled: form.lolalyticsEnabled,
-        riotEnabled: form.riotEnabled, platform: form.platform,
+        riotEnabled: form.riotEnabled, platform: form.platform, lcuFolder: form.lcuFolder || '',
       };
       if (key.trim() !== '' || form.clearKey) {
         body.riotApiKey = key.trim();
@@ -286,6 +286,14 @@ function SettingsDialog() {
         <${Select} label="Plattform" value=${form.platform} onChange=${(platform) => set({ platform })} options=${form.platforms.map((p) => ({ value: p, label: p.toUpperCase() }))} /></label>
       <p class="muted small">Der Key wird nur lokal in ${form.file} gespeichert. Dev-Keys laufen nach 24 Stunden ab.</p>
       <${RiotCheck} ready=${form.riotReady} />
+      <div class="divider"></div>
+      <label class="field"><span>League-Ordner für den Client-Abgleich (optional)</span>
+        <input class="input" type="text" spellcheck="false" value=${form.lcuFolder || ''}
+          onInput=${(e) => set({ lcuFolder: e.currentTarget.value })}
+          placeholder=${form.lcuDetected ? `leer = automatisch (${form.lcuDetected})` : 'leer = automatisch, z. B. D:\\Spiele\\Riot Games\\League of Legends'} /></label>
+      <p class="muted small">${form.lcuDetected
+        ? `Automatisch gefunden: ${form.lcuDetected}. Nur ausfüllen, wenn League woanders liegt.`
+        : 'Automatisch kein League gefunden. Ordner mit LeagueClient.exe eintragen; auch der Riot-Games-Ordner oder die Datei selbst gehen.'}</p>
     </div>` : null}
   <//>`;
 }

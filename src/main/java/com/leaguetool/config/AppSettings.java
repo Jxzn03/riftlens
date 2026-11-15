@@ -117,6 +117,24 @@ public final class AppSettings {
         props.setProperty("lolalytics.enabled", Boolean.toString(enabled));
     }
 
+    /** Schalter „Mit League-Client abgleichen“ im Draft-Tab, bleibt über Neustarts erhalten. Standard: aus. */
+    public synchronized boolean lcuSyncEnabled() {
+        return Boolean.parseBoolean(props.getProperty("lcu.sync", "false"));
+    }
+
+    public synchronized void setLcuSyncEnabled(boolean enabled) {
+        props.setProperty("lcu.sync", Boolean.toString(enabled));
+    }
+
+    /** Von Hand gewählter League-Ordner für den Client-Abgleich; leer = automatisch suchen. */
+    public synchronized String lcuFolder() {
+        return props.getProperty("lcu.folder", "");
+    }
+
+    public synchronized void setLcuFolder(String folder) {
+        props.setProperty("lcu.folder", folder == null ? "" : folder.trim());
+    }
+
     /** Standard-Rang für Lolalytics, wenn kein Rang-Filter gesetzt ist (z. B. {@code emerald_plus}). */
     public synchronized String lolalyticsTier() {
         return props.getProperty("lolalytics.tier", "emerald_plus");

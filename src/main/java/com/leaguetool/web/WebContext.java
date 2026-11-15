@@ -10,6 +10,9 @@ import com.leaguetool.data.http.HttpFetcher;
 import com.leaguetool.data.http.JavaHttpFetcher;
 import com.leaguetool.data.http.OfflineAwareFetcher;
 import com.leaguetool.data.itempassives.ItemPassiveUpdater;
+import com.leaguetool.data.lcu.LcuHttpTransport;
+import com.leaguetool.data.lcu.LcuLocator;
+import com.leaguetool.data.lcu.LcuSync;
 import com.leaguetool.data.lolalytics.LolalyticsClient;
 import com.leaguetool.data.riot.Platform;
 import com.leaguetool.data.riot.RateLimiter;
@@ -50,6 +53,8 @@ public final class WebContext implements AutoCloseable {
     private final ExecutorService background = Executors.newCachedThreadPool(daemon("lt-web-worker"));
     private final LolalyticsClient lolalytics;
     private final ItemPassiveUpdater itemPassives;
+    private final LcuSync lcu;
+    private final LcuLocator lcuLocator;
     private final RateLimiter riotLimiter = RateLimiter.riotDevKey();
     private final Map<Platform, RiotApiClient> riotClients = new EnumMap<>(Platform.class);
     private final Map<String, CompletableFuture<Path>> downloads = new ConcurrentHashMap<>();
@@ -77,7 +82,20 @@ public final class WebContext implements AutoCloseable {
         this.http = new OfflineAwareFetcher(fetcher, settings::offline);
         this.lolalytics = new LolalyticsClient(http, cache);
         this.itemPassives = new ItemPassiveUpdater(cache);
+        this.lcuLocator = new LcuLocator(settings::lcuFolder);
+        this.lcu = new LcuSync(lcuLocator::find, LcuHttpTransport::new, state -> publish("lcu", ClientSyncEndpoint.json(state)));
         rebuildServices();
+        // Gespeicherter Stand des Schalters im Draft-Tab; Standard aus.
+        lcu.setEnabled(settings.lcuSyncEnabled());
+    }
+
+    /** Abgleich mit dem League-Client (nur lesend, siehe {@code docs/client-sync.md}). */
+    LcuSync lcu() {
+        return lcu;
+    }
+
+    LcuLocator lcuLocator() {
+        return lcuLocator;
     }
 
     void setEvents(BiConsumer<String, Object> events) {
@@ -245,6 +263,7 @@ public final class WebContext implements AutoCloseable {
 
     @Override
     public void close() {
+        lcu.close();
         background.shutdownNow();
     }
 

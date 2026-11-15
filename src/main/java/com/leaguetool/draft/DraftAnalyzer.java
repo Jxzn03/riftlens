@@ -15,24 +15,41 @@ import java.util.Set;
  * Bewertet einen Draft und alle möglichen nächsten Picks nach dem Modell von DraftGap (MIT-Lizenz): Winrates werden in
  * Rating-Punkte umgerechnet, Stichproben mit einem Prior geglättet, und Champions, Duos und Matchups addieren sich.
  *
- * <p>Abweichung vom Original: Bei Lolalytics liegt die durchschnittliche Winrate über 50 %. Darum wird der Durchschnitt
- * herausgerechnet. Ein Champion mit Durchschnitts-Winrate zählt 0 Punkte, und die erwartete Winrate eines Paares
- * enthält den Durchschnitt einmal. Ohne diese Korrektur würde ein Team mit mehr Picks systematisch besser aussehen.
+ * <p>Bei Lolalytics liegt die durchschnittliche Winrate des Rang-Bereichs über 50 %. Wie DraftGaps {@code removeRankBias}
+ * wird dieser Durchschnitt herausgerechnet: Ein Champion mit Durchschnitts-Winrate zählt 0 Punkte, und die erwartete
+ * Winrate eines Paares enthält den Durchschnitt einmal. Ohne diese Korrektur würde ein Team mit mehr Picks systematisch
+ * besser aussehen.
+ *
+ * <p>Wichtigste Erweiterung: Die Glättung ist nicht für alles gleich, sondern folgt je Rollenpaar der gemessenen Streuung
+ * echter Effekte ({@link DraftPriors}). Lane-Matchups und das Botlane-Duo zählen damit schon bei wenigen Spielen, Duos
+ * über die Map hinweg erst bei sehr vielen. Die übrigen Abweichungen vom Original stehen in {@code docs/draft.md}.
  */
 public final class DraftAnalyzer {
 
-    /** Wie stark kleine Stichproben geglättet werden: Je weniger Risiko, desto mehr Spiele braucht ein Wert. */
+    /**
+     * Wie stark kleine Stichproben geglättet werden: Je weniger Risiko, desto mehr Spiele braucht ein Wert. Der Faktor
+     * vervielfacht die aus den Daten geschätzten Prior-Spiele ({@link DraftPriors}); die Stufen entsprechen DraftGaps
+     * 3000/2000/1000/500/250 Spielen.
+     */
     public enum Risk {
-        VERY_LOW(3000), LOW(2000), MEDIUM(1000), HIGH(500), VERY_HIGH(250);
+        VERY_LOW(3), LOW(2), MEDIUM(1), HIGH(0.5), VERY_HIGH(0.25);
 
-        private final int priorGames;
+        /** DraftGaps Prior-Spiele bei mittlerem Risiko; gilt hier nur noch für den Schritt vom Patch zu 30 Tagen. */
+        static final int BASE_PRIOR_GAMES = 1000;
 
-        Risk(int priorGames) {
-            this.priorGames = priorGames;
+        private final double factor;
+
+        Risk(double factor) {
+            this.factor = factor;
         }
 
+        public double factor() {
+            return factor;
+        }
+
+        /** Feste Glättung wie bei DraftGap, wo keine Schätzung aus den Daten vorliegt. */
         public int priorGames() {
-            return priorGames;
+            return (int) Math.round(BASE_PRIOR_GAMES * factor);
         }
     }
 
@@ -79,12 +96,21 @@ public final class DraftAnalyzer {
 
     private final DraftDataset data;
     private final Config config;
-    private final double prior;
+    private final DraftPriors priors;
 
+    /** Schätzt die Streuungen aus {@code data}. */
     public DraftAnalyzer(DraftDataset data, Config config) {
+        this(data, config, DraftPriors.estimate(data));
+    }
+
+    public DraftAnalyzer(DraftDataset data, Config config, DraftPriors priors) {
         this.data = data;
         this.config = config;
-        this.prior = config.risk().priorGames();
+        this.priors = priors;
+    }
+
+    public DraftPriors priors() {
+        return priors;
     }
 
     /** Standard für die Mindestspiele: wächst mit der Spielmenge, damit auch kleine Rang-Bereiche Vorschläge haben. */
@@ -175,11 +201,15 @@ public final class DraftAnalyzer {
 
     private ChampionResult champion(Pick pick) {
         Stat stats = data.selected(pick);
-        // Der Prior wird selbst zum Durchschnitt gezogen. Sonst wäre er bei 30 Tagen die eigene Winrate und wirkungslos.
+        // Der Prior wird selbst zum Durchschnitt gezogen, so stark, wie Champion-Stärken auf dieser Rolle streuen.
+        // Sonst wäre er bei 30 Tagen die eigene Winrate und wirkungslos.
         Stat full = data.full(pick);
-        double priorWinRate = (full.wins() + prior * data.fullAverage()) / (full.games() + prior);
+        double championPrior = priors.championPriorGames(pick.role()) * config.risk().factor();
+        double priorWinRate = (full.wins() + championPrior * data.fullAverage()) / (full.games() + championPrior);
         // Sind beide Zeiträume gleich, wären dieselben Spiele sonst doppelt gezählt.
-        double smoothed = stats.equals(full) ? priorWinRate : (stats.wins() + prior * priorWinRate) / (stats.games() + prior);
+        double patchPrior = config.risk().priorGames();
+        double smoothed = stats.equals(full) ? priorWinRate
+                : (stats.wins() + patchPrior * priorWinRate) / (stats.games() + patchPrior);
         return new ChampionResult(pick, rating(smoothed) - rating(data.selectedAverage()), stats);
     }
 
@@ -203,9 +233,10 @@ public final class DraftAnalyzer {
         Stat ba = data.synergy(b, a);
         double total = 0;
         int sources = 0;
+        double priorGames = pairPriorGames(DraftPriors.Kind.DUO, a, b, expected);
         for (Stat stat : List.of(ab, ba)) {
             if (stat.games() > 0) {
-                total += excessRating(stat, expected);
+                total += excessRating(stat, expected, priorGames);
                 sources++;
             }
         }
@@ -223,12 +254,14 @@ public final class DraftAnalyzer {
         Stat ba = data.matchup(b, a);
         double total = 0;
         int sources = 0;
+        double expectedA = ratingA - ratingB + average;
+        double expectedB = ratingB - ratingA + average;
         if (ab.games() > 0) {
-            total += excessRating(ab, ratingA - ratingB + average);
+            total += excessRating(ab, expectedA, pairPriorGames(DraftPriors.Kind.MATCHUP, a, b, expectedA));
             sources++;
         }
         if (ba.games() > 0) {
-            total -= excessRating(ba, ratingB - ratingA + average);
+            total -= excessRating(ba, expectedB, pairPriorGames(DraftPriors.Kind.MATCHUP, a, b, expectedB));
             sources++;
         }
         double rating = sources == 0 ? 0 : total / sources;
@@ -237,9 +270,14 @@ public final class DraftAnalyzer {
         return new PairResult(a, b, rating, combined);
     }
 
+    /** Prior-Spiele einer Paarung: je Rollenpaar aus der Streuung echter Effekte, vervielfacht mit dem Risiko. */
+    private double pairPriorGames(DraftPriors.Kind kind, Pick a, Pick b, double expectedRating) {
+        return priors.pairPriorGames(kind, a.role(), b.role(), winRate(expectedRating)) * config.risk().factor();
+    }
+
     /** Rating-Punkte über der Erwartung; der Prior zieht kleine Stichproben zur Erwartung, also gegen 0. */
-    private double excessRating(Stat stat, double expectedRating) {
-        double smoothed = (stat.wins() + prior * winRate(expectedRating)) / (stat.games() + prior);
+    private static double excessRating(Stat stat, double expectedRating, double priorGames) {
+        double smoothed = (stat.wins() + priorGames * winRate(expectedRating)) / (stat.games() + priorGames);
         return rating(smoothed) - expectedRating;
     }
 }

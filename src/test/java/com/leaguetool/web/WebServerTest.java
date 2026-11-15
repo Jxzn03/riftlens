@@ -363,6 +363,45 @@ class WebServerTest {
     }
 
     @Test
+    void clientSyncIsOffByDefault() throws Exception {
+        HttpResponse<String> state = get("/api/lcu", true);
+        assertEquals(200, state.statusCode());
+        assertTrue(state.body().contains("\"status\":\"OFF\""), state.body());
+
+        HttpRequest invalid = HttpRequest.newBuilder(URI.create(server.baseUrl() + "/api/lcu"))
+                .header("Cookie", server.sessionCookie()).header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString("{\"enabled\":\"ja\"}")).build();
+        assertEquals(400, http.send(invalid, HttpResponse.BodyHandlers.ofString()).statusCode());
+        assertEquals(401, get("/api/lcu", false).statusCode(), "nur mit Sitzungs-Cookie");
+        assertTrue(get("/api/settings", true).body().contains("\"lcuFolder\":\"\""), "Standard: automatisch suchen");
+    }
+
+    @Test
+    void clientSyncSwitchIsSaved() throws Exception {
+        HttpRequest.Builder post = HttpRequest.newBuilder(URI.create(server.baseUrl() + "/api/lcu"))
+                .header("Cookie", server.sessionCookie()).header("Content-Type", "application/json");
+        HttpResponse<String> on = http.send(post.POST(HttpRequest.BodyPublishers.ofString("{\"enabled\":true}")).build(),
+                HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, on.statusCode());
+        assertFalse(on.body().contains("\"status\":\"OFF\""), on.body());
+        assertTrue(AppSettings.load(settings.home()).lcuSyncEnabled(), "Der nächste Start übernimmt den Schalter");
+
+        http.send(post.POST(HttpRequest.BodyPublishers.ofString("{\"enabled\":false}")).build(), HttpResponse.BodyHandlers.ofString());
+        assertFalse(AppSettings.load(settings.home()).lcuSyncEnabled());
+        assertTrue(get("/api/lcu", true).body().contains("\"status\":\"OFF\""));
+    }
+
+    @Test
+    void leagueFolderMustContainTheClient() throws Exception {
+        HttpRequest save = HttpRequest.newBuilder(URI.create(server.baseUrl() + "/api/settings"))
+                .header("Cookie", server.sessionCookie()).header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString("{\"lcuFolder\":\"C:/gibt/es/nicht\"}")).build();
+        HttpResponse<String> response = http.send(save, HttpResponse.BodyHandlers.ofString());
+        assertEquals(400, response.statusCode());
+        assertTrue(response.body().contains("LeagueClient.exe"), response.body());
+    }
+
+    @Test
     void draftNeedsLolalytics() throws Exception {
         assertEquals(412, postDraft("{}").statusCode());
     }
