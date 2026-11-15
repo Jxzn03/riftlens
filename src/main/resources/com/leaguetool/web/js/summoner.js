@@ -192,9 +192,9 @@ export function SummonerView() {
     <section class="card key-help">
       <strong>Neuen API-Key erstellen</strong>
       <ol>
-        <li>Auf <a href="https://developer.riotgames.com/" target="_blank" rel="noopener noreferrer">developer.riotgames.com</a> mit dem Riot-Konto anmelden.</li>
-        <li>Auf „Regenerate API Key“ klicken.</li>
-        <li>Mit „Copy API Key“ kopieren und in den Optionen einfügen.</li>
+        <li>Auf <strong><a href="https://developer.riotgames.com/" target="_blank" rel="noopener noreferrer">developer.riotgames.com</a></strong> mit dem Riot-Konto anmelden.</li>
+        <li>Auf <strong>Regenerate API Key</strong> klicken.</li>
+        <li><strong>Show</strong> -> <strong>Copy API Key</strong> kopieren und in den Optionen einfügen.</li>
       </ol>
       <small>Dev-Keys laufen nach 24 Stunden ab.</small>
     </section>` : null}

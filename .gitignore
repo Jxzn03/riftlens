@@ -1,6 +1,7 @@
 # Maven
 /target/
 /dist/
+/build/
 .mvn/wrapper/maven-wrapper.jar
 
 # Java

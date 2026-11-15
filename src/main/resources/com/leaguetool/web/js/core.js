@@ -1,5 +1,5 @@
 // Kern der Oberfläche: Store, API-Zugriff, Routing, Formatierung.
-import { useState, useEffect, useLayoutEffect, useRef, useReducer } from '/vendor/htm-preact.js';
+import { useState, useEffect, useLayoutEffect, useRef, useReducer, useMemo } from '/vendor/htm-preact.js';
 
 // ------------------------------------------------------------------ Store
 
@@ -34,6 +34,7 @@ export const store = createStore({
   runePage: null, // wird unten mit EMPTY_RUNE_PAGE belegt
   split: {},
   prefs: { level: 1, haste: 0, previewLevel: 11, advancedTips: false },
+  favorites: [], // Champion-Keys des eigenen Pools, nur lokal gespeichert
   views: {},
   meta: null,
   busy: 0,
@@ -453,6 +454,30 @@ export function setPref(patch) {
   store.set({ prefs: { ...store.get().prefs, ...patch } });
 }
 
+// ------------------------------------------------------------------ Favoriten (eigener Champion-Pool)
+
+/** Obergrenze gegen kaputte gespeicherte Stände; mehr Champions gibt es nicht. */
+const MAX_FAVORITES = 400;
+
+/** Favorisierte Champion-Keys als Set; ändert sich nur, wenn sich die Favoriten ändern. */
+export function useFavorites() {
+  const favorites = useStore((s) => s.favorites);
+  return useMemo(() => new Set(favorites), [favorites]);
+}
+
+export function toggleFavorite(key) {
+  const favorites = store.get().favorites;
+  store.set({ favorites: favorites.includes(key) ? favorites.filter((k) => k !== key) : [...favorites, key] });
+}
+
+export function clearFavorites() {
+  store.set({ favorites: [] });
+}
+
+function sanitizeFavorites(value) {
+  return Array.isArray(value) ? [...new Set(value.filter((k) => Number.isInteger(k)))].slice(0, MAX_FAVORITES) : [];
+}
+
 // ------------------------------------------------------------------ Routing
 
 const VIEWS = ['champions', 'items', 'runes', 'abilities', 'summoner', 'draft'];
@@ -503,7 +528,7 @@ export function startRouter() {
 
 // ------------------------------------------------------------------ Zustand speichern
 
-const PERSISTED = ['theme', 'filter', 'dataSource', 'build', 'runePage', 'split', 'prefs', 'summonerRecent'];
+const PERSISTED = ['theme', 'filter', 'dataSource', 'build', 'runePage', 'split', 'prefs', 'summonerRecent', 'favorites'];
 let saveTimer = null;
 let lastSaved = null;
 
@@ -517,6 +542,9 @@ export async function loadUiState() {
         patch[key] = key === 'prefs' || key === 'dataSource' ? { ...store.get()[key], ...saved[key] } : saved[key];
       }
     });
+    if (patch.favorites !== undefined) {
+      patch.favorites = sanitizeFavorites(patch.favorites);
+    }
     if (Array.isArray(patch.build)) {
       patch.build = patch.build.filter((id) => Number.isInteger(id)).slice(0, MAX_BUILD);
     }

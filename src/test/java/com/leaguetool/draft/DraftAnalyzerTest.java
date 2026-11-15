@@ -110,6 +110,68 @@ class DraftAnalyzerTest {
     }
 
     @Test
+    void pickRateAndLaneShareFollowLolalytics() {
+        base.put(A_MID, stat(0.5, 9_000));
+        base.put(new Pick(A, Role.TOP), stat(0.5, 1_000));
+        base.put(B_MID, stat(0.5, 1_000));
+        DraftDataset data = dataset();
+        // 10.000 Mid-Picks = 5.000 Spiele; die Pickrates einer Rolle ergeben 200 %.
+        assertEquals(1.8, data.pickRate(A_MID), 1e-9);
+        assertEquals(0.2, data.pickRate(B_MID), 1e-9);
+        assertEquals(0.9, data.laneShare(A_MID), 1e-9);
+        assertEquals(1.0, data.laneShare(B_MID), 1e-9);
+        assertEquals(0, data.pickRate(E_MID), 1e-9);
+    }
+
+    @Test
+    void offRolePicksAreOnlySuggestedWhenRarePicksAreAllowed() {
+        // Wie Tahm Kench ADC: viele Spiele und hohe Winrate, aber nur 2 % seiner Spiele auf dieser Rolle.
+        base.put(B_TOP, stat(0.50, 980_000));
+        base.put(B_MID, stat(0.60, 20_000));
+        base.put(A_MID, stat(0.53, 100_000));
+        for (int champion = 10; champion < 100; champion++) {
+            base.put(new Pick(champion, Role.MIDDLE), stat(0.5, 10_000));
+        }
+        Config common = new Config(Risk.MEDIUM, false, 0, DraftAnalyzer.COMMON_MIN_PICK_RATE, DraftAnalyzer.COMMON_MIN_LANE_SHARE);
+        List<Pick> commonPicks = new DraftAnalyzer(dataset(), common).suggestions(Map.of(Role.TOP, E), Map.of(), Set.of())
+                .stream().map(Suggestion::pick).toList();
+        assertFalse(commonPicks.contains(B_MID), "Off-Role-Pick ausgefiltert");
+        assertEquals(A_MID, commonPicks.get(0));
+
+        List<Pick> allPicks = new DraftAnalyzer(dataset(), new Config(Risk.MEDIUM, false, 0))
+                .suggestions(Map.of(Role.TOP, E), Map.of(), Set.of()).stream().map(Suggestion::pick).toList();
+        assertTrue(allPicks.contains(B_MID), "Bisheriges Verhalten zeigt ihn");
+    }
+
+    @Test
+    void secondaryRolesNeedTenPercentOfTheChampionsGames() {
+        // Wie Malzahar Top: genug Spiele und Pickrate, aber nur 7 % seiner Spiele auf dieser Rolle.
+        base.put(B_TOP, stat(0.50, 930_000));
+        base.put(B_MID, stat(0.60, 70_000));
+        for (int champion = 10; champion < 100; champion++) {
+            base.put(new Pick(champion, Role.MIDDLE), stat(0.5, 10_000));
+        }
+        Config common = new Config(Risk.MEDIUM, false, 0, DraftAnalyzer.COMMON_MIN_PICK_RATE, DraftAnalyzer.COMMON_MIN_LANE_SHARE);
+        DraftAnalyzer analyzer = new DraftAnalyzer(dataset(), common);
+        assertTrue(dataset().pickRate(B_MID) > DraftAnalyzer.COMMON_MIN_PICK_RATE);
+        assertFalse(analyzer.suggestions(Map.of(Role.TOP, E), Map.of(), Set.of()).stream().anyMatch(s -> s.pick().equals(B_MID)));
+    }
+
+    @Test
+    void autoPickRateRemovesRarelyPlayedChampions() {
+        base.put(A_MID, stat(0.53, 100_000));
+        base.put(B_MID, stat(0.60, 1_000));
+        for (int champion = 10; champion < 100; champion++) {
+            base.put(new Pick(champion, Role.MIDDLE), stat(0.5, 10_000));
+        }
+        Config common = new Config(Risk.MEDIUM, false, 0, DraftAnalyzer.COMMON_MIN_PICK_RATE, DraftAnalyzer.COMMON_MIN_LANE_SHARE);
+        List<Pick> picks = new DraftAnalyzer(dataset(), common).suggestions(Map.of(), Map.of(), Set.of())
+                .stream().map(Suggestion::pick).toList();
+        assertFalse(picks.contains(B_MID), "0,2 % Pickrate liegt unter der Schwelle");
+        assertTrue(picks.contains(A_MID));
+    }
+
+    @Test
     void expectedMatchupHasNoEffect() {
         base.put(A_MID, stat(0.54, 50_000));
         base.put(E_MID, stat(0.52, 50_000));

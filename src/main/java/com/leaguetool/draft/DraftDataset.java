@@ -2,6 +2,8 @@ package com.leaguetool.draft;
 
 import com.leaguetool.model.Role;
 
+import java.util.EnumMap;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
@@ -33,6 +35,8 @@ public final class DraftDataset {
     private final Map<Pick, Stat> full;
     private final Map<Pick, Map<Pick, Stat>> matchups;
     private final Map<Pick, Map<Pick, Stat>> synergies;
+    private final Map<Role, Double> roleGames = new EnumMap<>(Role.class);
+    private final Map<Integer, Double> championGames = new HashMap<>();
 
     /**
      * @param selectedAverage Durchschnitts-Winrate des gewählten Zeitraums
@@ -50,6 +54,25 @@ public final class DraftDataset {
         this.full = Map.copyOf(full);
         this.matchups = Map.copyOf(matchups);
         this.synergies = Map.copyOf(synergies);
+        this.full.forEach((pick, stat) -> {
+            roleGames.merge(pick.role(), stat.games(), Double::sum);
+            championGames.merge(pick.champion(), stat.games(), Double::sum);
+        });
+    }
+
+    /**
+     * Pickrate auf der Rolle in den letzten 30 Tagen (0..1) wie bei Lolalytics: Anteil der Spiele, in denen der Champion
+     * diese Rolle spielt. Je Spiel gibt es zwei Picks pro Rolle, die Pickrates einer Rolle ergeben also 200 %.
+     */
+    public double pickRate(Pick pick) {
+        double total = roleGames.getOrDefault(pick.role(), 0.0);
+        return total > 0 ? full(pick).games() * 2 / total : 0;
+    }
+
+    /** Anteil der Spiele des Champions (letzte 30 Tage), die er auf dieser Rolle spielt (0..1). */
+    public double laneShare(Pick pick) {
+        double total = championGames.getOrDefault(pick.champion(), 0.0);
+        return total > 0 ? full(pick).games() / total : 0;
     }
 
     public double selectedAverage() {

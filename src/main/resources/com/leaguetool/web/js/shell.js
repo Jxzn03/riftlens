@@ -1,6 +1,6 @@
 // App-Rahmen: Navigation, Filterleiste, Schnellsuche, Dialoge, Statuszeile.
 import { html, useState, useEffect, useMemo, useRef } from '/vendor/htm-preact.js';
-import { store, useStore, useFetch, useStatsUrl, api, go, normalize, percent, toast, setPref, TIERS } from './core.js';
+import { store, useStore, useFetch, useStatsUrl, api, go, normalize, percent, toast, setPref, clearFavorites, TIERS } from './core.js';
 import { Icon, Img, Button, Select, Segmented, Switch, Spinner, Loading, ErrorNote } from './ui.js';
 import { ChampionsView } from './champions.js';
 import { ItemsView } from './items.js';
@@ -231,6 +231,21 @@ function Modal({ title, children, onClose, footer }) {
 
 const closeDialog = () => store.set({ dialog: null });
 
+/** Favoriten wirken sofort, ohne „Speichern“: Sie gehören zum lokalen Oberflächen-Zustand, nicht zu den Einstellungen. */
+function FavoritesSetting() {
+  const count = useStore((s) => s.favorites.length);
+  const clear = () => {
+    if (window.confirm(`Alle ${count} Favoriten entfernen?`)) {
+      clearFavorites();
+      toast('Alle Favoriten entfernt');
+    }
+  };
+  return html`<div class="setting-row">
+    <span>Favoriten (Champion-Pool): <strong>${count}</strong> <span class="muted small">· nur lokal auf diesem Gerät gespeichert</span></span>
+    <${Button} icon="trash" disabled=${count === 0} onClick=${clear}>Alle Favoriten entfernen<//>
+  </div>`;
+}
+
 function SettingsDialog() {
   const loaded = useFetch('/api/settings?fresh=' + useRef(Date.now()).current);
   const [form, setForm] = useState(null);
@@ -279,6 +294,7 @@ function SettingsDialog() {
       <${Switch} checked=${form.wikiEnabled} onChange=${(wikiEnabled) => set({ wikiEnabled })}>Zusatzdaten aus dem LoL-Wiki laden<//>
       <${Switch} checked=${form.lolalyticsEnabled} onChange=${(lolalyticsEnabled) => set({ lolalyticsEnabled })}>Lolalytics-Statistiken erlauben (öffentliche Seiten, gecacht)<//>
       <${Switch} checked=${advancedTips} onChange=${(on) => setPref({ advancedTips: on })}>Show Advanced Tooltips (zusätzliche Hover-Infos in der Champions-Statistik)<//>
+      <${FavoritesSetting} />
       <div class="divider"></div>
       <${Switch} checked=${form.riotEnabled} onChange=${(riotEnabled) => set({ riotEnabled })}>Riot-API verwenden (Summoner-Abfrage, Verifizierung)<//>
       <label class="field"><span>Riot-API-Key</span>

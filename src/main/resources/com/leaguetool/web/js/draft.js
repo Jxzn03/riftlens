@@ -1,7 +1,7 @@
 // Draft-Assistent: Eingabe der Picks und Bans, die fünf besten nächsten Picks und die Gesamteinschätzung.
 import { html, useState, useEffect, useMemo, useRef } from '/vendor/htm-preact.js';
-import { store, useStore, useViewState, useSourceLabel, api, normalize, percent, sortRows, activeSort } from './core.js';
-import { Icon, Img, Button, Select, Segmented, Switch, Card, Empty, ErrorNote, Loading, Tag, Spinner } from './ui.js';
+import { store, useStore, useViewState, useSourceLabel, api, normalize, percent, sortRows, activeSort, useFavorites } from './core.js';
+import { Icon, Img, Button, Select, Segmented, Switch, Card, Empty, ErrorNote, Loading, Tag, Spinner, FavoriteMark } from './ui.js';
 
 const ROLES = [
   { value: 'TOP', label: 'Top' }, { value: 'JUNGLE', label: 'Jungle' }, { value: 'MIDDLE', label: 'Mid' },
@@ -19,6 +19,8 @@ const RISKS = [
 ];
 const AUTO_MIN_GAMES = 'auto';
 const MIN_GAMES = [0, 1000, 2500, 4300, 10000, 25000].map((n) => ({ value: String(n), label: `ab ${n.toLocaleString('de-DE')} Spiele` }));
+/** Pickrate auf der Rolle in Prozent; „Auto“ ist der Standard des Backends. */
+const MIN_PICK_RATES = [0.25, 0.5, 1, 1.5, 2, 3].map((p) => ({ value: String(p / 100), label: `ab ${p} %` }));
 /** Eine Profil-Aussage über ein Team braucht mehr als ein oder zwei Picks. */
 const MIN_PICKS_FOR_PROFILE = 3;
 /** Kennzeichnet dieses Fenster, damit das Backend nur seine eigenen überholten Anfragen abbricht. */
@@ -26,7 +28,8 @@ const CLIENT_ID = crypto.randomUUID();
 
 const DEFAULTS = {
   ally: Array(TEAM_SIZE).fill(null), enemy: Array(TEAM_SIZE).fill(null), bans: [],
-  side: 'ally', role: '', risk: 'MEDIUM', minGames: AUTO_MIN_GAMES, ignoreChampionWinRates: false, tab: 'picks', picker: null,
+  side: 'ally', role: '', risk: 'MEDIUM', minGames: AUTO_MIN_GAMES, minPickRate: AUTO_MIN_GAMES, ignoreChampionWinRates: false, rarePicks: false,
+  tab: 'picks', picker: null,
 };
 
 /** Winrate-Anteil eines Rating-Werts in Prozentpunkten. */
@@ -39,14 +42,25 @@ const signed = (value, decimals = 1) => {
 const impactText = (rating) => signed(impact(rating));
 const toneOf = (value) => (value >= 0.05 ? 'good' : value <= -0.05 ? 'bad' : '');
 const count = (games) => Math.round(games).toLocaleString('de-DE');
+/** Beschriftung von „Auto“: bei gängigen Picks die Standard-Pickrate, sonst die absoluten Mindestspiele. */
+const autoLabel = (result, rarePicks) => {
+  if (!result || Boolean(result.minPickRate === 0) !== Boolean(rarePicks)) {
+    return 'Auto';
+  }
+  return rarePicks ? `Auto (ab ${result.minGames.toLocaleString('de-DE')})` : `Auto (ab ${percent(result.defaultMinPickRate, 2)})`;
+};
 
 function useDraftResult(view, dataSource) {
   const [state, setState] = useState({ result: null, error: null, loading: true });
   const sequence = useRef(0);
   const body = JSON.stringify({
     ally: view.ally.filter(Boolean), enemy: view.enemy.filter(Boolean), bans: view.bans, side: view.side,
-    risk: view.risk, minGames: view.minGames === AUTO_MIN_GAMES ? null : Number(view.minGames),
-    ignoreChampionWinRates: view.ignoreChampionWinRates, tier: dataSource.tier, period: dataSource.period,
+    // Spielzahlen gelten nur für seltene Picks, sonst die Pickrate auf der Rolle.
+    risk: view.risk, rarePicks: Boolean(view.rarePicks),
+    minGames: !view.rarePicks || view.minGames === AUTO_MIN_GAMES ? null : Number(view.minGames),
+    minPickRate: view.rarePicks || !view.minPickRate || view.minPickRate === AUTO_MIN_GAMES ? null : Number(view.minPickRate),
+    ignoreChampionWinRates: view.ignoreChampionWinRates,
+    tier: dataSource.tier, period: dataSource.period,
   });
   useEffect(() => {
     const requestId = ++sequence.current;
@@ -231,17 +245,23 @@ export function DraftView() {
       <${Segmented} label="Bereich" value=${view.tab} onChange=${(tab) => setView({ tab })}
         options=${[{ value: 'picks', label: 'Beste Picks' }, { value: 'analysis', label: 'Draft-Analyse' }]} />
       <div class="draft-options">
-        <label class="draft-option" data-tip="Wie stark kleine Stichproben zum Durchschnitt gezogen werden. Mittel entspricht DraftGap.">
+        <label class="draft-option" data-tip="Wie sehr Matchups und Synergien mit wenigen Spielen zählen (auch Champion-Werte im aktuellen Patch). Mittel entspricht DraftGap.">
           <span class="muted small">Risiko</span>
           <${Select} label="Risiko" value=${view.risk} options=${RISKS} onChange=${(risk) => setView({ risk })} />
         </label>
-        <label class="draft-option" data-tip=${advancedTips ? 'Mindestspiele eines Vorschlags auf seiner Rolle in den letzten 30 Tagen. Auto richtet sich nach der Spielmenge des Rang-Bereichs; in Emerald+ entspricht das etwa dem Standard von DraftGap.' : undefined}>
+        ${view.rarePicks ? html`<label class="draft-option" data-tip=${advancedTips ? 'Mindestspiele eines Vorschlags auf seiner Rolle in den letzten 30 Tagen. Auto richtet sich nach der Spielmenge des Rang-Bereichs; in Emerald+ entspricht das etwa dem Standard von DraftGap.' : undefined}>
           <span class="muted small">Games</span>
           <${Select} label="Mindestspiele" value=${view.minGames} onChange=${(minGames) => setView({ minGames })}
-            options=${[{ value: AUTO_MIN_GAMES, label: result ? `Auto (ab ${result.minGames.toLocaleString('de-DE')})` : 'Auto' }, ...MIN_GAMES]} />
-        </label>
+            options=${[{ value: AUTO_MIN_GAMES, label: autoLabel(result, true) }, ...MIN_GAMES]} />
+        </label>` : html`<label class="draft-option" data-tip=${advancedTips ? 'Mindest-Pickrate eines Vorschlags auf seiner Rolle in den letzten 30 Tagen, in jedem Rang-Bereich gleich streng. Höher heißt weniger exotische Picks.' : undefined}>
+          <span class="muted small">Pickrate</span>
+          <${Select} label="Mindest-Pickrate" value=${view.minPickRate || AUTO_MIN_GAMES} onChange=${(minPickRate) => setView({ minPickRate })}
+            options=${[{ value: AUTO_MIN_GAMES, label: autoLabel(result, false) }, ...MIN_PICK_RATES]} />
+        </label>`}
         <${Switch} checked=${view.ignoreChampionWinRates} onChange=${(ignoreChampionWinRates) => setView({ ignoreChampionWinRates })}
           tip=${advancedTips ? 'Bewertet nur Duos und Matchups, nicht die allgemeine Stärke der Champions' : undefined}>Nur Synergien und Matchups<//>
+        <${Switch} checked=${Boolean(view.rarePicks)} onChange=${(rarePicks) => setView({ rarePicks })}
+          tip=${advancedTips ? 'Bisheriges Verhalten: auch Off-Role-Picks wie Tahm Kench ADC, Filter nur nach Spielzahl. Sonst braucht ein Vorschlag mindestens 10 % der Spiele seines Champions auf dieser Rolle und die gewählte Pickrate.' : undefined}>Seltene Picks zeigen<//>
       </div>
     </div>
 
@@ -322,6 +342,7 @@ function RolePicker({ champion, slot, prediction, shares, pending, onChoose }) {
 
 function TeamColumn({ title, team, slots, result, data, pending, hints = [], onPick, onRole, onClear }) {
   const predicted = new Map((result?.slots[team] || []).map((s) => [s.champion, s]));
+  const favorites = useFavorites();
   return html`<section class=${`draft-team ${team}`}>
     <h3>${title}</h3>
     ${slots.map((slot, index) => {
@@ -335,7 +356,7 @@ function TeamColumn({ title, team, slots, result, data, pending, hints = [], onP
           onClick=${() => onPick(index)} data-tip=${intent ? 'Noch nicht gesperrt, zählt nicht zur Analyse' : undefined}>
           ${intent ? html`<span class="draft-intent"><${Img} src=${intent.icon} size=${40} /></span>`
             : html`<span class="draft-plus"><${Icon} name="plus" size=${18} /></span>`}
-          <span class="muted">${label}</span>
+          <span class="muted">${label}</span>${intent && favorites.has(intent.key) ? html`<${FavoriteMark} size=${13} />` : null}
           ${hint && hint.local ? html`<${Tag} kind="soft">Du<//>` : null}
         </button>`;
       }
@@ -343,9 +364,11 @@ function TeamColumn({ title, team, slots, result, data, pending, hints = [], onP
       // Die Antwort kann noch zum vorherigen Draft gehören: nur verwenden, wenn sie die gewählte Rolle schon kennt.
       const prediction = predicted.get(slot.champion);
       const current = prediction && (!slot.role || prediction.role === slot.role) ? prediction : null;
-      return html`<div key=${index} class="draft-slot">
+      const favorite = favorites.has(slot.champion);
+      return html`<div key=${index} class=${`draft-slot ${favorite ? 'favorite' : ''}`}>
         <button type="button" class="draft-slot-champion" onClick=${() => onPick(index)} data-tip="Champion ändern">
           <${Img} src=${champion.icon} size=${40} /><span class="draft-name">${champion.name}</span>
+          ${favorite ? html`<${FavoriteMark} size=${14} />` : null}
         </button>
         <${RolePicker} champion=${champion} slot=${slot} prediction=${current} shares=${prediction?.shares}
           pending=${pending === `${team}:${slot.champion}`} onChoose=${(role) => onRole(team, index, role)} />
@@ -356,12 +379,15 @@ function TeamColumn({ title, team, slots, result, data, pending, hints = [], onP
 }
 
 function BanRow({ bans, data, onAdd, onRemove }) {
+  const favorites = useFavorites();
   return html`<div class="draft-bans" aria-label="Bans">
     <span class="muted small">Bans</span>
     ${bans.map((key) => {
       const champion = data.championByKey.get(key);
-      return html`<button type="button" key=${key} class="draft-ban" onClick=${() => onRemove(key)} data-tip=${`${champion.name}: Ban entfernen`}>
-        <${Img} src=${champion.icon} size=${30} />
+      const favorite = favorites.has(key);
+      return html`<button type="button" key=${key} class=${`draft-ban ${favorite ? 'favorite' : ''}`} onClick=${() => onRemove(key)}
+        data-tip=${`${champion.name}${favorite ? ' (Favorit)' : ''}: Ban entfernen`}>
+        <${Img} src=${champion.icon} size=${30} />${favorite ? html`<${FavoriteMark} size=${11} tip="" />` : null}
       </button>`;
     })}
     ${bans.length < MAX_BANS ? html`<button type="button" class="draft-ban add" onClick=${onAdd} aria-label="Ban hinzufügen"><${Icon} name="plus" size=${15} /></button>` : null}
@@ -370,6 +396,7 @@ function BanRow({ bans, data, onAdd, onRemove }) {
 
 function ChampionPicker({ data, used, title, onChoose, onClose }) {
   const [query, setQuery] = useState('');
+  const favorites = useFavorites();
   const input = useRef();
   useEffect(() => input.current.focus(), []);
   const matches = useMemo(() => {
@@ -397,8 +424,10 @@ function ChampionPicker({ data, used, title, onChoose, onClose }) {
           onInput=${(e) => setQuery(e.currentTarget.value)} />
       </label>
       <div class="draft-picker-grid">
-        ${matches.map((c) => html`<button type="button" key=${c.key} disabled=${used.has(c.key)} onClick=${() => onChoose(c.key)}>
+        ${matches.map((c) => html`<button type="button" key=${c.key} disabled=${used.has(c.key)} onClick=${() => onChoose(c.key)}
+          class=${favorites.has(c.key) ? 'favorite' : ''}>
           <${Img} src=${c.icon} size=${48} /><span>${c.name}</span>
+          ${favorites.has(c.key) ? html`<${FavoriteMark} size=${13} />` : null}
         </button>`)}
       </div>
     </div>
@@ -467,6 +496,7 @@ function suggestionColumns(data) {
     { key: 'championRating', title: 'Champion', tip: 'Beitrag der Champion-Stärke', value: (s) => s.championRating },
     { key: 'duoRating', title: 'Duos', tip: 'Beitrag der Synergien mit dem eigenen Team', value: (s) => s.duoRating },
     { key: 'matchupRating', title: 'Matchups', tip: 'Beitrag der Matchups gegen den Gegner', value: (s) => s.matchupRating },
+    { key: 'pickRate', title: 'Pickrate', tip: 'Pickrate auf dieser Rolle in den letzten 30 Tagen', value: (s) => s.pickRate },
     { key: 'games', title: 'Spiele', tip: 'Spiele auf dieser Rolle in den letzten 30 Tagen', value: (s) => s.games },
   ];
 }
@@ -496,6 +526,7 @@ function Suggestions({ result, data, view, setView, onTake, busy, owned }) {
     </th>`;
   };
   const advancedTips = useStore((st) => Boolean(st.prefs.advancedTips));
+  const favorites = useFavorites();
   const sideText = result.side === 'ally' ? 'dein Team' : 'den Gegner';
   const baseText = result.side === 'ally' ? 'deines Teams' : 'des Gegners';
 
@@ -509,24 +540,27 @@ function Suggestions({ result, data, view, setView, onTake, busy, owned }) {
         tip="Laut League-Client in dieser Auswahl spielbar (eigene und kostenlose Champions)">Nur spielbare Champions<//>` : null}
     </div>
     ${rows.length === 0 ? html`<${Empty} title="Keine Vorschläge">
-      ${result.openRoles.length === 0 ? 'Dieses Team ist vollständig.' : 'Senke die Mindestspiele oder wähle eine andere Rolle.'}<//>` : html`
+      ${result.openRoles.length === 0 ? 'Dieses Team ist vollständig.' : view.rarePicks ? 'Senke die Mindestspiele oder wähle eine andere Rolle.' : 'Senke die Pickrate, zeige seltene Picks oder wähle eine andere Rolle.'}<//>` : html`
       <h3 class="draft-section-title">Top ${top.length} für ${sideText}${role ? ` auf ${roleLabel(role)}` : ''}</h3>
       <div class="draft-top">
-        ${top.map((s, i) => html`<${TopCard} key=${`${s.champion}-${s.role}`} rank=${i + 1} suggestion=${s} data=${data} onTake=${onTake} baseText=${baseText} />`)}
+        ${top.map((s, i) => html`<${TopCard} key=${`${s.champion}-${s.role}`} rank=${i + 1} suggestion=${s} data=${data} onTake=${onTake} baseText=${baseText}
+          favorite=${favorites.has(s.champion)} />`)}
       </div>
       ${rest.length ? html`<${Card} title="Weitere Picks">
         <div class="grid-scroll"><table class="data draft-table">
           <thead><tr>${columns.map(headCell)}</tr></thead>
           <tbody>${rest.map((s) => {
             const champion = data.championByKey.get(s.champion);
-            return html`<tr key=${`${s.champion}-${s.role}`} class="draft-row" onClick=${() => onTake(s)} data-tip=${advancedTips ? 'Pick übernehmen' : undefined}>
+            const favorite = favorites.has(s.champion);
+            return html`<tr key=${`${s.champion}-${s.role}`} class=${`draft-row ${favorite ? 'favorite' : ''}`} onClick=${() => onTake(s)} data-tip=${advancedTips ? 'Pick übernehmen' : undefined}>
               <td class="muted">${s.rank}</td>
-              <td><span class="draft-cell-champion">${champion ? html`<${Img} src=${champion.icon} size=${26} />` : null}${champion?.name || s.champion}</span></td>
+              <td><span class="draft-cell-champion">${champion ? html`<${Img} src=${champion.icon} size=${26} />` : null}${champion?.name || s.champion}${favorite ? html`<${FavoriteMark} size=${13} />` : null}</span></td>
               <td>${roleLabel(s.role)}</td><td><strong>${percent(s.winRate)}</strong></td>
               <td class=${toneOf(s.delta * 100)}>${signed(s.delta * 100)}</td>
               <td class=${toneOf(impact(s.championRating))}>${impactText(s.championRating)}</td>
               <td class=${toneOf(impact(s.duoRating))}>${impactText(s.duoRating)}</td>
               <td class=${toneOf(impact(s.matchupRating))}>${impactText(s.matchupRating)}</td>
+              <td class="muted" data-tip=${advancedTips ? `${percent(s.laneShare)} der Spiele von ${champion?.name || s.champion} auf dieser Rolle` : undefined}>${percent(s.pickRate, 2)}</td>
               <td class="muted">${count(s.games)}</td>
             </tr>`;
           })}</tbody>
@@ -535,16 +569,17 @@ function Suggestions({ result, data, view, setView, onTake, busy, owned }) {
   </div>`;
 }
 
-function TopCard({ rank, suggestion: s, data, onTake, baseText }) {
+function TopCard({ rank, suggestion: s, data, onTake, baseText, favorite }) {
   const advancedTips = useStore((st) => Boolean(st.prefs.advancedTips));
   const champion = data.championByKey.get(s.champion);
+  const favorites = useFavorites();
   const details = [...s.details].sort((a, b) => Math.abs(b.rating) - Math.abs(a.rating)).slice(0, 3);
-  return html`<button type="button" class=${`draft-top-card ${rank === 1 ? 'best' : ''}`} onClick=${() => onTake(s)}
+  return html`<button type="button" class=${`draft-top-card ${rank === 1 ? 'best' : ''} ${favorite ? 'favorite' : ''}`} onClick=${() => onTake(s)}
     data-tip=${advancedTips ? `Pick übernehmen · Winrate ${baseText} mit diesem Pick` : undefined}>
     <span class="draft-rank">${rank}</span>
     <span class="draft-top-head">
       ${champion ? html`<${Img} src=${champion.icon} size=${48} />` : null}
-      <span class="draft-top-name"><strong>${champion?.name || s.champion}</strong><${Tag} kind="soft">${roleLabel(s.role)}<//></span>
+      <span class="draft-top-name"><strong>${champion?.name || s.champion}${favorite ? html` <${FavoriteMark} size=${14} />` : null}</strong><${Tag} kind="soft">${roleLabel(s.role)}<//></span>
     </span>
     <span class="draft-top-value">${percent(s.winRate)}<small class=${toneOf(s.delta * 100)}>${signed(s.delta * 100)}</small></span>
     <span class="draft-top-parts">
@@ -555,8 +590,9 @@ function TopCard({ rank, suggestion: s, data, onTake, baseText }) {
     ${details.length ? html`<span class="draft-top-details">
       ${details.map((d) => {
         const other = data.championByKey.get(d.champion);
-        return html`<span key=${`${d.kind}-${d.champion}`} class="draft-chip"
-          data-tip=${`${d.kind === 'duo' ? 'Mit' : 'Gegen'} ${other?.name}: ${d.winRate === null ? 'keine Spiele' : `${percent(d.winRate)} in ${count(d.games)} Spielen`}`}>
+        const otherFavorite = favorites.has(d.champion);
+        return html`<span key=${`${d.kind}-${d.champion}`} class=${`draft-chip ${otherFavorite ? 'favorite' : ''}`}
+          data-tip=${`${d.kind === 'duo' ? 'Mit' : 'Gegen'} ${other?.name}${otherFavorite ? ' (Favorit)' : ''}: ${d.winRate === null ? 'keine Spiele' : `${percent(d.winRate)} in ${count(d.games)} Spielen`}`}>
           ${other ? html`<${Img} src=${other.icon} size=${20} />` : null}<b class=${toneOf(impact(d.rating))}>${impactText(d.rating)}</b>
         </span>`;
       })}
@@ -668,7 +704,8 @@ function ChampionTable({ label, rows, data }) {
 
 function ChampionCell({ data, champion }) {
   const c = data.championByKey.get(champion);
-  return html`<span class="draft-cell-champion">${c ? html`<${Img} src=${c.icon} size=${24} />` : null}${c?.name || champion}</span>`;
+  const favorite = useFavorites().has(champion);
+  return html`<span class="draft-cell-champion">${c ? html`<${Img} src=${c.icon} size=${24} />` : null}${c?.name || champion}${favorite ? html`<${FavoriteMark} size=${12} />` : null}</span>`;
 }
 
 function PairCard({ title, hint, rows, data, separator }) {

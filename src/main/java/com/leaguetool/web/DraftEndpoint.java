@@ -39,6 +39,7 @@ final class DraftEndpoint {
     private static final int TEAM_SIZE = 5;
     private static final int MAX_BANS = 10;
     private static final int MAX_MIN_GAMES = 100_000;
+    private static final double MAX_MIN_PICK_RATE = 0.2;
     private static final int MAX_CLIENT_ID_LENGTH = 64;
 
     private final WebContext ctx;
@@ -71,11 +72,20 @@ final class DraftEndpoint {
             throw new ApiException(400, e.getMessage());
         }
 
+        // Standard sind gängige Picks mit Mindest-Pickrate; "rarePicks" schaltet auf das alte Verhalten mit absoluten
+        // Mindestspielen zurück. Die automatischen Mindestspiele bleiben als Untergrenze für kleine Rang-Bereiche.
+        boolean rarePicks = body.path("rarePicks").asBoolean();
         JsonNode requestedMinGames = body.path("minGames");
-        int minGames = requestedMinGames.isNumber()
+        int minGames = rarePicks && requestedMinGames.isNumber()
                 ? Math.max(0, Math.min(MAX_MIN_GAMES, requestedMinGames.asInt()))
                 : DraftAnalyzer.defaultMinGames(loaded.analysedPicks());
-        DraftAnalyzer.Config config = new DraftAnalyzer.Config(risk, body.path("ignoreChampionWinRates").asBoolean(), minGames);
+        JsonNode requestedPickRate = body.path("minPickRate");
+        double minPickRate = rarePicks ? 0
+                : requestedPickRate.isNumber() ? Math.max(0, Math.min(MAX_MIN_PICK_RATE, requestedPickRate.asDouble()))
+                : DraftAnalyzer.COMMON_MIN_PICK_RATE;
+        double minLaneShare = rarePicks ? 0 : DraftAnalyzer.COMMON_MIN_LANE_SHARE;
+        DraftAnalyzer.Config config = new DraftAnalyzer.Config(risk, body.path("ignoreChampionWinRates").asBoolean(), minGames,
+                minPickRate, minLaneShare);
 
         Map<Role, Integer> allyTeam = team(loaded.allyRoles());
         Map<Role, Integer> enemyTeam = team(loaded.enemyRoles());
@@ -90,6 +100,9 @@ final class DraftEndpoint {
                 "patch", loaded.patch(),
                 "side", forEnemy ? "enemy" : "ally",
                 "minGames", minGames,
+                "minPickRate", minPickRate,
+                "defaultMinPickRate", DraftAnalyzer.COMMON_MIN_PICK_RATE,
+                "minLaneShare", minLaneShare,
                 "slots", Dto.obj("ally", slotResults(ally, loaded.allyRoles(), loaded.dataset()),
                         "enemy", slotResults(enemy, loaded.enemyRoles(), loaded.dataset())),
                 "analysis", analysis(analyzer.analyze(allyTeam, enemyTeam)),
@@ -97,7 +110,7 @@ final class DraftEndpoint {
                         "ally", profile(allyTeam, loaded, config),
                         "enemy", profile(enemyTeam, loaded, config)),
                 "openRoles", Arrays.stream(Role.values()).filter(r -> !suggestedTeam.containsKey(r)).map(Role::name).toList(),
-                "suggestions", suggestions.stream().map(DraftEndpoint::suggestion).toList(),
+                "suggestions", suggestions.stream().map(s -> suggestion(s, loaded.dataset())).toList(),
                 "warnings", loaded.warnings());
     }
 
@@ -238,7 +251,7 @@ final class DraftEndpoint {
     }
 
     /** Die Summen enthalten nur, was dieser Pick selbst beiträgt. */
-    private static Map<String, Object> suggestion(Suggestion s) {
+    private static Map<String, Object> suggestion(Suggestion s, DraftDataset dataset) {
         Result r = s.result();
         Pick pick = s.pick();
         ChampionResult own = r.champions().stream().filter(c -> c.pick().equals(pick)).findFirst().orElse(null);
@@ -260,7 +273,7 @@ final class DraftEndpoint {
         return Dto.obj("champion", pick.champion(), "role", pick.role().name(), "winRate", r.winRate(), "delta", s.delta(),
                 "championRating", own == null ? 0.0 : own.rating(), "duoRating", duoRating, "matchupRating", matchupRating,
                 "championWinRate", own == null ? null : winRate(own.stats()), "games", own == null ? 0.0 : own.stats().games(),
-                "details", details);
+                "pickRate", dataset.pickRate(pick), "laneShare", dataset.laneShare(pick), "details", details);
     }
 
     private static Map<String, Object> detail(String kind, Pick other, PairResult pair) {

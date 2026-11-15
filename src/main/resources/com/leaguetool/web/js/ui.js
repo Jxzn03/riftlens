@@ -1,6 +1,6 @@
 // Wiederverwendbare Bausteine: Icons, Bilder, Karten, Regler, virtualisierte Tabelle, Geteilte Ansicht.
 import { html, useState, useEffect, useLayoutEffect, useRef } from '/vendor/htm-preact.js';
-import { store, useStore, useWinRateClass, go } from './core.js';
+import { store, useStore, useWinRateClass, go, toggleFavorite } from './core.js';
 
 // ------------------------------------------------------------------ Icons
 
@@ -17,6 +17,7 @@ const ICONS = {
   moon: 'M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z',
   search: 'M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16zM21 21l-4.3-4.3',
   x: 'M18 6 6 18M6 6l12 12',
+  star: 'M12 2.8l2.85 5.8 6.4.93-4.63 4.5 1.1 6.37L12 17.4l-5.72 3l1.1-6.37-4.63-4.5 6.4-.93z',
   plus: 'M12 5v14M5 12h14',
   trash: 'M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6',
   arrow: 'M5 12h14M12 5l7 7-7 7',
@@ -31,6 +32,21 @@ const ICONS = {
 export function Icon({ name, size = 18 }) {
   return html`<svg class="icon" width=${size} height=${size} viewBox="0 0 24 24" fill="none" stroke="currentColor"
     stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d=${ICONS[name]} /></svg>`;
+}
+
+/** Gefüllter Stern für Favoriten (nur Anzeige). */
+export function FavoriteMark({ size = 14, tip = 'Favorit' }) {
+  return html`<span class="fav-mark" data-tip=${tip || undefined} aria-label=${tip || undefined}><${Icon} name="star" size=${size} /></span>`;
+}
+
+/** Stern zum Setzen und Entfernen eines Favoriten; der Klick wählt nicht zusätzlich die Tabellenzeile aus. */
+export function FavoriteToggle({ championKey, name, size = 16, label = false }) {
+  const on = useStore((s) => s.favorites.includes(championKey));
+  const text = on ? `${name} aus den Favoriten entfernen` : `${name} zu den Favoriten`;
+  return html`<button type="button" class=${`fav-toggle ${on ? 'on' : ''} ${label ? 'btn' : ''}`} aria-pressed=${on} aria-label=${text}
+    data-tip=${label ? undefined : text} onClick=${(e) => { e.stopPropagation(); toggleFavorite(championKey); }}>
+    <${Icon} name="star" size=${size} />${label ? html`<span>${on ? 'Favorit' : 'Als Favorit'}</span>` : null}
+  </button>`;
 }
 
 // ------------------------------------------------------------------ Einfache Bausteine

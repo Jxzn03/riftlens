@@ -164,6 +164,18 @@ kbd {
 .btn.ghost:hover:not(:disabled) { background: var(--row-hover); color: var(--text); }
 .btn.icon { width: 34px; padding: 0; }
 
+/* Favoriten (eigener Champion-Pool) */
+.fav-toggle { display: inline-grid; place-items: center; flex: none; padding: 2px; border-radius: 6px; color: var(--text-3); opacity: .45; transition: opacity var(--ease), color var(--ease); }
+.fav-toggle:hover, .vt-row:hover .fav-toggle { opacity: 1; }
+.fav-toggle:hover { color: var(--accent); }
+.fav-toggle.on { color: var(--accent); opacity: 1; }
+.fav-toggle.on svg, .fav-mark svg, .fav-filter.active svg { fill: currentColor; }
+.fav-toggle.btn { display: inline-flex; height: 26px; padding: 0 10px; gap: 5px; font-size: 12px; opacity: 1; color: var(--text-2); }
+.fav-toggle.btn.on { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+.fav-mark { display: inline-flex; vertical-align: -2px; color: var(--accent); }
+.fav-filter.active { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+.setting-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+
 .select, .input {
   height: 34px; padding: 0 10px; border-radius: var(--radius-s); background: var(--surface); border: 1px solid var(--line); outline-offset: 0;
   transition: border-color var(--ease);
@@ -650,6 +662,21 @@ table.data.compact td { padding: 3px 10px 3px 0; font-size: 12.5px; }
 .draft-picker-grid button { display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 6px 2px; border-radius: var(--radius-s); font-size: 11.5px; }
 .draft-picker-grid button:hover:not(:disabled) { background: var(--row-hover); }
 .draft-picker-grid button:disabled { opacity: .3; cursor: not-allowed; }
+.draft-picker-grid button { position: relative; }
+.draft-picker-grid button.favorite { background: var(--accent-soft); box-shadow: inset 0 0 0 1px var(--accent); }
+.draft-picker-grid .fav-mark { position: absolute; top: 4px; right: 5px; }
+/* Ganze Zeile golden; die erste Spalte bekommt Abstand, damit die Nummer nicht am Rand der Färbung klebt. */
+.draft-table td:first-child, .draft-table th:first-child { padding-left: 8px; }
+.draft-row.favorite td { background: var(--accent-soft); border-top-color: var(--accent); box-shadow: inset 0 -1px 0 var(--accent); }
+.draft-row.favorite td:first-child { box-shadow: inset 3px 0 0 var(--accent), inset 0 -1px 0 var(--accent); }
+.draft-row.favorite:hover td { background: color-mix(in srgb, var(--accent) 22%, transparent); }
+.draft-cell-champion .fav-mark { margin-left: 2px; }
+.draft-top-card.favorite { box-shadow: inset 0 0 0 2px var(--accent); }
+.draft-slot.favorite { background: var(--accent-soft); box-shadow: inset 0 0 0 1px var(--accent); }
+.draft-ban { position: relative; }
+.draft-ban.favorite { box-shadow: inset 0 0 0 2px var(--accent); }
+.draft-ban .fav-mark { position: absolute; top: 1px; right: 1px; filter: drop-shadow(0 0 2px rgba(0, 0, 0, .8)); }
+.draft-chip.favorite { box-shadow: inset 0 0 0 1px var(--accent); }
 .draft-picker-grid span { max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 @media (max-width: 1160px) {
   .draft-board { grid-template-columns: repeat(2, minmax(0, 1fr)); }

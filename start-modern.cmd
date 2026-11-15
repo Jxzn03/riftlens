@@ -13,11 +13,15 @@ echo Baue die moderne Oberflaeche ...
 call mvnw.cmd -q -Pmodern -DskipTests package
 if errorlevel 1 (
     echo Build fehlgeschlagen.
-    pause
     exit /b 1
 )
 
 :run
+rem test-build wont launch program all the time
+if /I "%~2"=="--no-launch" goto done
+
 rem Startzeit: gemeinsames Klassen-Archiv wird beim ersten Lauf automatisch angelegt.
 start "" javaw -XX:+UseSerialGC -XX:TieredStopAtLevel=1 -XX:+AutoCreateSharedArchive "-XX:SharedArchiveFile=%USERPROFILE%\.leaguetool\modern-ui\app.jsa" -jar "%JAR%"
+
+:done
 endlocal

@@ -57,8 +57,15 @@ public final class DraftAnalyzer {
      * @param risk                   Glättung kleiner Stichproben
      * @param ignoreChampionWinRates bewertet nur Duos und Matchups
      * @param minGames               Mindestspiele eines Vorschlags auf seiner Rolle in den letzten 30 Tagen
+     * @param minPickRate            Mindest-Pickrate eines Vorschlags auf seiner Rolle (0..1, 0 = aus)
+     * @param minLaneShare           Mindestanteil der Spiele des Champions auf dieser Rolle (0..1, 0 = aus)
      */
-    public record Config(Risk risk, boolean ignoreChampionWinRates, int minGames) {
+    public record Config(Risk risk, boolean ignoreChampionWinRates, int minGames, double minPickRate, double minLaneShare) {
+
+        /** Ohne Filter nach Pickrate und Rollenanteil (bisheriges Verhalten, „Seltene Picks zeigen“). */
+        public Config(Risk risk, boolean ignoreChampionWinRates, int minGames) {
+            this(risk, ignoreChampionWinRates, minGames, 0, 0);
+        }
     }
 
     public record ChampionResult(Pick pick, double rating, Stat stats) {
@@ -93,6 +100,15 @@ public final class DraftAnalyzer {
     /** DraftGaps Standard von 1000 Spielen pro Woche, bezogen auf die Picks von Emerald+ in 30 Tagen. */
     private static final double DEFAULT_MIN_GAMES_SHARE = 4300.0 / 57_802_290;
     private static final int LOWEST_DEFAULT_MIN_GAMES = 100;
+
+    /**
+     * Gängige Picks: Ohne diese Schwellen landen Off-Role-Picks wie Tahm Kench ADC oben. Deren Winrate stammt fast nur von
+     * Spezialisten und überschätzt den Pick; der Prior kann das bei Zehntausenden Spielen nicht ausgleichen. Mit beiden
+     * Schwellen bleiben in allen Rang-Bereichen je Rolle etwa 30 bis 55 Champions.
+     */
+    public static final double COMMON_MIN_LANE_SHARE = 0.10;
+    /** Standard-Pickrate auf der Rolle; relativ zu den Spielen der Rolle, also in jedem Rang-Bereich gleich streng. */
+    public static final double COMMON_MIN_PICK_RATE = 0.0075;
 
     private final DraftDataset data;
     private final Config config;
@@ -161,7 +177,7 @@ public final class DraftAnalyzer {
             for (Role role : Role.values()) {
                 Pick pick = new Pick(champion, role);
                 // Auch bei Mindestspielen 0 braucht ein Vorschlag echte Spiele auf dieser Rolle.
-                if (team.containsKey(role) || data.full(pick).games() < Math.max(1, config.minGames())) {
+                if (team.containsKey(role) || !allowed(pick)) {
                     continue;
                 }
                 Map<Role, Integer> candidate = new EnumMap<>(Role.class);
@@ -175,6 +191,13 @@ public final class DraftAnalyzer {
                 .thenComparingInt(s -> s.pick().champion())
                 .thenComparing(s -> s.pick().role()));
         return suggestions;
+    }
+
+    /** Ob {@code pick} als Vorschlag in Frage kommt: genug Spiele, und auf Wunsch eine gängige Rolle des Champions. */
+    private boolean allowed(Pick pick) {
+        return data.full(pick).games() >= Math.max(1, config.minGames())
+                && data.pickRate(pick) >= config.minPickRate()
+                && data.laneShare(pick) >= config.minLaneShare();
     }
 
     private static List<Pick> picks(Map<Role, Integer> team) {

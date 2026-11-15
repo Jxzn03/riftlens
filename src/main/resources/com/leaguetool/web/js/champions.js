@@ -3,14 +3,14 @@ import { html, useMemo, useEffect } from '/vendor/htm-preact.js';
 import {
   useStore, useViewState, useFetch, useStatsUrl, useSourceLabel, useDeferredUrl, useWinRateClass, select, go, normalize,
   sortRows, activeSort, percent, winRateText, summary, setPref, useChampionRole, useChampionStatsUrl,
-  useBuildQuery, runePageRunes, importRunePage,
+  useBuildQuery, runePageRunes, importRunePage, useFavorites,
 } from './core.js';
 import {
   Icon, Img, Card, Button, SearchInput, Segmented, Slider, Tag, Meter, DataGrid, RateCell, VirtualTable, MasterDetail, HelpTip,
-  Empty, Loading, Skeleton, ErrorNote, ItemIcons, RuneIcons, SpellIcons,
+  Empty, Loading, Skeleton, ErrorNote, ItemIcons, RuneIcons, SpellIcons, FavoriteToggle,
 } from './ui.js';
 
-const DEFAULTS = { q: '', sort: { key: 'name', dir: 1 } };
+const DEFAULTS = { q: '', sort: { key: 'name', dir: 1 }, favoritesOnly: false };
 const DETAIL_DEFAULTS = { tab: 'overview' };
 const DETAIL_TABS = [
   { value: 'overview', label: 'Übersicht' },
@@ -35,7 +35,8 @@ const playedEnoughOnRole = (row) => {
 
 const NAME_COLUMN = {
   key: 'name', title: 'Champion', width: '230px', value: (r) => r.c.name,
-  render: (r) => html`<div class="cell-hero"><${Img} src=${r.c.icon} size=${34} cls="round" /><div><strong>${r.c.name}</strong><small>${r.c.title}</small></div></div>`,
+  render: (r) => html`<div class="cell-hero"><${FavoriteToggle} championKey=${r.c.key} name=${r.c.name} size=${15} />
+    <${Img} src=${r.c.icon} size=${34} cls="round" /><div><strong>${r.c.name}</strong><small>${r.c.title}</small></div></div>`,
 };
 
 const banRate = (r) => (r.stats ? r.stats.banRate : null);
@@ -111,18 +112,22 @@ export function ChampionsView({ id }) {
 
   // Ohne geladene Statistik (Laden, Fehler) bleibt die Liste vollständig.
   const hideRarePicks = Boolean(role && stats);
+  const favorites = useFavorites();
+  // Ohne Favoriten wäre der Filter eine leere Liste ohne erkennbaren Grund.
+  const favoritesOnly = Boolean(view.favoritesOnly) && favorites.size > 0;
 
   const visible = useMemo(() => {
     const q = normalize(view.q);
     const filtered = rows.filter((r) => (!hideRarePicks || playedEnoughOnRole(r))
+      && (!favoritesOnly || favorites.has(r.c.key))
       && (!q || r.c.name.toLowerCase().includes(q) || r.c.id.toLowerCase().includes(q)));
     return sortRows(filtered, columns, sort);
-  }, [rows, view.q, sort.key, sort.dir, columns, hideRarePicks]);
+  }, [rows, view.q, sort.key, sort.dir, columns, hideRarePicks, favoritesOnly, favorites]);
 
   // Sprung aus einer anderen Ansicht: Filter nur zurücksetzen, wenn der Champion sonst ausgeblendet wäre.
   useEffect(() => {
     if (id && data.championById.has(id) && !visible.some((r) => r.c.id === id)) {
-      setView({ q: '' });
+      setView({ q: '', favoritesOnly: false });
     }
   }, [id]);
 
@@ -131,6 +136,11 @@ export function ChampionsView({ id }) {
   const master = html`<div class="pane">
     <div class="toolbar">
       <${SearchInput} value=${view.q} onInput=${(q) => setView({ q })} placeholder="Champion suchen …" />
+      <button type="button" class=${`btn fav-filter ${favoritesOnly ? 'active' : ''}`} aria-pressed=${favoritesOnly} disabled=${favorites.size === 0}
+        data-tip=${favorites.size === 0 ? 'Noch keine Favoriten: Stern vor einem Champion anklicken' : 'Nur deinen Champion-Pool zeigen'}
+        onClick=${() => setView({ favoritesOnly: !favoritesOnly })}>
+        <${Icon} name="star" size=${16} /><span>Favoriten${favorites.size ? ` (${favorites.size})` : ''}</span>
+      </button>
     </div>
     <div class="count-line">
       <span>${visible.length} von ${data.champions.length} Champions</span>
@@ -171,7 +181,10 @@ function ChampionDetail({ champion, tab, onTab }) {
         <div class="hero-text">
           <h1>${champion.name}</h1>
           <p class="hero-sub">${champion.title}</p>
-          ${champion.resource ? html`<div class="tags"><${Tag} kind="soft">${champion.resource}<//></div>` : null}
+          <div class="tags">
+            ${champion.resource ? html`<${Tag} kind="soft">${champion.resource}<//>` : null}
+            <${FavoriteToggle} championKey=${champion.key} name=${champion.name} size=${14} label />
+          </div>
         </div>
       </div>
     </header>
