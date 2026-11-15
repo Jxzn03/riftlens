@@ -3,6 +3,21 @@ import { html, useEffect, useMemo, useState } from '/vendor/htm-preact.js';
 import { store, useStore, useViewState, api, go, percent } from './core.js';
 import { Icon, Img, Button, Select, Card, Spinner, Empty, Tag, DataGrid, ItemIcons, SpellIcons } from './ui.js';
 
+const TOP_N = 5; // Standardansicht Mitspieler: nur die ersten 5 Einträge
+const TOP_CHAMPS = 5; // Standardansicht Champions
+// Breiter Schalter unter einer gekürzten Tabelle; der Pfeil zeigt, dass es mehr Einträge gibt.
+function MoreToggle({ open, total, top, onToggle }) {
+  // Beim Einklappen zurück an den Anfang der Karte springen, falls dieser oberhalb des Sichtbereichs liegt.
+  const click = (e) => {
+    const card = e.currentTarget.closest('.card');
+    onToggle();
+    if (open && card) requestAnimationFrame(() => { if (card.getBoundingClientRect().top < 0) card.scrollIntoView({ block: 'start' }); });
+  };
+  return html`<button type="button" class="more-toggle" aria-expanded=${open} onClick=${click}>
+    ${open ? `Nur Top ${top} zeigen` : `${total - top} weitere anzeigen`}<span class="more-arrow" aria-hidden="true">${open ? '▲' : '▼'}</span>
+  </button>`;
+}
+
 const DEFAULTS = { query: '', platform: '', count: '50', result: null, error: null, loading: false, mode: '' };
 const COUNTS = [20, 50, 100, 200, 300, 500, 1000].map((n) => ({ value: String(n), label: `${n} Matches` }));
 const MAX_RECENT = 8;
@@ -207,6 +222,8 @@ function Progress() {
 }
 
 function Result({ result, data, mode, onMode, onSearch }) {
+  const [matesOpen, setMatesOpen] = useState(false);
+  const [champsOpen, setChampsOpen] = useState(false);
   const modes = useMemo(() => modesOf(result.matches), [result]);
   const matches = useMemo(() => (mode ? result.matches.filter((m) => m.mode === mode) : result.matches), [result, mode]);
   const stats = useMemo(() => aggregate(matches), [matches]);
@@ -252,10 +269,10 @@ function Result({ result, data, mode, onMode, onSearch }) {
 
     <div class="summoner-grid">
       <div class="summoner-main">
-      <${Card} title="Meistgespielte Champions" aside=${html`<span class="muted">aus diesen Matches</span>`}>
+      <${Card} title="Meistgespielte Champions">
         ${stats.champions.length === 0 ? html`<p class="muted">Keine Matches in dieser Auswahl.</p>` : html`<${DataGrid}
           head=${['Champion', 'Spiele', 'WR', 'S / N', 'KDA', 'Ø K / D / A', 'CS/Min']}
-          rows=${stats.champions.map((c) => [
+          rows=${(champsOpen ? stats.champions : stats.champions.slice(0, TOP_CHAMPS)).map((c) => [
             html`<${ChampionCell} data=${data} championKey=${c.key} name=${c.name} />`,
             c.games,
             html`<strong class=${wrClass(c.wins / c.games)}>${percent(c.wins / c.games)}</strong>`,
@@ -264,11 +281,12 @@ function Result({ result, data, mode, onMode, onSearch }) {
             `${(c.kills / c.games).toFixed(1)} / ${(c.deaths / c.games).toFixed(1)} / ${(c.assists / c.games).toFixed(1)}`,
             c.seconds ? (c.cs / (c.seconds / 60)).toFixed(1) : '–',
           ])} />`}
+        ${stats.champions.length > TOP_CHAMPS ? html`<${MoreToggle} open=${champsOpen} total=${stats.champions.length} top=${TOP_CHAMPS} onToggle=${() => setChampsOpen(!champsOpen)} />` : null}
       <//>
-      <${Card} title="Häufige Mitspieler" aside=${html`<span class="muted">ab ${minShared} gemeinsamen Spielen</span>`}>
+      <${Card} title="Häufige Mitspieler">
         ${mates.length === 0 ? html`<p class="muted">Keine Mitspieler mit mindestens ${minShared} gemeinsamen Spielen in dieser Auswahl.</p>` : html`<${DataGrid}
           head=${['Mitspieler', 'Spiele', 'WR zusammen', 'S / N', 'WR ohne', 'Differenz']}
-          rows=${mates.map((m) => {
+          rows=${(matesOpen ? mates : mates.slice(0, TOP_N)).map((m) => {
             const together = m.wins / m.games;
             const without = m.otherGames ? m.otherWins / m.otherGames : null;
             const diff = without === null ? null : (together - without) * 100;
@@ -282,6 +300,7 @@ function Result({ result, data, mode, onMode, onSearch }) {
               diff === null ? '–' : html`<strong class=${diff >= 2 ? 'good' : diff <= -2 ? 'bad' : ''}>${diff > 0 ? '+' : ''}${diff.toLocaleString('de-DE', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} Pp.</strong>`,
             ];
           })} />`}
+        ${mates.length > TOP_N ? html`<${MoreToggle} open=${matesOpen} total=${mates.length} top=${TOP_N} onToggle=${() => setMatesOpen(!matesOpen)} />` : null}
         <p class="muted small">Riot meldet keine Premades. Als Mitspieler zählt, wer in dieser Auswahl mehrfach im eigenen Team war; „WR ohne“ ist deine Winrate in den übrigen Spielen.</p>
       <//>
       <${Card} title="Letzte Matches" aside=${html`<span class="muted">${matches.length} angezeigt</span>`}>

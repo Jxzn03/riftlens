@@ -468,6 +468,8 @@ table.data.compact td { padding: 3px 10px 3px 0; font-size: 12.5px; }
 .huge-hint ul { margin: 0; padding-left: 20px; display: grid; gap: 2px; }
 .mate-link { background: none; border: 0; padding: 0; color: inherit; font: inherit; cursor: pointer; text-align: left; }
 .mate-link:hover { text-decoration: underline; }
+.mate-toggle { background: none; border: 0; padding: 0; color: var(--muted, inherit); font: inherit; cursor: pointer; }
+.mate-toggle:hover { text-decoration: underline; }
 .summoner-result { display: flex; flex-direction: column; gap: 12px; }
 .rank-cards { display: flex; gap: 10px; flex-wrap: wrap; }
 .rank-card { flex: 1; min-width: 220px; display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; align-items: baseline; padding: 12px 14px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); }
@@ -669,3 +671,5 @@ table.data.compact td { padding: 3px 10px 3px 0; font-size: 12.5px; }
 .spell-cd strong { color: var(--text); }
 
 .detail > .empty { height: auto; min-height: 0; padding: 20px 28px 12px; }
+.more-toggle { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; margin-top: 8px; padding: 8px; background: var(--surface); border: 1px dashed var(--line); border-radius: var(--radius); color: var(--muted, inherit); font: inherit; cursor: pointer; }
+.more-arrow { font-size: 12px; }
