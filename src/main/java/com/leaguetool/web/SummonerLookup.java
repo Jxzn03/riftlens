@@ -44,11 +44,11 @@ final class SummonerLookup {
     private static final Map<Integer, String> QUEUES = Map.ofEntries(
             Map.entry(0, "Benutzerdefiniert"), Map.entry(1710, "Arena"), Map.entry(400, "Normal Draft"), Map.entry(420, "Ranked Solo/Duo"), Map.entry(430, "Normal Blind"),
             Map.entry(440, "Ranked Flex"), Map.entry(450, "ARAM"), Map.entry(480, "Swiftplay"), Map.entry(490, "Quickplay"),
-            Map.entry(700, "Clash"), Map.entry(720, "ARAM Clash"), Map.entry(900, "ARURF"), Map.entry(1020, "One for All"),
+            Map.entry(700, "Clash"), Map.entry(710, "5 vs 5 Teamranked"), Map.entry(720, "ARAM Clash"), Map.entry(900, "ARURF"), Map.entry(1020, "One for All"),
             Map.entry(1300, "Nexus Blitz"), Map.entry(1700, "Arena"), Map.entry(1900, "URF"), Map.entry(830, "Coop vs. KI"),
             Map.entry(840, "Coop vs. KI"), Map.entry(850, "Coop vs. KI"), Map.entry(870, "Coop vs. KI"),
             Map.entry(880, "Coop vs. KI"), Map.entry(890, "Coop vs. KI"), Map.entry(2300, "Brawl"),
-            Map.entry(2400, "ARAM: Mayhem"));
+            Map.entry(2400, "ARAM: Mayhem"), Map.entry(3100, "Tournament Code (Custom Game)"));
     private static final Map<String, String> POSITIONS = Map.of("TOP", "Top", "JUNGLE", "Jungle", "MIDDLE", "Mid",
             "BOTTOM", "Bot", "UTILITY", "Support");
     private static final Map<String, String> RANKED_QUEUES = Map.of("RANKED_SOLO_5x5", "Solo/Duo", "RANKED_FLEX_SR", "Flex");

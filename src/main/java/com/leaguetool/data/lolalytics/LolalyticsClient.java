@@ -116,8 +116,8 @@ public final class LolalyticsClient {
         requireSlug(slug);
         String t = safe(tier, "emerald_plus");
         String l = lane == null ? null : safe(lane, "all");
-        // "v3": enthält Matchups mit Delta-Werten, Schaden und Spieldauer; ältere Cache-Einträge haben diese Felder nicht.
-        String key = "lolalytics/build_v3_" + slug + "_" + t + "_" + (l == null ? "main" : l) + "_" + period.cacheSuffix() + ".json";
+        // "v4": enthält Matchups mit Delta-Werten, Schaden, Spieldauer und Itemplätze; ältere Cache-Einträge haben diese Felder nicht.
+        String key = "lolalytics/build_v4_" + slug + "_" + t + "_" + (l == null ? "main" : l) + "_" + period.cacheSuffix() + ".json";
         String url = "https://lolalytics.com/lol/" + slug + "/build/?tier=" + t + (l == null ? "" : "&lane=" + l)
                 + patchQuery(period);
         return LolalyticsState.parseBuild(cachedExtract(key, url, LolalyticsState::extractBuild));

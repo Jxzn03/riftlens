@@ -156,7 +156,14 @@ export function installTooltips() {
   let current = null;
   const show = (target) => {
     current = target;
-    tip.textContent = target.dataset.tip;
+    const rich = target.querySelector(':scope > .tip-content');
+    tip.classList.toggle('tip-rich', Boolean(rich));
+    tip.textContent = rich ? '' : target.dataset.tip;
+    if (rich) {
+      const content = rich.cloneNode(true);
+      content.hidden = false;
+      tip.append(content);
+    }
     tip.hidden = false;
     const rect = target.getBoundingClientRect();
     const box = tip.getBoundingClientRect();
@@ -181,6 +188,11 @@ export function installTooltips() {
   });
   document.addEventListener('scroll', hide, true);
   document.addEventListener('mousedown', hide);
+}
+
+/** „?“, das beim Hovern beliebigen Inhalt (z. B. eine Tabelle) als Tooltip zeigt. */
+export function HelpTip({ label, children }) {
+  return html`<span class="help-tip" data-tip=${label} aria-label=${label}>?<div class="tip-content" hidden>${children}</div></span>`;
 }
 
 // ------------------------------------------------------------------ Virtualisierte Tabelle

@@ -226,6 +226,12 @@ kbd {
   position: fixed; z-index: 90; max-width: 400px; padding: 7px 10px; border-radius: 8px; pointer-events: none; white-space: pre-line;
   background: #05070b; color: #eef2f8; font-size: 12px; line-height: 1.4; border: 1px solid rgba(255, 255, 255, .12); box-shadow: var(--shadow);
 }
+/* Der Tooltip ist immer dunkel, Tabellen darin dürfen die Farben des hellen Themas nicht übernehmen. */
+.tip.tip-rich { max-width: min(640px, calc(100vw - 16px)); padding: 10px 12px; white-space: normal; }
+.tip-rich th, .tip-rich td { color: inherit; vertical-align: top; }
+.tip-rich p { margin-top: 8px; color: #a9b4c4; }
+.help-tip { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; margin-left: 4px; border: 1px solid var(--line); border-radius: 50%; color: var(--text-3); font-size: 11px; font-weight: 700; cursor: help; }
+.help-tip:hover { color: var(--accent); border-color: var(--accent); }
 
 /* Master-Detail */
 .md { height: 100%; display: grid; grid-template-columns: minmax(280px, var(--split)) 1px minmax(320px, 1fr); }
@@ -281,6 +287,7 @@ kbd {
 .detail { padding: 0 0 22px; display: flex; flex-direction: column; gap: 12px; animation: rise 180ms ease-out; }
 .detail > *:not(.hero) { margin-inline: 16px; }
 .detail > .plain-hero { margin-top: 16px; }
+.detail > .detail-tabs { position: sticky; top: 0; z-index: 6; margin-inline: 0; padding: 8px 16px; background: var(--bg-2); border-bottom: 1px solid var(--line); }
 @keyframes rise { from { opacity: 0; transform: translateY(5px); } }
 
 .hero { position: relative; height: 240px; overflow: hidden; display: flex; align-items: flex-end; background: var(--surface); }
@@ -342,9 +349,13 @@ table.data.compact td { padding: 3px 10px 3px 0; font-size: 12.5px; }
 .rank-stats span { font-weight: 650; }
 .rank-stats small { color: var(--text-3); }
 .rank-stats.wide { flex: 0 1 auto; }
-.counter-delta { grid-column: 1 / -1; }
+.late-items { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px 4px; padding-top: 4px; border-top: 1px solid var(--line); }
+.late-item { display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 0; text-align: center; }
+.late-item-stats { display: flex; flex-direction: column; font-variant-numeric: tabular-nums; }
+.late-item-stats span { font-weight: 650; }
+.late-item-stats small { color: var(--text-3); white-space: nowrap; }
+.counter-delta { grid-column: 1 / -1; margin-top: 8px; padding-top: 14px; border-top: 1px solid var(--line-2, var(--line)); }
 .counter-delta-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
-.counter-scroll { max-height: 360px; overflow-y: auto; }
 .icon-row { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 3px; }
 .icon-link { display: block; border-radius: 7px; transition: transform var(--ease); }
 .icon-link:hover { transform: translateY(-1px) scale(1.06); }
@@ -352,7 +363,14 @@ table.data.compact td { padding: 3px 10px 3px 0; font-size: 12.5px; }
 .skills { display: inline-flex; align-items: center; }
 .skills-part { display: inline-flex; align-items: center; }
 .skills-sep { color: var(--text-3); margin: 0 4px; }
-.skills kbd { font-size: 11.5px; padding: 2px 7px; background: var(--accent-soft); color: var(--accent); }
+.skills kbd, .skill-path kbd { font-size: 11.5px; padding: 2px 7px; background: var(--accent-soft); color: var(--accent); }
+.skill-path { padding-top: 6px; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 6px; }
+.skill-path-grid { display: grid; grid-template-columns: repeat(9, minmax(0, 1fr)); gap: 3px; text-align: center; }
+.skill-path-grid > div { display: flex; flex-direction: column; align-items: center; gap: 3px; }
+.skill-path-grid small { color: var(--text-3); font-variant-numeric: tabular-nums; }
+.sort-head { display: inline-flex; align-items: center; gap: 3px; color: inherit; font: inherit; }
+.sort-head:hover { color: var(--text); }
+.sort-head.active { color: var(--accent); }
 
 /* Items */
 .build-panel { flex: none; margin: 0 -12px; padding: 11px 12px; display: flex; flex-direction: column; gap: 8px; background: var(--surface); border-top: 1px solid var(--line); max-height: 44%; overflow-y: auto; }

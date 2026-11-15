@@ -92,6 +92,8 @@ final class LolalyticsState {
 
     private static final List<String> BUILD_LISTS = List.of("startSet", "builtBootSet3", "boots", "skillOrder", "skill6",
             "spells");
+    /** Itemplätze nach dem Core-Build. Optional, damit eine geänderte Seite nur diese Anzeige kostet. */
+    private static final List<Integer> ITEM_SLOTS = List.of(3, 4, 5);
 
     static String extractBuild(String html) throws IOException {
         JsonNode objects = objects(html);
@@ -110,6 +112,10 @@ final class LolalyticsState {
                 }
                 limited.add(entry);
             }
+        }
+        for (int slot : ITEM_SLOTS) {
+            // Vollständig: Die Summe über die Itemplätze soll alle Zeilen enthalten.
+            out.set("item" + slot, build.has("item" + slot) ? resolve(objects, build.get("item" + slot), 0) : JsonNodeFactory.instance.arrayNode());
         }
         JsonNode summary = resolve(objects, build.get("summary"), 0);
         out.set("pagePick", summary.path("pick").path("runes"));
@@ -238,7 +244,8 @@ final class LolalyticsState {
                 entries(root.path("spells")), pairs(root.path("enemy")),
                 new LolalyticsBuild.Damage(root.path("damage").path("physical").asDouble(),
                         root.path("damage").path("magic").asDouble(), root.path("damage").path("true").asDouble()),
-                gameLength(root.path("time"), root.path("timeWin")));
+                gameLength(root.path("time"), root.path("timeWin")),
+                ITEM_SLOTS.stream().map(slot -> new LolalyticsBuild.ItemSlot(slot, entries(root.path("item" + slot)))).toList());
     }
 
     /** Listen der Form {@code [Schlüssel, Winrate, Pickrate, Spiele, …]}. Leere Schlüssel fallen weg. */

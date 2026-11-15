@@ -199,12 +199,20 @@ class WebServerTest {
         assertEquals(List.of(3118, 3020, 4645), json.convertValue(r.path("coreBuilds").path("lines").path(0).path("key"),
                 new TypeReference<List<Integer>>() { }));
         assertEquals("Q", r.path("skillOrders").path("lines").path(0).path("key").path(0).asText());
+        assertEquals(List.of("W", "Q", "E", "Q", "Q", "R", "Q", "W", "Q"),
+                json.convertValue(r.path("skillPath"), new TypeReference<List<String>>() { }));
         JsonNode counters = r.path("counters");
         assertEquals("Mid", counters.path("lane").asText(), "ohne Rollenfilter gilt die Hauptlane");
         assertEquals(5797, counters.path("minGames").asInt(), "1 % der Spiele des Champions");
         assertTrue(counters.path("strong").isArray());
         assertTrue(counters.path("weak").isArray());
         assertTrue(counters.path("delta").isArray());
+        JsonNode lateItems = r.path("lateItems");
+        assertEquals(2, lateItems.size(), "Core-Item und zu seltene Items fallen weg (lateItems)");
+        assertEquals(3157, lateItems.path(0).path("item").asInt());
+        assertEquals(3089, lateItems.path(1).path("item").asInt());
+        assertEquals(45_562 + 8_924, lateItems.path(1).path("games").asInt(), "lateItems: Spiele über alle Plätze");
+        assertEquals(5, lateItems.path(1).path("slots").path(1).path("slot").asInt(), "lateItems: Aufteilung je Platz");
     }
 
     @Test

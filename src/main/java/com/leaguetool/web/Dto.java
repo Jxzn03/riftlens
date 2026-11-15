@@ -16,6 +16,7 @@ import com.leaguetool.data.itempassives.ItemPassiveUpdater;
 import com.leaguetool.data.lolalytics.LolalyticsBuild;
 import com.leaguetool.data.lolalytics.LolalyticsCounters;
 import com.leaguetool.data.lolalytics.LolalyticsFullTierList;
+import com.leaguetool.data.lolalytics.LolalyticsLateItems;
 import com.leaguetool.data.wiki.WikiAbility;
 import com.leaguetool.data.wiki.WikiChampionData;
 import com.leaguetool.data.wiki.WikiLeveling;
@@ -33,6 +34,7 @@ import com.leaguetool.model.SummonerSpell;
 import com.leaguetool.stats.ChampionReport;
 import com.leaguetool.stats.ItemClassifier;
 import com.leaguetool.stats.RunePageKey;
+import com.leaguetool.stats.SkillPath;
 import com.leaguetool.stats.StatLine;
 import com.leaguetool.stats.StatRanking;
 import com.leaguetool.stats.WinStats;
@@ -432,6 +434,7 @@ final class Dto {
      */
     private static final double LOLALYTICS_MIN_SHARE = 0.01;
     private static final int LOLALYTICS_MIN_GAMES = 100;
+    private static final int LATE_ITEMS = 8;
 
     private static final Map<String, String> LANE_LABELS = Map.of("top", "Top", "jungle", "Jungle", "middle", "Mid",
             "bottom", "Bot", "support", "Support");
@@ -491,8 +494,26 @@ final class Dto {
                 ranking(b.spells(), Dto::idList, min));
         Map<String, Object> json = report(report);
         json.put("winRate", b.winRate());   // exakt wie geliefert, nicht aus gerundeten Siegen zurückgerechnet
-        json.put("counters", counters(LolalyticsCounters.of(b.matchups(), opponentLane, min)));
+        json.put("counters", counters(LolalyticsCounters.of(b.matchups(), opponentLane, min, b.winRate())));
+        json.put("skillPath", slots(bestSkillPath(report)));
+        json.put("lateItems", lateItems(b, report));
         return json;
+    }
+
+    /** Häufigste Items auf den Itemplätzen nach dem Core-Build; was schon im angezeigten Core-Build steckt, fällt weg. */
+    private static List<Map<String, Object>> lateItems(LolalyticsBuild b, ChampionReport r) {
+        List<Integer> core = r.coreBuilds().topBest().or(r.coreBuilds()::top).map(StatLine::key).orElse(List.of());
+        return LolalyticsLateItems.of(b.itemSlots(), core, LOLALYTICS_MIN_GAMES, LATE_ITEMS, b.games()).stream()
+                .map(l -> obj("item", l.item(), "winRate", l.winRate(), "pickRate", l.pickRate(), "games", l.games(),
+                        "slots", l.slots().stream().map(s -> obj("slot", s.slot(), "games", s.games())).toList()))
+                .toList();
+    }
+
+    /** Dieselben Zeilen, die auch die Ranglisten oben anzeigen. */
+    private static List<AbilitySlot> bestSkillPath(ChampionReport r) {
+        Optional<StatLine<List<AbilitySlot>>> start = r.skillStarts().topBest().or(r.skillStarts()::top);
+        Optional<StatLine<List<AbilitySlot>>> order = r.skillOrders().topBest().or(r.skillOrders()::top);
+        return start.isEmpty() || order.isEmpty() ? List.of() : SkillPath.firstLevels(start.get().key(), order.get().key());
     }
 
     private static Map<String, Object> counters(LolalyticsCounters c) {
@@ -502,7 +523,7 @@ final class Dto {
 
     private static List<Map<String, Object>> counterLines(List<LolalyticsCounters.Line> lines) {
         return lines.stream().map(l -> obj("champion", l.champion(), "winRate", l.winRate(), "games", l.games(),
-                "delta1", l.delta1(), "delta2", l.delta2(), "rating", l.rating())).toList();
+                "delta1", l.delta1(), "delta2", l.delta2(), "rating", l.rating(), "pick", l.pick())).toList();
     }
 
     private static <K> StatRanking<K> ranking(List<LolalyticsBuild.Entry> entries, Function<String, K> key, int minGames) {

@@ -26,6 +26,16 @@ class SummonerLookupTest {
     }
 
     @Test
+    void queue710IsShownAsTeamRanked() {
+        assertEquals("5 vs 5 Teamranked", SummonerLookup.modeLabel(710, "CLASSIC"));
+    }
+
+    @Test
+    void queue3100IsShownAsTournamentCode() {
+        assertEquals("Tournament Code (Custom Game)", SummonerLookup.modeLabel(3100, "CLASSIC"));
+    }
+
+    @Test
     void undocumentedQueuesKeepModeAndNumber() {
         assertEquals("Summoner's Rift (Queue 9999)", SummonerLookup.modeLabel(9999, "CLASSIC"));
         assertEquals("Queue 9999", SummonerLookup.modeLabel(9999, ""));

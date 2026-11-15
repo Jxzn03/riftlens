@@ -72,6 +72,11 @@ public final class LolalyticsPages {
         build.put("startSet", p.ref(List.of(p.list("1056_2003_2003", 53.12, 99.19, 574_940), p.list("", 48.48, 0.01, 66))));
         build.put("builtBootSet3", p.ref(List.of(p.list("3118_3020_4645", 53.66, 17.68, 102_489))));
         build.put("boots", p.ref(List.of(p.list(3020, 53.86, 57.72, 334_594, 13))));
+        build.put("item3", p.ref(List.of(p.list(3157, 56.67, 20.48, 119_752, 27))));
+        // 3118 steckt im Core-Build, 3135 hat zu wenige Spiele.
+        build.put("item4", p.ref(List.of(p.list(3118, 60.0, 10.0, 60_000, 31), p.list(3089, 60.79, 7.79, 45_562, 31),
+                p.list(3135, 55.0, 0.01, 50, 31))));
+        build.put("item5", p.ref(List.of(p.list(3089, 62.15, 1.53, 8_924, 34))));
         build.put("skillOrder", p.ref(List.of(p.list("QWE", 53.4, 91.2, 523_408))));
         build.put("skill6", p.ref(List.of(p.list(213_114, 53.1, 66.8, 386_979))));
         build.put("spells", p.ref(List.of(p.list("4_14", 53.52, 70.26, 407_292))));

@@ -85,6 +85,25 @@ class LolalyticsStateTest {
     }
 
     @Test
+    void itemSlotsThreeToFiveAreParsed() throws IOException {
+        List<LolalyticsBuild.ItemSlot> slots = LolalyticsState.parseBuild(LolalyticsState.extractBuild(LolalyticsPages.build())).itemSlots();
+        assertEquals(List.of(3, 4, 5), slots.stream().map(LolalyticsBuild.ItemSlot::slot).toList());
+        LolalyticsBuild.Entry third = slots.get(0).entries().get(0);
+        assertEquals("3157", third.key());
+        assertEquals(0.5667, third.winRate(), 1e-9);
+        assertEquals(0.2048, third.pickRate(), 1e-9);
+        assertEquals(119_752, third.games());
+    }
+
+    @Test
+    void missingItemSlotListsKeepTheBuildUsable() throws IOException {
+        String page = LolalyticsPages.build().replace("\"item3\"", "\"x3\"").replace("\"item4\"", "\"x4\"").replace("\"item5\"", "\"x5\"");
+        LolalyticsBuild build = LolalyticsState.parseBuild(LolalyticsState.extractBuild(page));
+        assertEquals(579_664, build.games());
+        assertTrue(build.itemSlots().stream().allMatch(slot -> slot.entries().isEmpty()));
+    }
+
+    @Test
     void missingDeltaColumnsKeepTheBuildUsable() throws IOException {
         String page = LolalyticsPages.build().replace("\"d1\"", "\"x1\"").replace("\"d2\"", "\"x2\"");
         LolalyticsPairs.Stat matchup = LolalyticsState.parseBuild(LolalyticsState.extractBuild(page))

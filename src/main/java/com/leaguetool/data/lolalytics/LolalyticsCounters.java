@@ -16,10 +16,11 @@ import java.util.Map;
 public record LolalyticsCounters(String lane, int minGames, List<Line> strong, List<Line> weak, List<Line> delta) {
 
     static final int MAX_LISTED = 8;
-    static final double DELTA1_WEIGHT = 1;
-    static final double DELTA2_WEIGHT = 2;
-    /** Spiele, bei denen die Bewertung nur noch halb zählt. */
-    static final double GAMES_DAMPING = 500;
+    /**
+     * Spiele, bei denen die Bewertung nur noch halb zählt: 0,25 / τ² mit der aus den Daten geschätzten Streuung der
+     * Matchup-Effekte τ = 1,89 Prozentpunkte.
+     */
+    static final double GAMES_DAMPING = 700;
 
     public LolalyticsCounters {
         strong = List.copyOf(strong);
@@ -29,15 +30,17 @@ public record LolalyticsCounters(String lane, int minGames, List<Line> strong, L
 
     /**
      * @param champion Riot-Champion-Key des Gegners
-     * @param rating   eigene Bewertung (Prozentpunkte/100); {@code null}, wenn ein Delta-Wert fehlt
+     * @param rating   eigene Bewertung (Prozentpunkte/100); {@code null}, wenn Delta 2 fehlt
+     * @param pick     geschätzte Winrate dieses Gegners gegen den Champion (0..1); {@code null}, wenn ein Delta fehlt
      */
-    public record Line(int champion, double winRate, int games, Double delta1, Double delta2, Double rating) {
+    public record Line(int champion, double winRate, int games, Double delta1, Double delta2, Double rating, Double pick) {
     }
 
-    public static LolalyticsCounters of(LolalyticsPairs matchups, String lane, int minGames) {
+    /** @param championWinRate Winrate des Champions, dem die Matchups gehören (0..1) */
+    public static LolalyticsCounters of(LolalyticsPairs matchups, String lane, int minGames, double championWinRate) {
         List<Line> lines = matchups.byLane().getOrDefault(lane, Map.of()).entrySet().stream()
                 .filter(e -> e.getValue().games() >= minGames)
-                .map(e -> line(e.getKey(), e.getValue()))
+                .map(e -> line(e.getKey(), e.getValue(), championWinRate))
                 .sorted(Comparator.comparingInt(Line::champion))
                 .toList();
         // Bei wenigen Gegnern teilen sich beide Listen die Zeilen, damit niemand zugleich Strong und Weak ist.
@@ -50,16 +53,31 @@ public record LolalyticsCounters(String lane, int minGames, List<Line> strong, L
                 lines.stream().sorted(Comparator.comparing(Line::rating, Comparator.nullsLast(Comparator.reverseOrder()))).toList());
     }
 
-    private static Line line(int champion, LolalyticsPairs.Stat stat) {
-        return new Line(champion, stat.winRate(), stat.games(), stat.delta1(), stat.delta2(), rating(stat));
+    private static Line line(int champion, LolalyticsPairs.Stat stat, double championWinRate) {
+        return new Line(champion, stat.winRate(), stat.games(), stat.delta1(), stat.delta2(), rating(stat),
+                pick(stat, championWinRate));
     }
 
-    /** Delta 2 rechnet die allgemeine Stärke beider Champions heraus und zählt deshalb doppelt. */
-    private static Double rating(LolalyticsPairs.Stat stat) {
+    /**
+     * Anders als die Bewertung behält der Wert die allgemeine Stärke des Gegners: Gesucht ist, mit wem man gegen den
+     * Champion am häufigsten gewinnt. Die Matchup-Winrate wird dafür zum Erwartungswert hin gedämpft und auf die Sicht
+     * des Gegners gespiegelt. Beide Seiten eines Matchups ergeben zusammen das Doppelte des Tier-Durchschnitts, nicht
+     * 100 %; der Durchschnitt folgt aus {@code Delta 1 − Delta 2 = Winrate + Durchschnitt − 1}.
+     */
+    private static Double pick(LolalyticsPairs.Stat stat, double championWinRate) {
         if (stat.delta1() == null || stat.delta2() == null) {
             return null;
         }
-        double weighted = (DELTA1_WEIGHT * stat.delta1() + DELTA2_WEIGHT * stat.delta2()) / (DELTA1_WEIGHT + DELTA2_WEIGHT);
-        return weighted * stat.games() / (stat.games() + GAMES_DAMPING);
+        double tierAverage = 1 + stat.delta1() - stat.delta2() - championWinRate;
+        double dampedWinRate = stat.winRate() - stat.delta2() * GAMES_DAMPING / (stat.games() + GAMES_DAMPING);
+        return 2 * tierAverage - dampedWinRate;
+    }
+
+    /**
+     * Posterior-Mittel des Matchup-Effekts. Delta 1 fließt nicht ein: Es unterscheidet sich je Champion nur um einen
+     * festen Wert von Delta 2 und würde die Reihenfolge nicht ändern, die Werte aber verschieben.
+     */
+    private static Double rating(LolalyticsPairs.Stat stat) {
+        return stat.delta2() == null ? null : stat.delta2() * stat.games() / (stat.games() + GAMES_DAMPING);
     }
 }

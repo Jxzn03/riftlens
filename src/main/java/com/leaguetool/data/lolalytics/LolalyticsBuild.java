@@ -17,12 +17,13 @@ import java.util.Map;
  * @param matchups    Winrates gegen jeden Gegner auf jeder Lane
  * @param damage      durchschnittlicher Schaden pro Spiel
  * @param gameLength  Spiele und Siege je Spieldauer-Abschnitt, von kurz nach lang; leer, wenn die Seite keine liefert
+ * @param itemSlots   Items je Itemplatz nach dem Core-Build; Schlüssel ist die Item-ID, leer, wenn die Seite keine liefert
  */
 public record LolalyticsBuild(int games, double winRate, double pickRate, double banRate,
                               List<Entry> starters, List<Entry> coreBuilds, List<Entry> boots,
                               Map<Integer, Entry> runes, List<RunePage> runePages,
                               List<Entry> skillOrders, List<Entry> skillStarts, List<Entry> spells,
-                              LolalyticsPairs matchups, Damage damage, List<LengthBucket> gameLength) {
+                              LolalyticsPairs matchups, Damage damage, List<LengthBucket> gameLength, List<ItemSlot> itemSlots) {
 
     public LolalyticsBuild {
         starters = List.copyOf(starters);
@@ -34,6 +35,15 @@ public record LolalyticsBuild(int games, double winRate, double pickRate, double
         skillStarts = List.copyOf(skillStarts);
         spells = List.copyOf(spells);
         gameLength = List.copyOf(gameLength);
+        itemSlots = List.copyOf(itemSlots);
+    }
+
+    /** @param slot Itemplatz laut Lolalytics (Boots zählen dort nicht mit) */
+    public record ItemSlot(int slot, List<Entry> entries) {
+
+        public ItemSlot {
+            entries = List.copyOf(entries);
+        }
     }
 
     public record Damage(double physical, double magic, double trueDamage) {
