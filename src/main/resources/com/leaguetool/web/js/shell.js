@@ -322,6 +322,10 @@ function SettingsDialog() {
     <p class="legal-note">RiftLens isn't endorsed by Riot Games and doesn't reflect the views or opinions of Riot Games or anyone
       officially involved in producing or managing Riot Games properties. Riot Games, and all associated properties are
       trademarks or registered trademarks of Riot Games, Inc.</p>
+    <p class="legal-note">Daten: Riot Games (Data Dragon, Riot-API), Lolalytics und das
+      <a href="https://wiki.leagueoflegends.com/" target="_blank" rel="noopener">League of Legends Wiki</a>
+      (Wiki-Inhalte unter <a href="https://creativecommons.org/licenses/by-sa/3.0/" target="_blank" rel="noopener">CC BY-SA 3.0</a>).
+      RiftLens steht in keiner Verbindung zu Lolalytics oder dem Wiki.</p>
   <//>`;
 }
 

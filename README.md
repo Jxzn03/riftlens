@@ -33,10 +33,33 @@ Schnellsuche über alles mit `Strg`+`K`. Helles und dunkles Design; Build, Filte
 
 - **Statistiken:** Oben Zeitraum (30 Tage oder letzter Patch) und Rang-Bereich wählen, Standard ist Emerald+.
 - **Summoner-Tab:** Braucht einen eigenen Riot-API-Key. Den Key unter *Einstellungen* eintragen und die
-  Riot-Abfragen dort aktivieren. Einen kostenlosen Key gibt es im
-  [Riot Developer Portal](https://developer.riotgames.com/); Dev-Keys laufen nach 24 Stunden ab.
-- **Client-Abgleich:** Im Draft-Tab einschalten. RiftLens liest nur die Champion-Auswahl, klickt nichts, liest
-  keine Spielernamen und nichts im laufenden Spiel.
+  Riot-Abfragen dort aktivieren (standardmäßig aus). RiftLens enthält keinen eigenen Key.
+- **Client-Abgleich:** Im Draft-Tab einschalten (standardmäßig aus). RiftLens liest nur die Champion-Auswahl, klickt
+  nichts, liest keine Spielernamen und nichts im laufenden Spiel.
+
+## Hinweise und Risiken
+
+**Eigener Riot-API-Key**
+- Einen Key gibt es kostenlos im [Riot Developer Portal](https://developer.riotgames.com/). Ein Development-Key läuft
+  nach 24 Stunden ab; für die eigene, dauerhafte Nutzung lässt sich dort ein Personal-Key beantragen.
+- Der Key gilt nur für dich: nicht weitergeben, nicht veröffentlichen. Er wird nur lokal gespeichert und nur an
+  Riot gesendet.
+- Es gelten Riots [Developer-Richtlinien](https://developer.riotgames.com/policies/general). Mit einem Dev- oder
+  Personal-Key erlaubt Riot nur 100 Anfragen in 2 Minuten, große Abfragen dauern deshalb einige Minuten.
+
+**Client-Abgleich**
+- Die Schnittstelle des League-Clients wird von Riot für Drittanbieter-Apps nicht offiziell unterstützt und kann
+  sich jederzeit ändern. Die Nutzung erfolgt auf eigenes Risiko.
+- RiftLens nutzt sie nur lesend und nur für zwei Abfragen der Champion-Auswahl (Session und spielbare Champions).
+  Es automatisiert nichts, deckt keine verborgenen Spieler auf, greift nicht auf Prozesse oder den Spielspeicher
+  zu und liest nichts im laufenden Spiel. Das entspricht dem, was Riot bei Drittanbieter-Apps duldet; eine
+  Garantie gegen Sperren kann trotzdem niemand geben.
+
+**Statistiken**
+- Die Statistiken stammen von Lolalytics und werden gedrosselt und zwischengespeichert abgerufen. RiftLens steht in
+  keiner Verbindung zu Lolalytics; der Abruf lässt sich in den Einstellungen abschalten.
+
+Die Software wird ohne Gewährleistung bereitgestellt (siehe [Lizenz](LICENSE)).
 
 ## Daten und Datenschutz
 
@@ -67,7 +90,7 @@ Voraussetzung: JDK 21 oder neuer. Maven wird vom Wrapper selbst geladen.
 [MIT](LICENSE). Das Draft-Rechenmodell folgt [DraftGap](https://github.com/vigovlugt/draftgap) (MIT).
 Mitgelieferte Fremdsoftware (Jackson, htm, Preact, Java-Laufzeit) und ihre Lizenzen:
 [THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt), Lizenztexte in [`licenses/`](licenses/). Alles liegt auch im
-Release-ZIP bei.
+Release-ZIP bei. Die Wiki-Testdaten unter `src/test/resources/fixtures/wiki/` stehen unter CC BY-SA 3.0.
 
 RiftLens isn't endorsed by Riot Games and doesn't reflect the views or opinions of Riot Games or anyone officially
 involved in producing or managing Riot Games properties. Riot Games, and all associated properties are trademarks

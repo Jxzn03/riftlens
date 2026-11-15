@@ -29,6 +29,28 @@ texts and notices are included in the "licenses" folder.
    License: GNU General Public License v2 with the Classpath Exception
    License texts and notices                -> runtime/legal/
 
+5. League of Legends Wiki content
+   https://wiki.leagueoflegends.com/
+   License: Creative Commons Attribution-ShareAlike 3.0 (CC BY-SA 3.0)
+   https://creativecommons.org/licenses/by-sa/3.0/
+   Authors: the contributors of the League of Legends Wiki (see the page
+   histories of the pages listed below).
+
+   The application loads wiki content (base stats, ability details, item data)
+   at runtime through the MediaWiki API; no wiki content is bundled in the
+   release package.
+
+   The source repository contains API responses of the wiki (partly shortened) as test
+   data. These files are licensed under CC BY-SA 3.0 (not under the MIT License):
+   - src/test/resources/fixtures/wiki/abilities-Aatrox.json
+     (Template:Data_Aatrox/* pages)
+   - src/test/resources/fixtures/wiki/abilities-Ahri.json
+     (Template:Data_Ahri/* pages)
+   - src/test/resources/fixtures/wiki/championdata.json
+     (Module:ChampionData/data)
+   Riot Games' intellectual property contained therein remains the property
+   of Riot Games, Inc.
+
 The draft rating model follows the approach of DraftGap
 (https://github.com/vigovlugt/draftgap, MIT License); no DraftGap code is bundled.
 

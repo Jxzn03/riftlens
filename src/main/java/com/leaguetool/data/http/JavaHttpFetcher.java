@@ -12,7 +12,7 @@ import java.util.Map;
 /** {@link HttpFetcher} auf Basis von {@link java.net.http.HttpClient}. */
 public final class JavaHttpFetcher implements HttpFetcher {
 
-    public static final String USER_AGENT = "RiftLens/0.1 (private desktop tool; Java HttpClient)";
+    public static final String USER_AGENT = "RiftLens (open-source desktop app; +https://github.com/Jxzn03/riftlens)";
 
     private final HttpClient client;
     private final Duration requestTimeout;
