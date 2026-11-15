@@ -118,6 +118,13 @@ und je Rolle gefiltert. Ein Klick übernimmt den Pick.
 **Draft-Analyse:** erwartete Winrate, Gesamteinschätzung, alle Matchups und Duos, Schadensverteilung und Vorsprung
 nach Spieldauer.
 
+**Archiv:** Vollständige Drafts (alle zehn Champions, 10 Sekunden unverändert) landen automatisch im Bereich „Archiv“,
+standardmäßig die letzten 10, in den Einstellungen auch 25, 50 oder 100. Gespeichert wird nur lokal in
+`draft-archive.json` und nur Champions, Rollen und Bans, keine Spielernamen. „Laden“ holt einen Draft zurück aufs
+Brett; ein Klick auf einen Champion lädt ihn ohne diesen Pick und zeigt, was an seiner Stelle am besten gewesen wäre.
+Weicht ein vollständiger Draft in weniger als 3 Champions von einem gespeicherten ab, gilt er als Variante und
+verdrängt keine älteren Einträge.
+
 **Abgleich mit dem League-Client** (Schalter im Draft-Tab, Standard aus, sein Stand bleibt über Neustarts erhalten;
 ausgeschaltet wird der Client nie abgefragt): Während der Champion-Auswahl übernimmt das
 Tool gesperrte Picks, Bans und eure zugewiesenen Rollen automatisch, wie DraftGap. Ansagen von Mitspielern erscheinen
@@ -208,6 +215,7 @@ für die Draft-Synergien behalten ihre 12 Stunden Cache.
 | `cache/_global/riot/match/…` | Früherer Match-Cache; wird nur noch gelesen und in die Historie übernommen |
 | `cache/_global/item-passives/` | Stand und Verlauf der automatischen Item-Passiv-Updates |
 | `modern-ui/` | UI-Zustand (`ui-state.json`) und Browserprofil |
+| `draft-archive.json` | Draft-Archiv (nur Champions, Rollen, Bans; Anzahl in den Einstellungen) |
 
 ### Offline-Betrieb
 

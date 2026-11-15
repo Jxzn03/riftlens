@@ -446,6 +446,56 @@ class WebServerTest {
         return http.send(request, HttpResponse.BodyHandlers.ofString());
     }
 
+    private HttpResponse<String> send(String method, String path, String body) throws Exception {
+        HttpRequest request = HttpRequest.newBuilder(URI.create(server.baseUrl() + path))
+                .header("Cookie", server.sessionCookie()).header("Content-Type", "application/json")
+                .method(method, body == null ? HttpRequest.BodyPublishers.noBody() : HttpRequest.BodyPublishers.ofString(body))
+                .build();
+        return http.send(request, HttpResponse.BodyHandlers.ofString());
+    }
+
+    private static final String ARCHIVE_ID = "0b6f3f8e-6f3c-4d39-9a52-3d2f4f0e8a11";
+
+    @Test
+    void draftArchiveListsAndDeletesLocalEntriesWithoutLolalytics() throws Exception {
+        java.nio.file.Files.writeString(home.resolve("draft-archive.json"), """
+                {"version":1,"entries":[{"id":"%s","savedAt":"2026-11-14T12:00:00Z","patch":"16.22.1",
+                 "ally":[{"champion":1,"role":"TOP"},{"champion":2},{"champion":3},{"champion":4},{"champion":5}],
+                 "enemy":[{"champion":6},{"champion":7},{"champion":8},{"champion":9},{"champion":10}],"bans":[11]}]}"""
+                .formatted(ARCHIVE_ID));
+
+        JsonNode list = json.readTree(get("/api/draft-archive", true).body());
+        assertEquals(10, list.path("limit").asInt());
+        assertEquals(3, list.path("minChanges").asInt());
+        JsonNode entry = list.path("entries").get(0);
+        assertEquals(ARCHIVE_ID, entry.path("id").asText());
+        assertEquals("TOP", entry.path("ally").get(0).path("role").asText());
+        assertTrue(entry.path("ally").get(1).path("role").isNull());
+        assertEquals(11, entry.path("bans").get(0).asInt());
+
+        assertEquals(404, send("DELETE", "/api/draft-archive/../settings", null).statusCode());
+        assertEquals(200, send("DELETE", "/api/draft-archive/" + ARCHIVE_ID, null).statusCode());
+        assertEquals(404, send("DELETE", "/api/draft-archive/" + ARCHIVE_ID, null).statusCode());
+        assertEquals(0, json.readTree(get("/api/draft-archive", true).body()).path("entries").size());
+    }
+
+    @Test
+    void draftArchiveTakesOnlyCompleteDrafts() throws Exception {
+        assertEquals(400, send("POST", "/api/draft-archive", "{\"ally\":[{\"champion\":103}],\"enemy\":[]}").statusCode(),
+                "Unvollständig, ohne Lolalytics trotzdem kein 412");
+        assertEquals(400, send("POST", "/api/draft-archive", "{\"ally\":[{\"champion\":999999}]}").statusCode());
+        assertFalse(java.nio.file.Files.exists(home.resolve("draft-archive.json")));
+    }
+
+    @Test
+    void draftArchiveLimitIsASetting() throws Exception {
+        assertEquals(200, send("POST", "/api/settings", "{\"draftArchiveLimit\":50}").statusCode());
+        assertEquals(50, json.readTree(get("/api/settings", true).body()).path("draftArchiveLimit").asInt());
+        assertEquals(50, json.readTree(get("/api/draft-archive", true).body()).path("limit").asInt());
+        assertEquals(200, send("POST", "/api/settings", "{\"draftArchiveLimit\":7}").statusCode());
+        assertEquals(10, AppSettings.load(home).draftArchiveLimit(), "Unbekannte Größe ergibt den Standard");
+    }
+
     @Test
     void clientSyncIsOffByDefault() throws Exception {
         HttpResponse<String> state = get("/api/lcu", true);

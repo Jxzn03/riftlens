@@ -269,6 +269,7 @@ function SettingsDialog() {
         locale: form.locale, offline: form.offline, wikiEnabled: form.wikiEnabled,
         lolalyticsEnabled: form.lolalyticsEnabled,
         riotEnabled: form.riotEnabled, platform: form.platform, lcuFolder: form.lcuFolder || '',
+        draftArchiveLimit: Number(form.draftArchiveLimit),
       };
       if (key.trim() !== '' || form.clearKey) {
         body.riotApiKey = key.trim();
@@ -295,6 +296,10 @@ function SettingsDialog() {
       <${Switch} checked=${form.lolalyticsEnabled} onChange=${(lolalyticsEnabled) => set({ lolalyticsEnabled })}>Lolalytics-Statistiken erlauben (öffentliche Seiten, gecacht)<//>
       <${Switch} checked=${advancedTips} onChange=${(on) => setPref({ advancedTips: on })}>Show Advanced Tooltips (zusätzliche Hover-Infos in der Champions-Statistik)<//>
       <${FavoritesSetting} />
+      <label class="field"><span>Draft-Archiv</span>
+        <${Select} label="Draft-Archiv" value=${String(form.draftArchiveLimit)} onChange=${(limit) => set({ draftArchiveLimit: Number(limit) })}
+          options=${form.draftArchiveLimits.map((n) => ({ value: String(n), label: `Letzte ${n} Drafts behalten` }))} /></label>
+      <p class="muted small">Vollständige Drafts werden nur lokal gespeichert (draft-archive.json im Nutzerordner). Beim Verkleinern werden ältere ausgeblendet und mit dem nächsten neuen Draft gelöscht.</p>
       <div class="divider"></div>
       <${Switch} checked=${form.riotEnabled} onChange=${(riotEnabled) => set({ riotEnabled })}>Riot-API verwenden (Summoner-Abfrage, Verifizierung)<//>
       <label class="field"><span>Riot-API-Key</span>

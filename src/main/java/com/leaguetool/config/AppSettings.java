@@ -21,6 +21,8 @@ public final class AppSettings {
 
     public static final String ENV_RIOT_KEY = "RIOT_API_KEY";
     public static final String FILE_NAME = "settings.properties";
+    /** Wählbare Größen des Draft-Archivs, die erste ist der Standard. */
+    public static final java.util.List<Integer> DRAFT_ARCHIVE_LIMITS = java.util.List.of(10, 25, 50, 100);
 
     private static final String KEY_LOCALE = "ddragon.locale";
     private static final String KEY_OFFLINE = "offline";
@@ -124,6 +126,24 @@ public final class AppSettings {
 
     public synchronized void setLcuSyncEnabled(boolean enabled) {
         props.setProperty("lcu.sync", Boolean.toString(enabled));
+    }
+
+    /** Wie viele vollständige Drafts das Archiv behält (10, 25, 50 oder 100). */
+    public synchronized int draftArchiveLimit() {
+        try {
+            return draftArchiveLimit(Integer.parseInt(props.getProperty("draft.archive.limit", "")));
+        } catch (NumberFormatException e) {
+            return DRAFT_ARCHIVE_LIMITS.get(0);
+        }
+    }
+
+    public synchronized void setDraftArchiveLimit(int limit) {
+        props.setProperty("draft.archive.limit", Integer.toString(draftArchiveLimit(limit)));
+    }
+
+    /** Erlaubte Archivgröße; unbekannte Werte ergeben den Standard. */
+    public static int draftArchiveLimit(int requested) {
+        return DRAFT_ARCHIVE_LIMITS.contains(requested) ? requested : DRAFT_ARCHIVE_LIMITS.get(0);
     }
 
     /** Von Hand gewählter League-Ordner für den Client-Abgleich; leer = automatisch suchen. */

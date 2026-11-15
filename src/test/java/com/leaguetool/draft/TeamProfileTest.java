@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class TeamProfileTest {
@@ -44,5 +45,11 @@ class TeamProfileTest {
                 champion(1, 1, curve), champion(1, 1, curve)), PRIOR);
         assertEquals(one.ratingByLength().get(0), five.ratingByLength().get(0), 1e-9, "Die Teamgröße darf die Kurve nicht verschieben");
         assertEquals(one.ratingByLength().get(1), five.ratingByLength().get(1), 1e-9);
+    }
+
+    @Test
+    void lolalyticsLengthBucketsMapToGameMinutes() {
+        assertEquals(List.of(0, 15, 20, 25, 30, 35, 40), LengthBucket.startMinutes(7));
+        assertNull(LengthBucket.startMinutes(5), "Eine unbekannte Einteilung darf keine falschen Minuten bekommen");
     }
 }

@@ -13,8 +13,11 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.FileTime;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.BooleanSupplier;
@@ -33,10 +36,13 @@ class DraftDataLoaderTest {
 
     private final FakeHttpFetcher http = new FakeHttpFetcher();
     private LolalyticsClient client;
+    private FileCache cache;
 
     @BeforeEach
     void setUp() {
-        client = new LolalyticsClient(http, new FileCache(tmp), Duration.ZERO);
+        cache = new FileCache(tmp);
+        client = new LolalyticsClient(http, cache, Duration.ZERO);
+        client.setRefreshExecutor(Runnable::run);
         double[][] champions = {{1, 53, 80_000}, {2, 51, 60_000}, {3, 52, 70_000}, {4, 50, 50_000}, {5, 54, 40_000}, {6, 49, 45_000}};
         for (Role role : Role.values()) {
             String lane = LolalyticsClient.lane(role);
@@ -144,6 +150,148 @@ class DraftDataLoaderTest {
                 key -> "Champ", (done, total) -> steps.add(new int[] {done, total}), () -> false);
         int[] last = steps.get(steps.size() - 1);
         assertEquals(last[1], last[0]);
+    }
+
+    private DraftDataLoader.Loaded loadQuick(DraftDataLoader loader, List<Slot> ally, List<Slot> enemy, List<int[]> steps)
+            throws IOException {
+        return loader.load(client, new DraftDataLoader.Request(ally, enemy, TIER, LolalyticsPeriod.LAST_30_DAYS, false, true),
+                key -> "Champ" + key, (done, total) -> steps.add(new int[] {done, total}), () -> false);
+    }
+
+    private void respondPick(int champion, String lane) {
+        http.respond(buildUrl(champion, lane), LolalyticsPages.build());
+        http.respond(teamUrl(champion, lane), LolalyticsPages.team(2, 55, 9000));
+    }
+
+    @Test
+    void quickLoadFetchesOnlyWhatRanksTheSuggestions() throws IOException {
+        respondPick(1, "middle");
+        respondPick(3, "top");
+        List<int[]> steps = new ArrayList<>();
+
+        DraftDataLoader.Loaded loaded = loadQuick(new DraftDataLoader(), List.of(new Slot(1, Role.MIDDLE)),
+                List.of(new Slot(3, Role.TOP)), steps);
+
+        assertTrue(http.requests().contains(teamUrl(1, "middle")), "Synergien des eigenen Picks mit dem Kandidaten");
+        assertTrue(http.requests().contains(buildUrl(3, "top")), "Matchups des Gegners gegen den Kandidaten");
+        assertTrue(!http.requests().contains(buildUrl(1, "middle")) && !http.requests().contains(teamUrl(3, "top")));
+        assertEquals(2, loaded.deferred());
+        assertTrue(loaded.warnings().isEmpty(), loaded.warnings().toString());
+        int[] last = steps.get(steps.size() - 1);
+        assertEquals(last[1], last[0]);
+        assertEquals(7, last[1], "5 Tierlisten, 1 Team-Abruf, 1 Seite");
+    }
+
+    @Test
+    void fullLoadAfterQuickFetchesOnlyTheRest() throws IOException {
+        respondPick(1, "middle");
+        respondPick(3, "top");
+        DraftDataLoader loader = new DraftDataLoader();
+        List<Slot> ally = List.of(new Slot(1, Role.MIDDLE));
+        List<Slot> enemy = List.of(new Slot(3, Role.TOP));
+        loadQuick(loader, ally, enemy, new ArrayList<>());
+        int before = http.requests().size();
+
+        DraftDataLoader.Loaded full = load(loader, ally, enemy);
+
+        assertEquals(List.of(buildUrl(1, "middle"), teamUrl(3, "top")), http.requests().subList(before, http.requests().size()));
+        assertEquals(0, full.deferred());
+        assertNotNull(full.builds().get(new Pick(1, Role.MIDDLE)));
+    }
+
+    @Test
+    void quickLoadUsesFreshCacheForDeferredData() throws IOException {
+        respondPick(1, "middle");
+        respondPick(3, "top");
+        DraftDataLoader loader = new DraftDataLoader();
+        List<Slot> ally = List.of(new Slot(1, Role.MIDDLE));
+        List<Slot> enemy = List.of(new Slot(3, Role.TOP));
+        load(loader, ally, enemy);
+        int before = http.requests().size();
+
+        DraftDataLoader.Loaded quick = loadQuick(loader, ally, enemy, new ArrayList<>());
+
+        assertEquals(before, http.requests().size());
+        assertEquals(0, quick.deferred());
+        assertNotNull(quick.builds().get(new Pick(1, Role.MIDDLE)), "Eigene Seite aus dem Cache");
+        assertEquals(9000, quick.dataset().synergy(new Pick(3, Role.TOP), new Pick(2, Role.TOP)).games(), 1e-9,
+                "Gegner-Synergien aus dem Cache");
+    }
+
+    private void age(String key) throws IOException {
+        Path file = cache.file(FileCache.GLOBAL, key).orElseThrow();
+        Files.setLastModifiedTime(file, FileTime.from(Instant.now().minus(LolalyticsClient.MAX_AGE).minus(Duration.ofHours(1))));
+    }
+
+    private void respondPatchLists(double winRate) {
+        for (Role role : Role.values()) {
+            String lane = LolalyticsClient.lane(role);
+            http.respond("https://lolalytics.com/lol/tierlist/?tier=" + TIER + "&lane=" + lane,
+                    LolalyticsPages.laneTierList(lane, 50, new double[][] {{1, winRate, 9000}}));
+        }
+    }
+
+    private static final String TEAM_KEY = "lolalytics/team_v1_c1_" + TIER + "_middle_30d.json";
+
+    @Test
+    void outdatedThirtyDayDataIsUsedAtOnceAndRefreshedAfterwards() throws IOException {
+        respondPick(1, "middle");
+        DraftDataLoader loader = new DraftDataLoader();
+        List<Slot> ally = List.of(new Slot(1, Role.MIDDLE));
+        Pick pick = new Pick(1, Role.MIDDLE);
+        load(loader, ally, List.of());
+        age(TEAM_KEY);
+        http.respond(teamUrl(1, "middle"), LolalyticsPages.team(2, 60, 5000));
+        int before = http.requests().size();
+
+        DraftDataLoader.Loaded stale = load(loader, ally, List.of());
+
+        assertEquals(9000, stale.dataset().synergy(pick, new Pick(2, Role.TOP)).games(), 1e-9, "Alter Eintrag sofort");
+        assertEquals(List.of(teamUrl(1, "middle")), http.requests().subList(before, http.requests().size()),
+                "Genau eine Erneuerung, sonst nichts");
+        DraftDataLoader.Loaded fresh = load(loader, ally, List.of());
+        assertEquals(5000, fresh.dataset().synergy(pick, new Pick(2, Role.TOP)).games(), 1e-9, "Danach der neue Stand");
+        assertEquals(before + 1, http.requests().size());
+    }
+
+    @Test
+    void failedRefreshKeepsTheOldEntryAndPauses() throws IOException {
+        respondPick(1, "middle");
+        DraftDataLoader loader = new DraftDataLoader();
+        List<Slot> ally = List.of(new Slot(1, Role.MIDDLE));
+        load(loader, ally, List.of());
+        age(TEAM_KEY);
+        http.setOffline(true);
+        int before = http.requests().size();
+
+        DraftDataLoader.Loaded first = load(loader, ally, List.of());
+        DraftDataLoader.Loaded second = load(loader, ally, List.of());
+
+        assertEquals(before + 1, http.requests().size(), "Kein zweiter Versuch während der Pause");
+        assertTrue(first.warnings().isEmpty() && second.warnings().isEmpty(), second.warnings().toString());
+        assertEquals(9000, second.dataset().synergy(new Pick(1, Role.MIDDLE), new Pick(2, Role.TOP)).games(), 1e-9);
+    }
+
+    @Test
+    void currentPatchTierListIsNeverServedOutdated() throws IOException {
+        respondPatchLists(51);
+        DraftDataLoader.Request patch = new DraftDataLoader.Request(List.of(), List.of(), TIER, LolalyticsPeriod.CURRENT_PATCH);
+        DraftDataLoader loader = new DraftDataLoader();
+        loader.load(client, patch, key -> "Champ", (done, total) -> { }, () -> false);
+        for (Role role : Role.values()) {
+            age("lolalytics/full_v4_" + TIER + "_" + LolalyticsClient.lane(role) + "_patch.json");
+            age("lolalytics/full_v4_" + TIER + "_" + LolalyticsClient.lane(role) + "_30d.json");
+        }
+        respondPatchLists(56);
+        int before = http.requests().size();
+
+        DraftDataLoader.Loaded loaded = loader.load(client, patch, key -> "Champ", (done, total) -> { }, () -> false);
+
+        DraftDataset.Stat selected = loaded.dataset().selected(new Pick(1, Role.MIDDLE));
+        assertEquals(0.56, selected.wins() / selected.games(), 1e-9, "Patch-Winrate schon in dieser Antwort neu");
+        List<String> fetched = http.requests().subList(before, http.requests().size());
+        assertEquals(2 * Role.values().length, fetched.size(), "Patch-Listen neu, 30-Tage-Listen im Hintergrund erneuert");
+        assertEquals(Role.values().length, fetched.stream().filter(u -> !u.contains("&patch=")).count());
     }
 
     @Test

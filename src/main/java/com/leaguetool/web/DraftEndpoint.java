@@ -59,10 +59,13 @@ final class DraftEndpoint {
         requireDistinct(ally, enemy);
         DraftAnalyzer.Risk risk = risk(body.path("risk").asText(""));
         int requestId = body.path("requestId").asInt();
+        boolean forEnemy = "enemy".equals(body.path("side").asText());
+        // Schneller Modus: erst die Daten für die Vorschläge, das Frontend fragt danach vollständig nach.
+        boolean quick = body.path("quick").asBoolean();
 
         DraftDataLoader.Loaded loaded;
         try {
-            loaded = loader.load(client, new DraftDataLoader.Request(ally, enemy, tier, period),
+            loaded = loader.load(client, new DraftDataLoader.Request(ally, enemy, tier, period, forEnemy, quick),
                     key -> data.championByKey(key).map(Champion::name).orElse("Champion " + key),
                     (done, total) -> ctx.publish("draft-progress", Dto.obj("requestId", requestId, "done", done, "total", total)),
                     registerRequest(body.path("client").asText(""), requestId));
@@ -90,7 +93,6 @@ final class DraftEndpoint {
         Map<Role, Integer> allyTeam = team(loaded.allyRoles());
         Map<Role, Integer> enemyTeam = team(loaded.enemyRoles());
         DraftAnalyzer analyzer = new DraftAnalyzer(loaded.dataset(), config);
-        boolean forEnemy = "enemy".equals(body.path("side").asText());
         Map<Role, Integer> suggestedTeam = forEnemy ? enemyTeam : allyTeam;
         List<Suggestion> suggestions = forEnemy
                 ? analyzer.suggestions(enemyTeam, allyTeam, bans)
@@ -99,6 +101,7 @@ final class DraftEndpoint {
         return Dto.obj(
                 "patch", loaded.patch(),
                 "side", forEnemy ? "enemy" : "ally",
+                "complete", loaded.deferred() == 0,
                 "minGames", minGames,
                 "minPickRate", minPickRate,
                 "defaultMinPickRate", DraftAnalyzer.COMMON_MIN_PICK_RATE,
@@ -125,7 +128,7 @@ final class DraftEndpoint {
         return () -> latestRequests.get(client) != requestId;
     }
 
-    private static List<Slot> slots(JsonNode team, GameData data) {
+    static List<Slot> slots(JsonNode team, GameData data) {
         List<Slot> slots = new ArrayList<>();
         if (team.size() > TEAM_SIZE) {
             throw new ApiException(400, "Ein Team hat höchstens " + TEAM_SIZE + " Champions.");
@@ -146,7 +149,7 @@ final class DraftEndpoint {
         return bans;
     }
 
-    private static int championKey(JsonNode node, GameData data) {
+    static int championKey(JsonNode node, GameData data) {
         int key = node.asInt(-1);
         if (data.championByKey(key).isEmpty()) {
             throw new ApiException(400, "Unbekannter Champion: " + node.asText());
@@ -154,7 +157,7 @@ final class DraftEndpoint {
         return key;
     }
 
-    private static void requireDistinct(List<Slot> ally, List<Slot> enemy) {
+    static void requireDistinct(List<Slot> ally, List<Slot> enemy) {
         Set<Integer> seen = new HashSet<>();
         for (List<Slot> team : List.of(ally, enemy)) {
             for (Slot slot : team) {
@@ -247,7 +250,8 @@ final class DraftEndpoint {
                 .toList();
         TeamProfile profile = TeamProfile.of(builds, config.risk().priorGames());
         return Dto.obj("champions", profile.champions(), "physical", profile.physical(), "magic", profile.magic(), "true", profile.trueDamage(),
-                "ratingByLength", profile.ratingByLength());
+                "ratingByLength", profile.ratingByLength(),
+                "lengthStartMinutes", LolalyticsBuild.LengthBucket.startMinutes(profile.ratingByLength().size()));
     }
 
     /** Die Summen enthalten nur, was dieser Pick selbst beiträgt. */

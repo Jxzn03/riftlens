@@ -118,6 +118,7 @@ export const api = {
   get: (url, signal) => request('GET', url, undefined, signal),
   post: (url, body = {}, signal) => request('POST', url, body, signal),
   put: (url, body) => request('PUT', url, body),
+  del: (url) => request('DELETE', url),
 };
 
 // Antworten bleiben im Speicher: Zurückwechseln in eine Ansicht braucht keine Anfrage.
@@ -521,6 +522,20 @@ export function select(view, id) {
   applyRoute();
 }
 
+/**
+ * Springt zu einem Champion im Champions-Tab mit einer bestimmten Detail-Ansicht (`overview|stats|counters`).
+ * Mit `role` wird die Rolle des Champions gesetzt (wie die Auswahl im Detail), damit Statistik und Counters passen.
+ */
+export function openChampion(champion, tab, role) {
+  const views = store.get().views;
+  const next = { ...views, 'champion-detail': { ...(views['champion-detail'] || {}), tab } };
+  if (role) {
+    next[CHAMPION_ROLES] = { ...(views[CHAMPION_ROLES] || {}), [champion.key]: role };
+  }
+  store.set({ views: next });
+  go('champions', champion.id);
+}
+
 export function startRouter() {
   window.addEventListener('hashchange', applyRoute);
   applyRoute();
@@ -528,7 +543,7 @@ export function startRouter() {
 
 // ------------------------------------------------------------------ Zustand speichern
 
-const PERSISTED = ['theme', 'filter', 'dataSource', 'build', 'runePage', 'split', 'prefs', 'summonerRecent', 'favorites'];
+const PERSISTED = ['theme', 'filter', 'dataSource', 'build', 'runePage', 'split', 'prefs', 'summonerRecent', 'favorites', 'window'];
 let saveTimer = null;
 let lastSaved = null;
 
@@ -558,6 +573,47 @@ export async function loadUiState() {
   }
   lastSaved = snapshot();
   store.subscribe(scheduleSave);
+  trackWindow();
+}
+
+/** Toleranz in Pixeln: Ein maximiertes Fenster ragt unter Windows ein paar Pixel über den Arbeitsbereich. */
+const MAXIMIZED_SLACK = 12;
+const WINDOW_CHECK_MS = 2000;
+
+/** Aktuelle Fensterlage; bei maximiertem Fenster bleibt die zuletzt freie Größe für das Wiederherstellen erhalten. */
+function windowPlacement(previous) {
+  const s = window.screen;
+  const maximized = window.outerWidth >= s.availWidth - MAXIMIZED_SLACK && window.outerHeight >= s.availHeight - MAXIMIZED_SLACK;
+  if (maximized) {
+    return { ...(previous || {}), maximized: true };
+  }
+  return { maximized: false, x: window.screenX, y: window.screenY, width: window.outerWidth, height: window.outerHeight };
+}
+
+/**
+ * Merkt sich Größe, Position und Maximierung des App-Fensters in `store.window`; `AppWindow` öffnet es beim
+ * nächsten Start wieder so. Verschieben löst kein Ereignis aus, daher zusätzlich eine Prüfung alle 2 s; beim
+ * Schließen wird sofort gespeichert, weil der Server danach endet.
+ */
+function trackWindow() {
+  const update = () => {
+    const previous = store.get().window;
+    const next = windowPlacement(previous);
+    if (JSON.stringify(next) !== JSON.stringify(previous)) {
+      store.set({ window: next });
+    }
+  };
+  update();
+  window.addEventListener('resize', update);
+  setInterval(update, WINDOW_CHECK_MS);
+  window.addEventListener('pagehide', () => {
+    update();
+    const current = snapshot();
+    if (current !== lastSaved) {
+      lastSaved = current;
+      fetch('/api/ui-state', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: current, keepalive: true }).catch(() => {});
+    }
+  });
 }
 
 function snapshot() {

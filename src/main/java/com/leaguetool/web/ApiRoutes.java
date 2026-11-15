@@ -59,11 +59,13 @@ final class ApiRoutes {
     private final WebContext ctx;
     private final ObjectMapper json;
     private final DraftEndpoint draft;
+    private final DraftArchiveEndpoint archive;
 
     ApiRoutes(WebContext ctx, ObjectMapper json) {
         this.ctx = ctx;
         this.json = json;
         this.draft = new DraftEndpoint(ctx);
+        this.archive = new DraftArchiveEndpoint(ctx);
     }
 
     /** Antwort eines Endpunkts: ein zu serialisierendes Objekt oder fertige JSON-Bytes. */
@@ -85,6 +87,9 @@ final class ApiRoutes {
             case "GET stats" -> stats(path, params);
             case "GET champions" -> champion(path, params);
             case "POST draft" -> draft(body);
+            case "GET draft-archive" -> archive.list();
+            case "POST draft-archive" -> archive.record(parse(body));
+            case "DELETE draft-archive" -> archive.delete(path);
             case "GET lcu" -> ClientSyncEndpoint.get(ctx);
             case "POST lcu" -> ClientSyncEndpoint.set(ctx, parse(body));
             default -> throw new ApiException(404, "Unbekannter Endpunkt");
@@ -405,6 +410,7 @@ final class ApiRoutes {
                 "platform", Platform.fromId(s.platform()).orElse(Platform.EUW1).id(),
                 "platforms", Arrays.stream(Platform.values()).map(Platform::id).toList(),
                 "lcuFolder", s.lcuFolder(),
+                "draftArchiveLimit", s.draftArchiveLimit(), "draftArchiveLimits", AppSettings.DRAFT_ARCHIVE_LIMITS,
                 "lcuDetected", ctx.lcuLocator().detectedInstallFolder().map(Path::toString).orElse(null),
                 "file", s.file().toString());
     }
@@ -434,6 +440,9 @@ final class ApiRoutes {
             s.setStoredRiotApiKey(AppSettings.load(s.home()).storedRiotApiKey());
         }
         Platform.fromId(n.path("platform").asText("")).ifPresent(p -> s.setPlatform(p.id()));
+        if (n.path("draftArchiveLimit").isInt()) {
+            s.setDraftArchiveLimit(n.path("draftArchiveLimit").asInt());
+        }
         if (lcuFolder != null) {
             s.setLcuFolder(lcuFolder);
         }

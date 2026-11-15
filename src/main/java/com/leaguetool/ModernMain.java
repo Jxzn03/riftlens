@@ -6,6 +6,7 @@ import com.leaguetool.web.SmokeTest;
 import com.leaguetool.web.WebContext;
 import com.leaguetool.web.WebServer;
 
+import java.nio.file.Path;
 import java.util.List;
 
 /**
@@ -43,7 +44,8 @@ public final class ModernMain {
         System.out.println("RiftLens: " + server.entryUrl());
         if (window) {
             server.exitWhenClosed(() -> System.exit(0));
-            if (!AppWindow.open(server.entryUrl(), settings.home().resolve("modern-ui").resolve("browser-profile"))) {
+            Path ui = settings.home().resolve("modern-ui");
+            if (!AppWindow.open(server.entryUrl(), ui.resolve("browser-profile"), ui.resolve("ui-state.json"))) {
                 System.out.println("Kein Browser gefunden. Bitte die URL oben manuell öffnen.");
             }
         }

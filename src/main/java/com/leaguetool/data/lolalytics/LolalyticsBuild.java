@@ -50,6 +50,17 @@ public record LolalyticsBuild(int games, double winRate, double pickRate, double
     }
 
     public record LengthBucket(int wins, int games) {
+
+        /**
+         * Startminute je Spieldauer-Abschnitt in Lolalytics' Reihenfolge ({@code time} 1–7): unter 15, 15–20, 20–25, 25–30,
+         * 30–35, 35–40 und ab 40 Minuten. Die Verteilung der Spiele passt dazu (Abschnitt 1 ≈ 1 %, Gipfel bei 25–30).
+         */
+        public static final List<Integer> START_MINUTES = List.of(0, 15, 20, 25, 30, 35, 40);
+
+        /** Startminuten für {@code buckets} Abschnitte; {@code null}, wenn Lolalytics eine unbekannte Einteilung liefert. */
+        public static List<Integer> startMinutes(int buckets) {
+            return buckets == START_MINUTES.size() ? START_MINUTES : null;
+        }
     }
 
     public record Entry(String key, double winRate, double pickRate, int games) {
