@@ -1,0 +1,134 @@
+{
+ "batchcomplete": true,
+ "query": {
+  "normalized": [
+   {
+    "fromencoded": false,
+    "from": "Template:Data_Aatrox/Deathbringer Stance",
+    "to": "Template:Data Aatrox/Deathbringer Stance"
+   },
+   {
+    "fromencoded": false,
+    "from": "Template:Data_Aatrox/The Darkin Blade",
+    "to": "Template:Data Aatrox/The Darkin Blade"
+   },
+   {
+    "fromencoded": false,
+    "from": "Template:Data_Aatrox/The Darkin Blade 2",
+    "to": "Template:Data Aatrox/The Darkin Blade 2"
+   },
+   {
+    "fromencoded": false,
+    "from": "Template:Data_Aatrox/The Darkin Blade 3",
+    "to": "Template:Data Aatrox/The Darkin Blade 3"
+   },
+   {
+    "fromencoded": false,
+    "from": "Template:Data_Aatrox/Infernal Chains",
+    "to": "Template:Data Aatrox/Infernal Chains"
+   },
+   {
+    "fromencoded": false,
+    "from": "Template:Data_Aatrox/Umbral Dash",
+    "to": "Template:Data Aatrox/Umbral Dash"
+   },
+   {
+    "fromencoded": false,
+    "from": "Template:Data_Aatrox/World Ender",
+    "to": "Template:Data Aatrox/World Ender"
+   }
+  ],
+  "redirects": [
+   {
+    "from": "Template:Data Aatrox/The Darkin Blade 2",
+    "to": "Template:Data Aatrox/The Darkin Blade"
+   },
+   {
+    "from": "Template:Data Aatrox/The Darkin Blade 3",
+    "to": "Template:Data Aatrox/The Darkin Blade"
+   }
+  ],
+  "pages": [
+   {
+    "pageid": 1363715,
+    "ns": 10,
+    "title": "Template:Data Aatrox/Deathbringer Stance",
+    "revisions": [
+     {
+      "slots": {
+       "main": {
+        "contentmodel": "wikitext",
+        "contentformat": "text/x-wiki",
+        "content": "<!-- The following values are defined as parameters.\n-->{{#vardefine:i_hmod|1.0}}<!-- Primary healing modifier as a DECIMAL (currently unused)\n-->{{#vardefine:i_mhmod|0.25}}<!-- Minion healing modifier as a DECIMAL\n-->{{{{{1<noinclude>|Ability data</noinclude>}}}|Deathbringer Stance|{{{2|}}}|{{{3|}}}|{{{4|}}}|{{{5|}}}\n|champion     = Aatrox\n|skill        = I\n|description  = {{sbc|Innate:}} Periodically, '''Aatrox''' empowers his next {{tip|basic attack}} to gain {{sti|range|50 '''bonus''' range}} and deal {{as|'''bonus''' magic damage}} equal to {{as|{{pplevel|key=%|4 to 10}} of the target's '''maximum''' health}}, capped at {{pplevel|100 to 320}} against {{tip|monsters}}. ''Deathbringer Stance's'' damage applies {{as|{{sti|life steal}}}}.<br><br>'''Aatrox''' {{tip|heals}} for <!--{{ap|{{#var:i_hmod}}*100}}% of -->the {{tt|post-mitigation '''bonus''' damage|Damage calculated after modifiers}} dealt, reduced to {{ap|{{#var:i_mhmod}}*{{#var:i_hmod}}*100}}% against {{tip|minions}}.\n|description2 = Whenever '''Aatrox''' hits at least one enemy {{tip|champion}} or large {{tip|monster}} with a basic attack {{tip|on-hit}} or an {{tip|ability}}, ''Deathbringer Stance's'' {{sti|'''current''' cooldown}} is reduced by 2 seconds, doubled to 4 if he hits with the {{as|Sweetspot|sweetspot}} of ''{{ai|The Darkin Blade|Aatrox}}''.\n|static       = {{pplevel|22 to 10}}\n|targeting    = Passive\n|affects      = Self, Enemies\n|damagetype   = magic\n|spellshield  = False\n|spelleffects = proc\n|parry        = True\n|damage       = true\n}}"
+       }
+      }
+     }
+    ]
+   },
+   {
+    "pageid": 1363716,
+    "ns": 10,
+    "title": "Template:Data Aatrox/The Darkin Blade",
+    "revisions": [
+     {
+      "slots": {
+       "main": {
+        "contentmodel": "wikitext",
+        "contentformat": "text/x-wiki",
+        "content": "<!--Edit these paramater values when they get changed\n-->{{#vardefine:b1|10}}<!--First Cast base damage Rank 1\n-->{{#vardefine:b2|70}}<!--First Cast base damage Rank 5\n-->{{#vardefine:r1|60}}<!--First Cast rank 1 AD ratio as a PERCENTAGE \n-->{{#vardefine:r2|90}}<!--First Cast rank 5 AD ratio as a PERCENTAGE\n-->{{#vardefine:cd|0.25}}<!-- Bonus Damage Modifier per Cast as a DECIMAL\n-->{{#vardefine:sd|1.75}}<!--Total Sweetspot Damage as a DECIMAL\n-->{{{{{1<noinclude>|Ability data</noinclude>}}}|The Darkin Blade|{{{2|}}}|{{{3|}}}|{{{4|}}}|{{{5|}}}\n|champion     = Aatrox\n|name         = The Darkin Blade\n|skill        = Q\n|description  = '''Aatrox''' can activate ''The Darkin Blade'' three times before the ability goes on cooldown, with a 1-second {{tt|static cooldown|Unaffected by ability haste}} between casts. If '''Aatrox''' does not recast the ability within 4 seconds of the previous cast, it goes on cooldown.\n|description2 = {{sbc|Active:}} '''Aatrox''' performs a strike with his greatsword for each of the three casts, dealing {{as|physical damage}} to enemies hit within an area. Enemies hit within a {{as|Sweetspot|sweetspot}} of the area take {{ccs|{{#expr:({{#var:sd}}-1)*100}}% '''bonus''' damage|physical}} and are also {{tip|airborne|knocked up}} for {{fd|0.25}} seconds. Each subsequent cast gains {{ap|{{#var:cd}}*100}}% more damage.\n|description3 = {{sbc|First Cast:}} '''Aatrox's''' first strike affects a 625{{times}}180-unit rectangular area in the target direction, with him centered on the back line and the {{as|Sweetspot|sweetspot}} at the farthest edge.\n|leveling3    = {{st|First Cast Damage|{{ap|{{#var:b1}} to {{#var:b2}}}} {{as|(+ {{ap|{{#var:r1}} to {{#var:r2}}}}% AD)}}|First Sweetspot Damage|{{ap|{{#var:b1}}*{{#var:sd}} to {{#var:b2}}*{{#var:sd}}}} {{as|(+ {{ap|{{#var:r1}}*{{#var:sd}} to {{#var:r2}}*{{#var:sd}}}}% AD)}}}}\n|description4 = {{sbc|Second Cast:}} '''Aatrox's''' second strike affects a trapezoidal area in the target direction, with the {{as|Sweetspot|sweetspot}} at the farthest edge. The hitbox begins 100-units behind '''Aatrox''' and extends 475-units in front of him, measuring between 300 and 500-units wide from behind to in front.\n|leveling4    = {{st|Second Cast Damage|{{ap|{{#var:b1}}*(1+{{#var:cd}}) to {{#var:b2}}*(1+{{#var:cd}})}} {{as|(+ {{ap|{{#var:r1}}*(1+{{#var:cd}}) to {{#var:r2}}*(1+{{#var:cd}})}}% AD)}}|Second Sweetspot Damage|{{ap|{{#var:b1}}*(1+{{#var:cd}})*{{#var:sd}} to {{#var:b2}}*(1+{{#var:cd}})*{{#var:sd}}}} {{as|(+ {{ap|{{#var:r1}}*(1+{{#var:cd}})*{{#var:sd}} to {{#var:r2}}*(1+{{#var:cd}})*{{#var:sd}}}}% AD)}}}}\n|description5 = {{sbc|Third Cast:}} '''Aatrox's''' third strike affects a 300-radius circular area centered on a target location that is 200 units in front of him, with a 180-radius {{as|Sweetspot|sweetspot}} within.\n|leveling5    = {{st|Third Cast Damage|{{ap|{{#var:b1}}*(1+{{#var:cd}}*2) to {{#var:b2}}*(1+{{#var:cd}}*2)}} {{as|(+ {{ap|{{#var:r1}}*(1+{{#var:cd}}*2) to {{#var:r2}}*(1+{{#var:cd}}*2)}}% AD)}}|Third Sweetspot Damage|{{ap|{{#var:b1}}*(1+{{#var:cd}}*2)*{{#var:sd}} to {{#var:b2}}*(1+{{#var:cd}}*2)*{{#var:sd}}}} {{as|(+ {{ap|{{#var:r1}}*(1+{{#var:cd}}*2)*{{#var:sd}} to {{#var:r2}}*(1+{{#var:cd}}*2)*{{#var:sd}}}}% AD)}}}}\n|description6 = ''The Darkin Blade'' deals {{pp|55 to 70|key=%|1;6;11;16|formula=55% base + 5% every 5 levels thereafter}} damage against {{tip|minions}}. Against {{tip|monsters}}, the first cast deals {{as|25 '''bonus''' physical damage}}, which is affected by the subsequent cast and {{as|Sweetspot|sweetspot}} damage modifiers; and the {{tip|airborne|knock up}} duration from hitting the {{as|Sweetspot|sweetspot}} against them is doubled to {{fd|0.5}} seconds.\n|leveling6    = {{st<!--\n-->|Maximum Non-Minion Non-Sweetspot Damage|<!--\n-->{{ap|{{#var:b1}}*(1+(1+{{#var:cd}})+(1+{{#var:cd}}*2)) to {{#var:b2}}*(1+(1+{{#var:cd}})+(1+{{#var:cd}}*2))}} <!--\n-->{{as|(+ {{ap|{{#var:r1}}*(1+(1+{{#var:cd}})+(1+{{#var:cd}}*2)) to {{#var:r2}}*(1+(1+{{#var:cd}})+(1+{{#var:cd}}*2))}}% AD)}}<!--\n-->|Maximum Non-Minion Sweetspot Damage|<!--\n-->{{ap|{{#var:b1}}*(1+(1+{{#var:cd}})+(1+{{#var:cd}}*2))*{{#var:sd}} to {{#var:b2}}*(1+(1+{{#var:cd}})+(1+{{#var:cd}}*2))*{{#var:sd}}}} <!--\n-->{{as|(+ {{ap|{{#var:r1}}*(1+(1+{{#var:cd}})+(1+{{#var:cd}}*2))*{{#var:sd}} to {{#var:r2}}*(1+(1+{{#var:cd}})+(1+{{#var:cd}}*2))*{{#var:sd}}}}% AD)}}}}\n|range        = Varied\n|effect radius= Varied\n|cast time    = {{fd|0.6}}\n|cooldown     = {{ap|14 to 6}}\n|cdstart      = Cooldown starts on first cast and restarts on each successive recast\n|targeting    = Direction\n|affects      = Enemies\n|damagetype   = Physical\n|spellshield  = True\n|spelleffects = spellaoe\n|damage       = true\n}}"
+       }
+      }
+     }
+    ]
+   },
+   {
+    "pageid": 1363717,
+    "ns": 10,
+    "title": "Template:Data Aatrox/Infernal Chains",
+    "revisions": [
+     {
+      "slots": {
+       "main": {
+        "contentmodel": "wikitext",
+        "contentformat": "text/x-wiki",
+        "content": "{{{{{1<noinclude>|Ability data</noinclude>}}}|Infernal Chains|{{{2|}}}|{{{3|}}}|{{{4|}}}|{{{5|}}}\n|champion     = Aatrox\n|skill        = W\n|description  = {{sbc|Active:}} '''Aatrox''' sends a chain in the target direction that deals {{as|physical damage}} to the first enemy hit, doubled against {{tip|minions}}, and {{tip|slow|slowing}} them for {{fd|1.5}} seconds.\n|leveling     = {{st|Physical Damage|{{ap|30 to 70}} {{as|(+ 40% AD)}}|Minion Damage|{{ap|30*2 to 70*2}} {{as|(+ 80% AD)}}}}\n{{st|Slow|{{ap|25 to 35}}%}}\n|description2 = If this hits an enemy {{tip|champion}} or large {{tip|monster}}, a {{tip|tether}} is formed between the target and the ground beneath them for {{fd|1.5}} seconds, during which they are {{tip|true sight|revealed}}.\n|description3 = If the tether is not broken by the end of its duration, the target is dealt the same {{as|physical damage}} again and {{tip|airborne|pulled}} to the center of the area.\n|leveling3    = {{st|Total Damage|{{ap|30*2 to 70*2}} {{as|(+ 80% AD)}}}}\n|range        = {{dv|{{tip|cr|icononly = true}} 825|{{tip|er|icononly = true}} 765}}\n|speed        = 1800\n|width        = {{tip|er|icononly = true}} 160\n|cast time    = {{fd|0.25}}\n|effect radius= \n|inner radius = \n|cooldown     = {{ap|18 to 12}}\n|targeting    = Direction\n|affects      = Enemies\n|damagetype   = Physical\n|spellshield  = Special\n|spelleffects = spell\n|projectile   = True\n}}"
+       }
+      }
+     }
+    ]
+   },
+   {
+    "pageid": 1363718,
+    "ns": 10,
+    "title": "Template:Data Aatrox/Umbral Dash",
+    "revisions": [
+     {
+      "slots": {
+       "main": {
+        "contentmodel": "wikitext",
+        "contentformat": "text/x-wiki",
+        "content": "{{{{{1<noinclude>|Ability data</noinclude>}}}|Umbral Dash|{{{2|}}}|{{{3|}}}|{{{4|}}}|{{{5|}}}\n|champion     = Aatrox\n|skill        = E\n|description  = {{sbc|Passive:}} '''Aatrox''' {{tip|heals}} for 16% {{as|(+ {{fd|1.3}}% per 100 '''bonus''' health)}} of non-{{tip|persistent damage|persistent}} {{tt|post-mitigation damage|Damage calculated after modifiers}} he deals against enemy champions.\n|description2 = {{sbc|Active:}} '''Aatrox''' {{tip|dash|dashes}} in the target direction.\n|description3 = ''Umbral Dash {{tip|basic attack reset|resets}} '''Aatrox's''' basic attack timer and can be cast during his other abilities without cancelling them and vice versa.''\n|cast time    = none\n|target range = {{dv|{{tt|75 - 300|Minimum and maximum dash distance}}|{{tt|500|Maximum extended dash distance across terrain}}}}\n|speed        = {{dv|{{tt|800|Dash speed, slightly higher when measured}}|{{tt|1340|Maximum increased dash speed, when dashing through wide terrain}}}}\n|cooldown     = {{ap|9 to 5}}\n|targeting    = Location\n|affects      = Self\n|grounded     = True\n|knockdown    = True\n|terraingrace = true\n|outofrange   = cast at max\n}}"
+       }
+      }
+     }
+    ]
+   },
+   {
+    "pageid": 1363760,
+    "ns": 10,
+    "title": "Template:Data Aatrox/World Ender",
+    "revisions": [
+     {
+      "slots": {
+       "main": {
+        "contentmodel": "wikitext",
+        "contentformat": "text/x-wiki",
+        "content": "{{{{{1<noinclude>|Ability data</noinclude>}}}|World Ender|{{{2|}}}|{{{3|}}}|{{{4|}}}|{{{5|}}}\n|champion     = Aatrox\n|skill        = R\n|description  = {{sbc|Active:}} '''Aatrox''' unleashes his true form for 10 seconds, {{tip|fearing}} nearby enemy {{tip|minions}} and {{tip|monsters}} for 3 seconds, during which they are gradually {{tip|slow|slowed}} by up to 99% over the duration. He also gains {{sti|{{as|'''bonus''' movement speed}}}} that decays by 10% of the '''current bonus''' every {{fd|0.25}} seconds, lasting until ''World Ender'' has ended.\n|leveling     = {{st|Bonus Movement Speed|{{ap|60 to 100}}%}}\n|description2 = Whenever '''Aatrox''' scores a champion {{tip|takedown}}, he extends the duration by 5 seconds, up to its original length, and becomes unleashed again.\n|description3 = During ''World Ender'', '''Aatrox''' gains {{as|{{sti|'''bonus''' attack damage}}}}, has 5% increased [[size]], is {{tip|ghosted}}, and receives increased {{tip|heal|self-healing}} from all sources.\n|leveling3    = {{st|Bonus Attack Damage|{{as|{{ap|20 to 40}}% AD}}}}\n{{st|Increased Healing|{{ap|50 to 100}}%}}\n|description4 = '''''Aatrox''' can move during World Ender's cast time.''\n|cast time    = {{fd|0.25}}\n|effect radius= {{tt|600|Flee radius}}\n|cooldown     = {{ap|120 to 80}}\n|cdstart      = on-cast\n|targeting    = Auto\n|affects      = Self, Enemies\n}}"
+       }
+      }
+     }
+    ]
+   }
+  ]
+ }
+}

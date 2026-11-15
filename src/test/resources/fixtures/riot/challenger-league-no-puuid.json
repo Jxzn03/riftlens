@@ -1,0 +1,19 @@
+{
+ "tier": "CHALLENGER",
+ "leagueId": "00000000-0000-0000-0000-000000000002",
+ "queue": "RANKED_SOLO_5x5",
+ "name": "Testliga",
+ "entries": [
+  {
+   "freshBlood": false,
+   "wins": 204,
+   "inactive": false,
+   "veteran": true,
+   "hotStreak": true,
+   "rank": "I",
+   "leaguePoints": 1500,
+   "losses": 154,
+   "summonerId": "test-summoner-04"
+  }
+ ]
+}

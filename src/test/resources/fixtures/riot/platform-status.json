@@ -1,0 +1,10 @@
+{
+ "id": "EUW1",
+ "name": "EU West",
+ "locales": [
+  "en_GB",
+  "de_DE"
+ ],
+ "maintenances": [],
+ "incidents": []
+}

@@ -1,0 +1,60 @@
+{
+ "metadata": {
+  "dataVersion": "2",
+  "matchId": "EUW1_7000000002",
+  "participants": [
+   "test-puuid-01",
+   "test-puuid-02",
+   "test-puuid-03",
+   "test-puuid-04",
+   "test-puuid-05",
+   "test-puuid-06",
+   "test-puuid-07",
+   "test-puuid-08",
+   "test-puuid-09",
+   "test-puuid-10"
+  ]
+ },
+ "info": {
+  "endOfGameResult": "GameComplete",
+  "gameCreation": 1762500000000,
+  "gameDuration": 1712,
+  "gameEndTimestamp": 1762501750000,
+  "gameId": 7000000002,
+  "gameMode": "CLASSIC",
+  "gameName": "teambuilder-match-7000000002",
+  "gameStartTimestamp": 1762500030000,
+  "gameType": "MATCHED_GAME",
+  "gameVersion": "16.21.705.1234",
+  "mapId": 11,
+  "participants": [
+   {"puuid":"test-puuid-01","riotIdGameName":"Testspieler1","riotIdTagline":"TEST","participantId":1,"teamId":100,"win":true,"championId":266,"championName":"Aatrox","champLevel":15,"teamPosition":"TOP","individualPosition":"TOP","kills":0,"deaths":0,"assists":0,"goldEarned":9000,"totalMinionsKilled":120,"item0":1001,"item1":3020,"item2":3089,"item3":0,"item4":1058,"item5":2420,"item6":3340,"summoner1Id":4,"summoner2Id":14,"perks":{"statPerks":{"defense":5011,"flex":5008,"offense":5005},"styles":[{"description":"primaryStyle","selections":[{"perk":1234,"var1":0,"var2":0,"var3":0},{"perk":9111,"var1":0,"var2":0,"var3":0},{"perk":9104,"var1":0,"var2":0,"var3":0},{"perk":8014,"var1":0,"var2":0,"var3":0}],"style":8000},{"description":"subStyle","selections":[{"perk":8226,"var1":0,"var2":0,"var3":0},{"perk":8210,"var1":0,"var2":0,"var3":0}],"style":8200}]}},
+   {"puuid":"test-puuid-02","riotIdGameName":"Testspieler2","riotIdTagline":"TEST","participantId":2,"teamId":100,"win":true,"championId":62,"championName":"MonkeyKing","champLevel":15,"teamPosition":"JUNGLE","individualPosition":"JUNGLE","kills":1,"deaths":3,"assists":2,"goldEarned":9250,"totalMinionsKilled":130,"item0":1035,"item1":3157,"item2":0,"item3":0,"item4":0,"item5":0,"item6":3340,"summoner1Id":4,"summoner2Id":11,"perks":{"statPerks":{"defense":5001,"flex":5008,"offense":5008},"styles":[{"description":"primaryStyle","selections":[{"perk":8214,"var1":0,"var2":0,"var3":0},{"perk":8226,"var1":0,"var2":0,"var3":0},{"perk":8210,"var1":0,"var2":0,"var3":0},{"perk":8237,"var1":0,"var2":0,"var3":0}],"style":8200},{"description":"subStyle","selections":[{"perk":9111,"var1":0,"var2":0,"var3":0},{"perk":9104,"var1":0,"var2":0,"var3":0}],"style":8400}]}},
+   {"puuid":"test-puuid-03","riotIdGameName":"Testspieler3","riotIdTagline":"TEST","participantId":3,"teamId":100,"win":true,"championId":103,"championName":"Ahri","champLevel":15,"teamPosition":"MIDDLE","individualPosition":"MIDDLE","kills":2,"deaths":1,"assists":4,"goldEarned":9500,"totalMinionsKilled":140,"item0":3020,"item1":3089,"item2":3157,"item3":1058,"item4":0,"item5":2003,"item6":3340,"summoner1Id":4,"summoner2Id":14,"perks":{"statPerks":{"defense":5999,"flex":5008,"offense":5005},"styles":[{"description":"primaryStyle","selections":[{"perk":8005,"var1":0,"var2":0,"var3":0},{"perk":9111,"var1":0,"var2":0,"var3":0},{"perk":9104,"var1":0,"var2":0,"var3":0},{"perk":8014,"var1":0,"var2":0,"var3":0}],"style":8000},{"description":"subStyle","selections":[{"perk":8226,"var1":0,"var2":0,"var3":0},{"perk":8210,"var1":0,"var2":0,"var3":0}],"style":8200}]}},
+   {"puuid":"test-puuid-04","riotIdGameName":"Testspieler4","riotIdTagline":"TEST","participantId":4,"teamId":100,"win":true,"championId":999,"championName":"Ahri","champLevel":15,"teamPosition":"BOTTOM","individualPosition":"BOTTOM","kills":3,"deaths":4,"assists":6,"goldEarned":9750,"totalMinionsKilled":150,"item0":1001,"item1":1500,"item2":9999,"item3":0,"item4":0,"item5":2003,"item6":3330,"summoner1Id":4,"summoner2Id":14,"perks":{"statPerks":{"defense":5001,"flex":5008,"offense":5008},"styles":[{"description":"primaryStyle","selections":[{"perk":8214,"var1":0,"var2":0,"var3":0},{"perk":8226,"var1":0,"var2":0,"var3":0},{"perk":8210,"var1":0,"var2":0,"var3":0},{"perk":8237,"var1":0,"var2":0,"var3":0}],"style":8200},{"description":"subStyle","selections":[{"perk":9111,"var1":0,"var2":0,"var3":0},{"perk":9104,"var1":0,"var2":0,"var3":0}],"style":8000}]}},
+   {"puuid":"test-puuid-05","riotIdGameName":"Testspieler5","riotIdTagline":"TEST","participantId":5,"teamId":100,"win":true,"championId":62,"championName":"MonkeyKing","champLevel":15,"teamPosition":"UTILITY","individualPosition":"UTILITY","kills":4,"deaths":2,"assists":8,"goldEarned":10000,"totalMinionsKilled":160,"item0":1001,"item1":0,"item2":0,"item3":0,"item4":0,"item5":0,"item6":3330,"summoner1Id":4,"summoner2Id":14,"perks":{"statPerks":{"defense":5011,"flex":5008,"offense":5005},"styles":[{"description":"primaryStyle","selections":[{"perk":8005,"var1":0,"var2":0,"var3":0},{"perk":9111,"var1":0,"var2":0,"var3":0},{"perk":9104,"var1":0,"var2":0,"var3":0},{"perk":8014,"var1":0,"var2":0,"var3":0}],"style":8000},{"description":"subStyle","selections":[{"perk":8226,"var1":0,"var2":0,"var3":0},{"perk":8210,"var1":0,"var2":0,"var3":0}],"style":8200}]}},
+   {"puuid":"test-puuid-06","riotIdGameName":"Testspieler6","riotIdTagline":"TEST","participantId":6,"teamId":200,"win":false,"championId":266,"championName":"Aatrox","champLevel":15,"teamPosition":"TOP","individualPosition":"TOP","kills":5,"deaths":0,"assists":1,"goldEarned":10250,"totalMinionsKilled":170,"item0":1001,"item1":3020,"item2":3089,"item3":0,"item4":1058,"item5":2420,"item6":3340,"summoner1Id":4,"summoner2Id":99,"perks":{"statPerks":{"defense":5001,"flex":5008,"offense":5008},"styles":[{"description":"primaryStyle","selections":[{"perk":8214,"var1":0,"var2":0,"var3":0},{"perk":8226,"var1":0,"var2":0,"var3":0},{"perk":8210,"var1":0,"var2":0,"var3":0},{"perk":8237,"var1":0,"var2":0,"var3":0}],"style":8200},{"description":"subStyle","selections":[{"perk":9111,"var1":0,"var2":0,"var3":0},{"perk":9104,"var1":0,"var2":0,"var3":0}],"style":8000}]}},
+   {"puuid":"test-puuid-07","riotIdGameName":"Testspieler7","riotIdTagline":"TEST","participantId":7,"teamId":200,"win":false,"championId":62,"championName":"MonkeyKing","champLevel":15,"teamPosition":"JUNGLE","individualPosition":"JUNGLE","kills":6,"deaths":3,"assists":3,"goldEarned":10500,"totalMinionsKilled":180,"item0":1035,"item1":3157,"item2":0,"item3":0,"item4":0,"item5":0,"item6":3340,"summoner1Id":4,"summoner2Id":11,"perks":{"statPerks":{"defense":5011,"flex":5008,"offense":5005},"styles":[{"description":"primaryStyle","selections":[{"perk":8005,"var1":0,"var2":0,"var3":0},{"perk":9111,"var1":0,"var2":0,"var3":0},{"perk":9104,"var1":0,"var2":0,"var3":0},{"perk":8014,"var1":0,"var2":0,"var3":0}],"style":8000},{"description":"subStyle","selections":[{"perk":8226,"var1":0,"var2":0,"var3":0},{"perk":8210,"var1":0,"var2":0,"var3":0}],"style":8200}]}},
+   {"puuid":"test-puuid-08","riotIdGameName":"Testspieler8","riotIdTagline":"TEST","participantId":8,"teamId":200,"win":false,"championId":103,"championName":"Ahri","champLevel":15,"teamPosition":"MIDDLE","individualPosition":"MIDDLE","kills":0,"deaths":1,"assists":5,"goldEarned":10750,"totalMinionsKilled":190,"item0":3020,"item1":3089,"item2":3157,"item3":1058,"item4":0,"item5":2003,"item6":3364,"summoner1Id":4,"summoner2Id":14,"perks":{"statPerks":{"defense":5001,"flex":5008,"offense":5008},"styles":[{"description":"primaryStyle","selections":[{"perk":8214,"var1":0,"var2":0,"var3":0},{"perk":8226,"var1":0,"var2":0,"var3":0},{"perk":8210,"var1":0,"var2":0,"var3":0},{"perk":8237,"var1":0,"var2":0,"var3":0}],"style":8200},{"description":"subStyle","selections":[{"perk":9111,"var1":0,"var2":0,"var3":0},{"perk":9104,"var1":0,"var2":0,"var3":0}],"style":8000}]}},
+   {"puuid":"test-puuid-09","riotIdGameName":"Testspieler9","riotIdTagline":"TEST","participantId":9,"teamId":200,"win":false,"championId":103,"championName":"Ahri","champLevel":15,"teamPosition":"BOTTOM","individualPosition":"BOTTOM","kills":1,"deaths":4,"assists":7,"goldEarned":11000,"totalMinionsKilled":200,"item0":1001,"item1":1500,"item2":0,"item3":0,"item4":0,"item5":2003,"item6":3330,"summoner1Id":4,"summoner2Id":14,"perks":{"statPerks":{"defense":5011,"flex":5008,"offense":5005},"styles":[{"description":"primaryStyle","selections":[{"perk":8005,"var1":0,"var2":0,"var3":0},{"perk":9111,"var1":0,"var2":0,"var3":0},{"perk":9104,"var1":0,"var2":0,"var3":0},{"perk":8014,"var1":0,"var2":0,"var3":0}],"style":8000},{"description":"subStyle","selections":[{"perk":8226,"var1":0,"var2":0,"var3":0},{"perk":8210,"var1":0,"var2":0,"var3":0}],"style":8200}]}},
+   {"puuid":"test-puuid-10","riotIdGameName":"Testspieler10","riotIdTagline":"TEST","participantId":10,"teamId":200,"win":false,"championId":62,"championName":"MonkeyKing","champLevel":15,"teamPosition":"UTILITY","individualPosition":"UTILITY","kills":2,"deaths":2,"assists":0,"goldEarned":11250,"totalMinionsKilled":210,"item0":1001,"item1":0,"item2":0,"item3":0,"item4":0,"item5":0,"item6":3330,"summoner1Id":4,"summoner2Id":14,"perks":{"statPerks":{"defense":5001,"flex":5008,"offense":5008},"styles":[{"description":"primaryStyle","selections":[{"perk":8214,"var1":0,"var2":0,"var3":0},{"perk":8226,"var1":0,"var2":0,"var3":0},{"perk":8210,"var1":0,"var2":0,"var3":0},{"perk":8237,"var1":0,"var2":0,"var3":0}],"style":8200},{"description":"subStyle","selections":[{"perk":9111,"var1":0,"var2":0,"var3":0},{"perk":9104,"var1":0,"var2":0,"var3":0}],"style":8000}]}}
+  ],
+  "platformId": "EUW1",
+  "queueId": 420,
+  "teams": [
+   {
+    "teamId": 100,
+    "win": true,
+    "bans": [],
+    "objectives": {}
+   },
+   {
+    "teamId": 200,
+    "win": false,
+    "bans": [],
+    "objectives": {}
+   }
+  ],
+  "tournamentCode": ""
+ }
+}

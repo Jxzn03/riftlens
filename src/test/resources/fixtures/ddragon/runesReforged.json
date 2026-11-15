@@ -1,0 +1,258 @@
+[
+ {
+  "id": 8000,
+  "key": "Precision",
+  "icon": "perk-images/Styles/7201_Precision.png",
+  "name": "Precision",
+  "slots": [
+   {
+    "runes": [
+     {
+      "id": 8005,
+      "key": "PressTheAttack",
+      "icon": "perk-images/Styles/Precision/PressTheAttack/PressTheAttack.png",
+      "name": "Press the Attack",
+      "shortDesc": "Hitting an enemy champion 3 consecutive times deals bonus damage and amplifies your damage until you leave combat with champions.",
+      "longDesc": "Hitting an enemy champion with 3 consecutive basic attacks deals 40 - 160 bonus <lol-uikit-tooltipped-keyword key='LinkTooltip_Description_AdaptiveDmg'><font color='#48C4B7'>adaptive damage</font></lol-uikit-tooltipped-keyword> (based on level) and amplifies your damage dealt by 8% until you leave combat with champions."
+     },
+     {
+      "id": 8008,
+      "key": "LethalTempo",
+      "icon": "perk-images/Styles/Precision/LethalTempo/LethalTempoTemp.png",
+      "name": "Lethal Tempo",
+      "shortDesc": "Attacking an enemy champion grants you Attack Speed, up to 6 stacks. At max stacks, deal <lol-uikit-tooltipped-keyword key='LinkTooltip_Description_AdaptiveDmg'><font color='#48C4B7'>bonus adaptive damage</font></lol-uikit-tooltipped-keyword> On-Attack.",
+      "longDesc": "Attacking an enemy champion grants you [6% Melee || 4% Ranged] Attack Speed for 6 seconds, up to 6. At max stacks, deal [9 - 30 Melee || 6 - 24 Ranged] <lol-uikit-tooltipped-keyword key='LinkTooltip_Description_AdaptiveDmg'>bonus adaptive damage On-Attack, increased by 1% per 1% Bonus Attack Speed</lol-uikit-tooltipped-keyword>."
+     },
+     {
+      "id": 8021,
+      "key": "FleetFootwork",
+      "icon": "perk-images/Styles/Precision/FleetFootwork/FleetFootwork.png",
+      "name": "Fleet Footwork",
+      "shortDesc": "Attacking and moving builds Energy stacks. At 100 stacks, your next attack heals you and grants increased <lol-uikit-tooltipped-keyword key='LinkTooltip_Description_MS'>MS</lol-uikit-tooltipped-keyword>.",
+      "longDesc": "Attacking and moving builds Energy stacks. At 100 stacks, your next attack is Energized<br><br>Energized attacks heal you for 15 - 160 (+0.1 Bonus AD, +0.05 AP) and grant <speed>20% Move Speed</speed> for 1s.<br><br>For Ranged Champions, Healing is 60% effective and Move Speed is 75% effective. All healing is 15% effective against Minions."
+     },
+     {
+      "id": 8010,
+      "key": "Conqueror",
+      "icon": "perk-images/Styles/Precision/Conqueror/Conqueror.png",
+      "name": "Conqueror",
+      "shortDesc": "Gain stacks of adaptive force when attacking enemy champions. After reaching 12 stacks, heal for a portion of damage you deal to champions.",
+      "longDesc": "Basic attacks or spells that deal damage to an enemy champion grant 2 stacks of Conqueror for 5s, gaining 1.8-4 <lol-uikit-tooltipped-keyword key='LinkTooltip_Description_Adaptive'><font color='#48C4B7'>Adaptive Force</font></lol-uikit-tooltipped-keyword> per stack. Stacks up to 12 times. Ranged champions gain only 1 stack per basic attack.<br><br>When fully stacked, heal for 8% of the damage you deal to champions (5% for ranged champions)."
+     }
+    ]
+   },
+   {
+    "runes": [
+     {
+      "id": 9101,
+      "key": "AbsorbLife",
+      "icon": "perk-images/Styles/Precision/AbsorbLife/AbsorbLife.png",
+      "name": "Absorb Life",
+      "shortDesc": "Killing a target heals you.",
+      "longDesc": "Killing a target heals you for @HealAmount@."
+     },
+     {
+      "id": 9111,
+      "key": "Triumph",
+      "icon": "perk-images/Styles/Precision/Triumph.png",
+      "name": "Triumph",
+      "shortDesc": "<lol-uikit-tooltipped-keyword key='LinkTooltip_Description_Takedown'>Takedowns</lol-uikit-tooltipped-keyword> restore 5% of your missing health and grant an additional 20 gold. ",
+      "longDesc": "Takedowns restore 5% of your missing health, 2.5% of your max health, and grant an additional 20 gold. <br><br><hr><br><i>'The most dangerous game brings the greatest glory.' <br>—Noxian Reckoner</i>"
+     },
+     {
+      "id": 8009,
+      "key": "PresenceOfMind",
+      "icon": "perk-images/Styles/Precision/PresenceOfMind/PresenceOfMind.png",
+      "name": "Presence of Mind",
+      "shortDesc": "Restore a small amount of mana or energy when damaging an enemy champion. Takedowns restore mana or energy.",
+      "longDesc": "Damaging an enemy champion restores 6-50 (80% for ranged) mana or 6 energy.<br><br>Takedowns restore 15% of your maximum mana or energy. <br><br>Cooldown for damage restoration: 8s"
+     }
+    ]
+   },
+   {
+    "runes": [
+     {
+      "id": 9104,
+      "key": "LegendAlacrity",
+      "icon": "perk-images/Styles/Precision/LegendAlacrity/LegendAlacrity.png",
+      "name": "Legend: Alacrity",
+      "shortDesc": "<lol-uikit-tooltipped-keyword key='LinkTooltip_Description_Takedown'>Takedowns</lol-uikit-tooltipped-keyword> on enemies grant permanent <b>Attack Speed</b>. ",
+      "longDesc": "Gain 3% attack speed plus an additional 1.5% for every <i>Legend</i> stack (<statGood>max 10 stacks</statGood>).<br><br>Earn progress toward <i>Legend</i> stacks for every champion takedown, epic monster takedown, large monster kill, and minion kill."
+     },
+     {
+      "id": 9105,
+      "key": "LegendHaste",
+      "icon": "perk-images/Styles/Precision/LegendHaste/LegendHaste.png",
+      "name": "Legend: Haste",
+      "shortDesc": "<lol-uikit-tooltipped-keyword key='LinkTooltip_Description_Takedown'>Takedowns</lol-uikit-tooltipped-keyword> on enemies grant permanent Basic Ability <b>Haste</b>. ",
+      "longDesc": "Gain 1.5 basic ability haste for every <i>Legend</i> stack (<statGood>max 10 stacks</statGood>).<br><br>Earn progress toward <i>Legend</i> stacks for every champion takedown, epic monster takedown, large monster kill, and minion kill."
+     },
+     {
+      "id": 9103,
+      "key": "LegendBloodline",
+      "icon": "perk-images/Styles/Precision/LegendBloodline/LegendBloodline.png",
+      "name": "Legend: Bloodline",
+      "shortDesc": "<lol-uikit-tooltipped-keyword key='LinkTooltip_Description_Takedown'>Takedowns</lol-uikit-tooltipped-keyword> on enemies grant permanent<b> Life Steal</b>, up to a cap. Once the cap is reached, increase your max health. Weaker earlier but stronger later game than other Legend Runes.",
+      "longDesc": "Gain <scaleAD>0.45% Life Steal</scaleAD> for every <i>Legend</i> stack (<statGood>max 15 stacks</statGood>). At maximum <i>Legend</i> stacks, gain <scaleHealth>85 max health</scaleHealth>.<br><br>Earn progress toward <i>Legend</i> stacks for every champion takedown, epic monster takedown, large monster kill, and minion kill."
+     }
+    ]
+   },
+   {
+    "runes": [
+     {
+      "id": 8014,
+      "key": "CoupDeGrace",
+      "icon": "perk-images/Styles/Precision/CoupDeGrace/CoupDeGrace.png",
+      "name": "Coup de Grace",
+      "shortDesc": "Deal more damage to low health enemy champions.",
+      "longDesc": "Deal 8% more damage to champions who have less than 40% health."
+     },
+     {
+      "id": 8017,
+      "key": "CutDown",
+      "icon": "perk-images/Styles/Precision/CutDown/CutDown.png",
+      "name": "Cut Down",
+      "shortDesc": "Deal more damage to high health enemy champions.",
+      "longDesc": "Deal 8% more damage to champions who have more than 60% health."
+     },
+     {
+      "id": 8299,
+      "key": "LastStand",
+      "icon": "perk-images/Styles/Sorcery/LastStand/LastStand.png",
+      "name": "Last Stand",
+      "shortDesc": "Deal more damage to champions while you are low on health.",
+      "longDesc": "Deal 5% - 11% increased damage to champions while you are below 60% health. Max damage gained at 30% health."
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "id": 8200,
+  "key": "Sorcery",
+  "icon": "perk-images/Styles/7202_Sorcery.png",
+  "name": "Sorcery",
+  "slots": [
+   {
+    "runes": [
+     {
+      "id": 8214,
+      "key": "SummonAery",
+      "icon": "perk-images/Styles/Sorcery/SummonAery/SummonAery.png",
+      "name": "Summon Aery",
+      "shortDesc": "Your attacks and abilities send Aery to a target, damaging enemies or shielding allies.",
+      "longDesc": "Damaging enemy champions with basic attacks or abilities sends Aery to them, dealing 10 - 50 based on level (+<scaleAP>0.05 AP</scaleAP>) (+<scaleAD>0.1 bonus AD</scaleAD>).<br><br>Empowering or protecting allies with abilities sends Aery to them, shielding them for 20 - 100 based on level (+<scaleAP>0.05 AP</scaleAP>) (+<scaleAD>0.1 bonus AD</scaleAD>).<br><br>Aery cannot be sent out again until she returns to you."
+     },
+     {
+      "id": 8229,
+      "key": "ArcaneComet",
+      "icon": "perk-images/Styles/Sorcery/ArcaneComet/ArcaneComet.png",
+      "name": "Arcane Comet",
+      "shortDesc": "Damaging a champion with an ability hurls a damaging comet at their location.",
+      "longDesc": "Damaging a champion with an ability hurls a comet at their location, dealing increased damage based on distance.<br><br><lol-uikit-tooltipped-keyword key='LinkTooltip_Description_AdaptiveDmg'><font color='#48C4B7'>Adaptive Damage</font></lol-uikit-tooltipped-keyword>: 15 - 100 based on level (<scaleAP>+0.05 AP</scaleAP> and <scaleAD>+0.1 bonus AD</scaleAD>)<br>Cooldown: 20 - 8s<br><rules><br>Damage amplification scales up to 100% at 750 range.<br></rules>"
+     },
+     {
+      "id": 8230,
+      "key": "PhaseRush",
+      "icon": "perk-images/Styles/Sorcery/PhaseRush/StormraidersSurgeRuneIcon2.png",
+      "name": "Stormraider's Surge",
+      "shortDesc": "Dealing 25% of a champion's maximum health grants a burst of <lol-uikit-tooltipped-keyword key='LinkTooltip_Description_MS'>MS</lol-uikit-tooltipped-keyword> and Slow Resist. ",
+      "longDesc": "Dealing 25% of a champion's maximum health within 3s grants <speed>48% Move Speed</speed> and <status>50% Slow Resistance</status> for 4s. Move Speed is 75% effective for ranged champions.<br>Cooldown: 20s - 10s"
+     },
+     {
+      "id": 8992,
+      "key": "DeathfireTouch",
+      "icon": "perk-images/Styles/Sorcery/DeathfireTouch/DEATHFIRE_TOUCH_KEYSTONE.png",
+      "name": "Deathfire Touch",
+      "shortDesc": "Damaging a champion with an ability burns them over time.",
+      "longDesc": "Damaging a champion with an ability burns them for 3 - 12 based on level (+<scaleAP>2.5% AP</scaleAP>) (+<scaleAD>7% bonus AD</scaleAD>)  magic damage per second. After burning for 3 seconds, the damage of the burn increases by 75% while they remain on fire.<br><rules><br>Duration:<br>Single Target: 4s<br>Area of Effect: 2s<br>Damage over Time: 1s<br></rules>"
+     }
+    ]
+   },
+   {
+    "runes": [
+     {
+      "id": 8224,
+      "key": "NullifyingOrb",
+      "icon": "perk-images/Styles/Sorcery/NullifyingOrb/Axiom_Arcanist.png",
+      "name": "Axiom Arcanist",
+      "shortDesc": "Your Ultimate has increased damage, healing, and shielding. Scoring a takedown on an enemy champion reduces your Ultimate's current cooldown.",
+      "longDesc": "Your Ultimate has 12% increased damage, healing, and shielding. <br>(AoE damage is reduced to a 8% increase)<br><br>Scoring a takedown on an enemy champion reduces your Ultimate's current cooldown by 7%."
+     },
+     {
+      "id": 8226,
+      "key": "ManaflowBand",
+      "icon": "perk-images/Styles/Sorcery/ManaflowBand/ManaflowBand.png",
+      "name": "Manaflow Band",
+      "shortDesc": "Hitting an enemy champion with an ability permanently increases your maximum mana by 25, up to 250 mana.<br><br>After reaching 250 bonus mana, restore 1% of your missing mana every 5 seconds.",
+      "longDesc": "Hitting an enemy champion with an ability permanently increases your maximum mana by 25, up to 250 mana.<br><br>After reaching 250 bonus mana, restore 1% of your missing mana every 5 seconds.<br><br>Cooldown: 15 seconds"
+     },
+     {
+      "id": 8275,
+      "key": "NimbusCloak",
+      "icon": "perk-images/Styles/Sorcery/NimbusCloak/6361.png",
+      "name": "Nimbus Cloak",
+      "shortDesc": "After casting a Summoner Spell, gain a short <speed>Move Speed</speed> increase that allows you to pass through units.",
+      "longDesc": "After casting a Summoner Spell, gain a <speed>Move Speed</speed> increase that lasts for 2s and allows you to pass through units.<br><br>Increase: <speed>15% - 45% Move Speed</speed> based on the Summoner Spell's cooldown. (Higher cooldown Summoner Spells grant more <speed>Move Speed</speed>). "
+     }
+    ]
+   },
+   {
+    "runes": [
+     {
+      "id": 8210,
+      "key": "Transcendence",
+      "icon": "perk-images/Styles/Sorcery/Transcendence/Transcendence.png",
+      "name": "Transcendence",
+      "shortDesc": "Gain bonuses upon reaching the following levels:<br>Level 5: +5 <lol-uikit-tooltipped-keyword key='LinkTooltip_Description_CDR'>Ability Haste</lol-uikit-tooltipped-keyword> <br>Level 8: +5 <lol-uikit-tooltipped-keyword key='LinkTooltip_Description_CDR'>Ability Haste</lol-uikit-tooltipped-keyword> <br>Level 11: On Champion takedown, reduce the remaining cooldown of basic abilities by 20%.",
+      "longDesc": "Gain bonuses upon reaching the following levels:<br>Level 5: +5 <lol-uikit-tooltipped-keyword key='LinkTooltip_Description_CDR'>Ability Haste</lol-uikit-tooltipped-keyword> <br>Level 8: +5 <lol-uikit-tooltipped-keyword key='LinkTooltip_Description_CDR'>Ability Haste</lol-uikit-tooltipped-keyword> <br>Level 11: On Champion takedown, reduce the remaining cooldown of basic abilities by 20%."
+     },
+     {
+      "id": 8234,
+      "key": "Celerity",
+      "icon": "perk-images/Styles/Sorcery/Celerity/CelerityTemp.png",
+      "name": "Celerity",
+      "shortDesc": "All <speed>Move Speed</speed> bonuses are 7% more effective on you and gain <speed>1% Move Speed</speed>.",
+      "longDesc": "All movement bonuses are 7% more effective on you and gain <speed>1% Move Speed</speed>."
+     },
+     {
+      "id": 8233,
+      "key": "AbsoluteFocus",
+      "icon": "perk-images/Styles/Sorcery/AbsoluteFocus/AbsoluteFocus.png",
+      "name": "Absolute Focus",
+      "shortDesc": "While above 70% health, gain extra <lol-uikit-tooltipped-keyword key='LinkTooltip_Description_AdaptiveDmg'>adaptive damage</lol-uikit-tooltipped-keyword>.",
+      "longDesc": "While above 70% health, gain an <lol-uikit-tooltipped-keyword key='LinkTooltip_Description_Adaptive'><font color='#48C4B7'>adaptive</font></lol-uikit-tooltipped-keyword> bonus of up to 18 Attack Damage or 30 Ability Power (based on level). <br><br>Grants 1.8 Attack Damage or 3 Ability Power at level 1. "
+     }
+    ]
+   },
+   {
+    "runes": [
+     {
+      "id": 8237,
+      "key": "Scorch",
+      "icon": "perk-images/Styles/Sorcery/Scorch/Scorch.png",
+      "name": "Scorch",
+      "shortDesc": "Your first damaging ability hit every 10s burns champions.",
+      "longDesc": "Your next damaging ability hit sets champions on fire dealing 20 - 40 bonus magic damage based on level after 1s.<br><br>Cooldown: 10s"
+     },
+     {
+      "id": 8232,
+      "key": "Waterwalking",
+      "icon": "perk-images/Styles/Sorcery/Waterwalking/Waterwalking.png",
+      "name": "Waterwalking",
+      "shortDesc": "Gain <lol-uikit-tooltipped-keyword key='LinkTooltip_Description_MS'>MS</lol-uikit-tooltipped-keyword> and AP or AD, <lol-uikit-tooltipped-keyword key='LinkTooltip_Description_Adaptive'>adaptive</lol-uikit-tooltipped-keyword> in the river.",
+      "longDesc": "Gain <speed>10 Move Speed</speed> and <lol-uikit-tooltipped-keyword key='LinkTooltip_Description_Adaptive'><font color='#48C4B7'>13 - 30 Adaptive Force</font></lol-uikit-tooltipped-keyword> (based on level) when in the river.<br><br><i>May you be as swift as the rushing river and agile as a startled Rift Scuttler.</i>"
+     },
+     {
+      "id": 8236,
+      "key": "GatheringStorm",
+      "icon": "perk-images/Styles/Sorcery/GatheringStorm/GatheringStorm.png",
+      "name": "Gathering Storm",
+      "shortDesc": "Gain increasing amounts of AD or AP, <lol-uikit-tooltipped-keyword key='LinkTooltip_Description_Adaptive'>adaptive</lol-uikit-tooltipped-keyword> over the course of the game.",
+      "longDesc": "Every 10 min gain AP or AD, <lol-uikit-tooltipped-keyword key='LinkTooltip_Description_Adaptive'><font color='#48C4B7'>adaptive</font></lol-uikit-tooltipped-keyword>.<br><br><i>10 min</i>: + 8 AP or 5 AD <br><i>20 min</i>: + 24 AP or 14 AD<br><i>30 min</i>: + 48 AP or 29 AD<br><i>40 min</i>: + 80 AP or 48 AD<br><i>50 min</i>: + 120 AP or 72 AD<br><i>60 min</i>: + 168 AP or 101 AD<br>etc..."
+     }
+    ]
+   }
+  ]
+ }
+]

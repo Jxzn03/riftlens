@@ -1,0 +1,581 @@
+{
+ "type": "item",
+ "version": "16.22.1",
+ "basic": {
+  "name": "",
+  "rune": {
+   "isrune": false,
+   "tier": 1,
+   "type": "red"
+  },
+  "gold": {
+   "base": 0,
+   "total": 0,
+   "sell": 0,
+   "purchasable": false
+  },
+  "group": "",
+  "description": "",
+  "colloq": ";",
+  "plaintext": "",
+  "consumed": false,
+  "stacks": 1,
+  "depth": 1,
+  "consumeOnFull": false,
+  "from": [],
+  "into": [],
+  "specialRecipe": 0,
+  "inStore": true,
+  "hideFromAll": false,
+  "requiredChampion": "",
+  "requiredAlly": "",
+  "stats": {
+   "FlatHPPoolMod": 0,
+   "rFlatHPModPerLevel": 0,
+   "FlatMPPoolMod": 0,
+   "rFlatMPModPerLevel": 0,
+   "PercentHPPoolMod": 0,
+   "PercentMPPoolMod": 0,
+   "FlatHPRegenMod": 0,
+   "rFlatHPRegenModPerLevel": 0,
+   "PercentHPRegenMod": 0,
+   "FlatMPRegenMod": 0,
+   "rFlatMPRegenModPerLevel": 0,
+   "PercentMPRegenMod": 0,
+   "FlatArmorMod": 0,
+   "rFlatArmorModPerLevel": 0,
+   "PercentArmorMod": 0,
+   "rFlatArmorPenetrationMod": 0,
+   "rFlatArmorPenetrationModPerLevel": 0,
+   "rPercentArmorPenetrationMod": 0,
+   "rPercentArmorPenetrationModPerLevel": 0,
+   "FlatPhysicalDamageMod": 0,
+   "rFlatPhysicalDamageModPerLevel": 0,
+   "PercentPhysicalDamageMod": 0,
+   "FlatMagicDamageMod": 0,
+   "rFlatMagicDamageModPerLevel": 0,
+   "PercentMagicDamageMod": 0,
+   "FlatMovementSpeedMod": 0,
+   "rFlatMovementSpeedModPerLevel": 0,
+   "PercentMovementSpeedMod": 0,
+   "rPercentMovementSpeedModPerLevel": 0,
+   "FlatAttackSpeedMod": 0,
+   "PercentAttackSpeedMod": 0,
+   "rPercentAttackSpeedModPerLevel": 0,
+   "rFlatDodgeMod": 0,
+   "rFlatDodgeModPerLevel": 0,
+   "PercentDodgeMod": 0,
+   "FlatCritChanceMod": 0,
+   "rFlatCritChanceModPerLevel": 0,
+   "PercentCritChanceMod": 0,
+   "FlatCritDamageMod": 0,
+   "rFlatCritDamageModPerLevel": 0,
+   "PercentCritDamageMod": 0,
+   "FlatBlockMod": 0,
+   "PercentBlockMod": 0,
+   "FlatSpellBlockMod": 0,
+   "rFlatSpellBlockModPerLevel": 0,
+   "PercentSpellBlockMod": 0,
+   "FlatEXPBonus": 0,
+   "PercentEXPBonus": 0,
+   "rPercentCooldownMod": 0,
+   "rPercentCooldownModPerLevel": 0,
+   "rFlatTimeDeadMod": 0,
+   "rFlatTimeDeadModPerLevel": 0,
+   "rPercentTimeDeadMod": 0,
+   "rPercentTimeDeadModPerLevel": 0,
+   "rFlatGoldPer10Mod": 0,
+   "rFlatMagicPenetrationMod": 0,
+   "rFlatMagicPenetrationModPerLevel": 0,
+   "rPercentMagicPenetrationMod": 0,
+   "rPercentMagicPenetrationModPerLevel": 0,
+   "FlatEnergyRegenMod": 0,
+   "rFlatEnergyRegenModPerLevel": 0,
+   "FlatEnergyPoolMod": 0,
+   "rFlatEnergyModPerLevel": 0,
+   "PercentLifeStealMod": 0,
+   "PercentSpellVampMod": 0
+  },
+  "tags": [],
+  "maps": {
+   "1": true,
+   "8": true,
+   "10": true,
+   "12": true
+  }
+ },
+ "data": {
+  "1001": {
+   "name": "Boots",
+   "description": "<mainText><stats><attention>25</attention> Move Speed</stats><br><br></mainText>",
+   "colloq": ";",
+   "plaintext": "Slightly increases Move Speed",
+   "into": [
+    "3005",
+    "3047",
+    "3008",
+    "3006",
+    "3009",
+    "3010",
+    "3020",
+    "3111",
+    "3117",
+    "3158"
+   ],
+   "image": {
+    "full": "1001.png",
+    "sprite": "item0.png",
+    "group": "item",
+    "x": 0,
+    "y": 0,
+    "w": 48,
+    "h": 48
+   },
+   "gold": {
+    "base": 300,
+    "purchasable": true,
+    "total": 300,
+    "sell": 210
+   },
+   "tags": [
+    "Boots"
+   ],
+   "maps": {
+    "11": true,
+    "12": true,
+    "22": false,
+    "30": false,
+    "453": true
+   },
+   "stats": {
+    "FlatMovementSpeedMod": 25
+   }
+  },
+  "3020": {
+   "name": "Sorcerer's Shoes",
+   "description": "<mainText><stats><attention>12</attention> Magic Penetration<br><attention>45</attention> Move Speed</stats><br><br></mainText>",
+   "colloq": ";",
+   "plaintext": "Enhances Move Speed and magic damage",
+   "from": [
+    "1001"
+   ],
+   "into": [
+    "3175"
+   ],
+   "image": {
+    "full": "3020.png",
+    "sprite": "item3.png",
+    "group": "item",
+    "x": 336,
+    "y": 96,
+    "w": 48,
+    "h": 48
+   },
+   "gold": {
+    "base": 800,
+    "purchasable": true,
+    "total": 1100,
+    "sell": 770
+   },
+   "tags": [
+    "Boots",
+    "MagicPenetration"
+   ],
+   "maps": {
+    "11": true,
+    "12": true,
+    "22": false,
+    "30": false,
+    "453": true
+   },
+   "stats": {
+    "FlatMovementSpeedMod": 45
+   },
+   "depth": 2
+  },
+  "3089": {
+   "name": "Rabadon's Deathcap",
+   "description": "<mainText><stats><attention>130</attention> Ability Power</stats><br><br><passive>Magical Opus</passive><br>Increases your total <scaleAP>Ability Power by 30%</scaleAP>.</mainText>",
+   "colloq": ";dc;banksys;hat",
+   "plaintext": "Massively increases Ability Power",
+   "from": [
+    "1058",
+    "1058"
+   ],
+   "image": {
+    "full": "3089.png",
+    "sprite": "item3.png",
+    "group": "item",
+    "x": 288,
+    "y": 288,
+    "w": 48,
+    "h": 48
+   },
+   "gold": {
+    "base": 1100,
+    "purchasable": true,
+    "total": 3500,
+    "sell": 2450
+   },
+   "tags": [
+    "SpellDamage"
+   ],
+   "maps": {
+    "11": true,
+    "12": true,
+    "22": false,
+    "30": false,
+    "453": true
+   },
+   "stats": {
+    "FlatMagicDamageMod": 130
+   },
+   "depth": 2
+  },
+  "2003": {
+   "name": "Health Potion",
+   "description": "<mainText><stats></stats><br><br><active>Consume</active><br>Restores <healing>120 Health</healing> over 15 seconds.</mainText>",
+   "colloq": ";",
+   "plaintext": "Consume to restore Health over time",
+   "stacks": 5,
+   "consumed": true,
+   "image": {
+    "full": "2003.png",
+    "sprite": "item0.png",
+    "group": "item",
+    "x": 288,
+    "y": 384,
+    "w": 48,
+    "h": 48
+   },
+   "gold": {
+    "base": 50,
+    "purchasable": true,
+    "total": 50,
+    "sell": 20
+   },
+   "tags": [
+    "HealthRegen",
+    "Consumable",
+    "Lane",
+    "Jungle"
+   ],
+   "maps": {
+    "11": true,
+    "12": true,
+    "22": false,
+    "30": false,
+    "453": true
+   },
+   "stats": {}
+  },
+  "3340": {
+   "name": "Stealth Ward",
+   "description": "<mainText><stats></stats><br><br><active>Active</active> (<scaleLevel>210 - 90</scaleLevel>s, max 2 charges)<br>Places an <keyword>Invisible</keyword> Stealth Ward that grants vision for <scaleLevel>90-120</scaleLevel> seconds.</mainText>",
+   "colloq": "yellow; totem; trinket",
+   "plaintext": "Periodically place a Stealth Ward",
+   "image": {
+    "full": "3340.png",
+    "sprite": "item4.png",
+    "group": "item",
+    "x": 240,
+    "y": 240,
+    "w": 48,
+    "h": 48
+   },
+   "gold": {
+    "base": 0,
+    "purchasable": true,
+    "total": 0,
+    "sell": 0
+   },
+   "tags": [
+    "Active",
+    "Jungle",
+    "Lane",
+    "Trinket",
+    "Vision"
+   ],
+   "maps": {
+    "11": true,
+    "12": false,
+    "22": false,
+    "30": false,
+    "453": true
+   },
+   "stats": {},
+   "effect": {
+    "Effect1Amount": "90",
+    "Effect2Amount": "0",
+    "Effect3Amount": "120",
+    "Effect4Amount": "0",
+    "Effect5Amount": "2",
+    "Effect6Amount": "9",
+    "Effect7Amount": "30",
+    "Effect8Amount": "120"
+   }
+  },
+  "3157": {
+   "name": "Zhonya's Hourglass",
+   "description": "<mainText><stats><attention>105</attention> Ability Power<br><attention>50</attention> Armor</stats><br><br><br><br><active>Time Stop</active><br>Enter <keyword>Stasis</keyword> for 2.5 seconds.</mainText>",
+   "colloq": ";zhg;zonyas",
+   "plaintext": "Activate to become invincible but unable to take actions",
+   "from": [
+    "1058",
+    "2420"
+   ],
+   "image": {
+    "full": "3157.png",
+    "sprite": "item4.png",
+    "group": "item",
+    "x": 336,
+    "y": 0,
+    "w": 48,
+    "h": 48
+   },
+   "gold": {
+    "base": 450,
+    "purchasable": true,
+    "total": 3250,
+    "sell": 2275
+   },
+   "tags": [
+    "Armor",
+    "SpellDamage",
+    "Active"
+   ],
+   "maps": {
+    "11": true,
+    "12": true,
+    "22": false,
+    "30": false,
+    "453": true
+   },
+   "stats": {
+    "FlatMagicDamageMod": 105,
+    "FlatArmorMod": 50
+   },
+   "effect": {
+    "Effect1Amount": "0",
+    "Effect2Amount": "2.5",
+    "Effect3Amount": "120"
+   },
+   "depth": 3
+  },
+  "1058": {
+   "name": "Needlessly Large Rod",
+   "description": "<mainText><stats><attention>65</attention> Ability Power</stats><br><br></mainText>",
+   "colloq": ";nlr",
+   "plaintext": "Greatly increases Ability Power",
+   "into": [
+    "3157",
+    "4645",
+    "3089",
+    "3102",
+    "3128",
+    "4403"
+   ],
+   "image": {
+    "full": "1058.png",
+    "sprite": "item0.png",
+    "group": "item",
+    "x": 240,
+    "y": 96,
+    "w": 48,
+    "h": 48
+   },
+   "gold": {
+    "base": 1200,
+    "purchasable": true,
+    "total": 1200,
+    "sell": 840
+   },
+   "tags": [
+    "SpellDamage"
+   ],
+   "maps": {
+    "11": true,
+    "12": true,
+    "22": false,
+    "30": false,
+    "453": true
+   },
+   "stats": {
+    "FlatMagicDamageMod": 65
+   }
+  },
+  "2420": {
+   "name": "Seeker's Armguard",
+   "description": "<mainText><stats><attention>40</attention> Ability Power<br><attention>25</attention> Armor</stats><br><br><active>Time Stop</active> (Single use)<br>Enter <keyword>Stasis</keyword> for 2.5 seconds.</mainText>",
+   "colloq": ";zhg;zonyas",
+   "plaintext": "Activate to become invincible but unable to take actions",
+   "from": [
+    "1052",
+    "1029",
+    "1052"
+   ],
+   "into": [
+    "3157"
+   ],
+   "image": {
+    "full": "2420.png",
+    "sprite": "item2.png",
+    "group": "item",
+    "x": 336,
+    "y": 432,
+    "w": 48,
+    "h": 48
+   },
+   "gold": {
+    "base": 500,
+    "purchasable": true,
+    "total": 1600,
+    "sell": 640
+   },
+   "tags": [
+    "Armor",
+    "SpellDamage",
+    "Active"
+   ],
+   "maps": {
+    "11": true,
+    "12": true,
+    "22": false,
+    "30": false,
+    "453": true
+   },
+   "stats": {
+    "FlatMagicDamageMod": 40,
+    "FlatArmorMod": 25
+   },
+   "effect": {
+    "Effect1Amount": "0",
+    "Effect2Amount": "2.5"
+   },
+   "depth": 2
+  },
+  "3330": {
+   "name": "Scarecrow Effigy",
+   "description": "<mainText><stats></stats><br><br>Cannot be sold<br><br><active>Active - Trinket:</active> Places an effigy that lasts for  seconds and appears exactly as Fiddlesticks does to enemies. Stores one charge every  seconds, up to maximum 2 charges.<br><br>Enemy champions approaching an effigy will activate it, causing the effigy to fake a random action, after which the effigy will fall apart.</mainText>",
+   "colloq": "yellow; totem; trinket",
+   "plaintext": "Periodically place a Stealth Ward",
+   "requiredChampion": "FiddleSticks",
+   "image": {
+    "full": "3330.png",
+    "sprite": "item4.png",
+    "group": "item",
+    "x": 192,
+    "y": 240,
+    "w": 48,
+    "h": 48
+   },
+   "gold": {
+    "base": 0,
+    "purchasable": true,
+    "total": 0,
+    "sell": 0
+   },
+   "tags": [
+    "Active",
+    "Jungle",
+    "Lane",
+    "Trinket",
+    "Vision"
+   ],
+   "maps": {
+    "11": true,
+    "12": true,
+    "22": false,
+    "30": true,
+    "453": true
+   },
+   "stats": {},
+   "effect": {
+    "Effect1Amount": "90",
+    "Effect2Amount": "240",
+    "Effect3Amount": "120",
+    "Effect4Amount": "120",
+    "Effect5Amount": "2",
+    "Effect6Amount": "9",
+    "Effect7Amount": "30",
+    "Effect8Amount": "120"
+   }
+  },
+  "1035": {
+   "name": "Emberknife",
+   "description": "<mainText><stats></stats><br><br><passive>7%</passive> Omnivamp against jungle monsters<br><li><passive>Sear:</passive> Damaging jungle monsters burns them for <magicDamage> magic damage</magicDamage> over 5 seconds.<li><passive>Challenging Path:</passive> Smiting 5 times <status>consumes</status> this item and upgrades your Smite to <attention>Challenging Smite</attention>, increasing its damage to monsters to <trueDamage>900</trueDamage> and damage to minions to <trueDamage>500 +10% target max Health</trueDamage>. Challenging Smite marks champions for 4 seconds. Damaging a marked champion deals an additional <trueDamage> true damage</trueDamage> to them over 2.5 seconds. You take 10% reduced damage from marked champions.<li><passive>Huntsman:</passive> Killing large jungle monsters grants bonus experience.<li><passive>Recoup:</passive> Regen up to <scaleMana> Mana</scaleMana> (based on missing mana) per second when in the jungle or river. <br><br><rules><status>Consuming</status> this item grants all item effects permanently and increases Smite damage to monsters. If you have gained more gold from minions than jungle monsters, gold and experience from minions is heavily reduced. Healing is not reduced on AoE attacks. If two levels behind the average champion level of the game, monster kills grant bonus experience. </rules><br><rules>Only attacks and abilities apply Challenging Smite's burn</rules></mainText>",
+   "colloq": "",
+   "plaintext": "",
+   "inStore": false,
+   "image": {
+    "full": "1035.png",
+    "sprite": "item0.png",
+    "group": "item",
+    "x": 48,
+    "y": 48,
+    "w": 48,
+    "h": 48
+   },
+   "gold": {
+    "base": 350,
+    "purchasable": false,
+    "total": 350,
+    "sell": 140
+   },
+   "tags": [
+    "LifeSteal",
+    "SpellVamp",
+    "Jungle"
+   ],
+   "maps": {
+    "11": false,
+    "12": false,
+    "22": false,
+    "30": false,
+    "453": false
+   },
+   "stats": {},
+   "effect": {
+    "Effect1Amount": "60",
+    "Effect2Amount": "25",
+    "Effect3Amount": "5",
+    "Effect4Amount": "8"
+   }
+  },
+  "1500": {
+   "name": "Penetrating Bullets",
+   "description": "",
+   "colloq": "",
+   "plaintext": "",
+   "inStore": false,
+   "image": {
+    "full": "1500.png",
+    "sprite": "item0.png",
+    "group": "item",
+    "x": 48,
+    "y": 288,
+    "w": 48,
+    "h": 48
+   },
+   "gold": {
+    "base": 0,
+    "purchasable": false,
+    "total": 0,
+    "sell": 0
+   },
+   "tags": [
+    "HealthRegen",
+    "ManaRegen",
+    "OnHit"
+   ],
+   "maps": {
+    "11": false,
+    "12": true,
+    "22": false,
+    "30": true,
+    "453": false
+   },
+   "stats": {}
+  }
+ }
+}

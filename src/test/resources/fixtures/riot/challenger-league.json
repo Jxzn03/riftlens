@@ -1,0 +1,43 @@
+{
+ "tier": "CHALLENGER",
+ "leagueId": "00000000-0000-0000-0000-000000000001",
+ "queue": "RANKED_SOLO_5x5",
+ "name": "Testliga",
+ "entries": [
+  {
+   "freshBlood": false,
+   "wins": 201,
+   "inactive": false,
+   "veteran": true,
+   "hotStreak": false,
+   "rank": "I",
+   "leaguePoints": 1200,
+   "losses": 151,
+   "summonerId": "test-summoner-01",
+   "puuid": "test-puuid-c01"
+  },
+  {
+   "freshBlood": false,
+   "wins": 202,
+   "inactive": false,
+   "veteran": true,
+   "hotStreak": true,
+   "rank": "I",
+   "leaguePoints": 1650,
+   "losses": 152,
+   "summonerId": "test-summoner-02",
+   "puuid": "test-puuid-c02"
+  },
+  {
+   "freshBlood": false,
+   "wins": 203,
+   "inactive": false,
+   "veteran": true,
+   "hotStreak": false,
+   "rank": "I",
+   "leaguePoints": 900,
+   "losses": 153,
+   "summonerId": "test-summoner-03"
+  }
+ ]
+}

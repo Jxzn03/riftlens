@@ -1,0 +1,31 @@
+# Maven
+/target/
+/dist/
+.mvn/wrapper/maven-wrapper.jar
+
+# Java
+*.class
+*.log
+hs_err_pid*
+replay_pid*
+
+# IDEs
+/.idea/
+*.iml
+/.vscode/
+
+# Lokale Daten/Einstellungen, falls leaguetool.home
+# auf den Projektordner zeigt (enthaelt den Riot-API-Key)
+/.leaguetool/
+/settings.properties
+/cache/
+/modern-ui/
+leaguetool.properties
+
+# Geheimnisse
+.env
+.env.*
+
+# OS
+Thumbs.db
+.DS_Store
