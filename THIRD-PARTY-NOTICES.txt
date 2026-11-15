@@ -1,0 +1,39 @@
+RiftLens – Third-Party Notices
+==============================
+
+RiftLens itself is licensed under the MIT License (see LICENSE).
+The release package bundles the following third-party software. Their license
+texts and notices are included in the "licenses" folder.
+
+1. Jackson (jackson-databind, jackson-core, jackson-annotations) 2.17.2
+   https://github.com/FasterXML/jackson
+   License: Apache License 2.0              -> licenses/Apache-2.0.txt
+   Notices:                                 -> licenses/jackson-*-NOTICE.txt
+
+   jackson-core contains:
+   - FastDoubleParser, Copyright (c) 2023 Werner Randelshofer, MIT License
+                                            -> licenses/FastDoubleParser-NOTICE.txt
+   - fast_float, Copyright (c) 2021 The fast_float authors, MIT License
+                                            -> licenses/jackson-core-thirdparty-LICENSE.txt
+
+2. htm 3.1.1 (including its bundled Preact build "htm/preact/standalone")
+   https://github.com/developit/htm
+   License: Apache License 2.0              -> licenses/Apache-2.0.txt
+
+3. Preact (bundled in htm/preact/standalone)
+   https://github.com/preactjs/preact
+   License: MIT, Copyright (c) 2015-present Jason Miller
+                                            -> licenses/preact-MIT.txt
+
+4. Java runtime (OpenJDK, created with jlink), folder "runtime"
+   License: GNU General Public License v2 with the Classpath Exception
+   License texts and notices                -> runtime/legal/
+
+The draft rating model follows the approach of DraftGap
+(https://github.com/vigovlugt/draftgap, MIT License); no DraftGap code is bundled.
+
+League of Legends data is provided by Riot Games (Data Dragon, Riot API), the
+League of Legends Wiki and Lolalytics. RiftLens isn't endorsed by Riot Games and
+doesn't reflect the views or opinions of Riot Games or anyone officially involved
+in producing or managing Riot Games properties. Riot Games, and all associated
+properties are trademarks or registered trademarks of Riot Games, Inc.
