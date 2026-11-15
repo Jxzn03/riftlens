@@ -330,8 +330,11 @@ export function go(view, id) {
   }
 }
 
-/** Ändert nur die Auswahl innerhalb der Ansicht (kein Verlaufseintrag, z. B. für Pfeiltasten). */
+/** Ändert nur die Auswahl innerhalb der Ansicht (kein Verlaufseintrag, z. B. für Pfeiltasten); `null` hebt sie auf. */
 export function select(view, id) {
+  if (id === null) {
+    delete lastIds[view]; // sonst stellt applyRoute die vorherige Auswahl wieder her
+  }
   history.replaceState(null, '', hashFor(view, id));
   applyRoute();
 }

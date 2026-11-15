@@ -262,8 +262,11 @@ final class ApiRoutes {
             throw new ApiException(404, "Champion bei Lolalytics nicht gefunden");
         }
         GameData data = ctx.awaitData();
-        LolalyticsBuild build = client.build(slug, tier, role == null ? null : LolalyticsClient.lane(role), period);
-        return Dto.lolalyticsReport(build, data, ctx.itemClassifier(data), championKey);
+        String lane = role == null ? null : LolalyticsClient.lane(role);
+        LolalyticsBuild build = client.build(slug, tier, lane, period);
+        LolalyticsFullTierList.Row row = list.rows().get(championKey);
+        String opponentLane = lane != null ? lane : row == null ? "" : row.lane();
+        return Dto.lolalyticsReport(build, data, ctx.itemClassifier(data), championKey, opponentLane);
     }
 
     private LolalyticsClient lolalytics() {

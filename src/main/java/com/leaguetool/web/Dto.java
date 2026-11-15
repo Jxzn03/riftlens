@@ -14,6 +14,7 @@ import com.leaguetool.data.GameData;
 import com.leaguetool.data.ddragon.ImageRef;
 import com.leaguetool.data.itempassives.ItemPassiveUpdater;
 import com.leaguetool.data.lolalytics.LolalyticsBuild;
+import com.leaguetool.data.lolalytics.LolalyticsCounters;
 import com.leaguetool.data.lolalytics.LolalyticsFullTierList;
 import com.leaguetool.data.wiki.WikiAbility;
 import com.leaguetool.data.wiki.WikiChampionData;
@@ -454,7 +455,8 @@ final class Dto {
     }
 
     /** Gleiche Form wie {@link #report(ChampionReport)}, damit die Oberfläche beide Quellen gleich anzeigt. */
-    static Map<String, Object> lolalyticsReport(LolalyticsBuild b, GameData data, ItemClassifier classifier, int championKey) {
+    static Map<String, Object> lolalyticsReport(LolalyticsBuild b, GameData data, ItemClassifier classifier, int championKey,
+                                                String opponentLane) {
         List<StatLine<Integer>> boots = new ArrayList<>();
         for (LolalyticsBuild.Entry e : b.boots()) {
             if (e.key().matches("\\d+") && classifier.isFinalBoots(Integer.parseInt(e.key()))) {
@@ -489,7 +491,18 @@ final class Dto {
                 ranking(b.spells(), Dto::idList, min));
         Map<String, Object> json = report(report);
         json.put("winRate", b.winRate());   // exakt wie geliefert, nicht aus gerundeten Siegen zurückgerechnet
+        json.put("counters", counters(LolalyticsCounters.of(b.matchups(), opponentLane, min)));
         return json;
+    }
+
+    private static Map<String, Object> counters(LolalyticsCounters c) {
+        return obj("lane", LANE_LABELS.getOrDefault(c.lane(), c.lane()), "minGames", c.minGames(),
+                "strong", counterLines(c.strong()), "weak", counterLines(c.weak()), "delta", counterLines(c.delta()));
+    }
+
+    private static List<Map<String, Object>> counterLines(List<LolalyticsCounters.Line> lines) {
+        return lines.stream().map(l -> obj("champion", l.champion(), "winRate", l.winRate(), "games", l.games(),
+                "delta1", l.delta1(), "delta2", l.delta2(), "rating", l.rating())).toList();
     }
 
     private static <K> StatRanking<K> ranking(List<LolalyticsBuild.Entry> entries, Function<String, K> key, int minGames) {

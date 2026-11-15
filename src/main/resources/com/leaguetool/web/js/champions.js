@@ -5,7 +5,7 @@ import {
   sortRows, activeSort, percent, winRateText, summary, setPref,
 } from './core.js';
 import {
-  Img, Card, Button, SearchInput, Slider, Tag, Meter, DataGrid, RateCell, VirtualTable, MasterDetail,
+  Img, Card, Button, SearchInput, Segmented, Slider, Tag, Meter, DataGrid, RateCell, VirtualTable, MasterDetail,
   Empty, Loading, Skeleton, ErrorNote, ItemIcons, RuneIcons, SpellIcons,
 } from './ui.js';
 
@@ -122,7 +122,8 @@ export function ChampionsView({ id }) {
       ${statsFetch.error ? html`<span class="bad" data-tip=${statsFetch.error.message}>Statistik nicht verfügbar: ${statsFetch.error.message}</span>` : null}
     </div>
     <${VirtualTable} rows=${visible} columns=${columns} rowKey=${(r) => r.c.id} selected=${id}
-      onSelect=${(r) => select('champions', r.c.id)} sort=${sort} onSort=${(next) => setView({ sort: next })}
+      onSelect=${(r) => select('champions', r.c.id)} onDeselect=${() => select('champions', null)}
+      sort=${sort} onSort=${(next) => setView({ sort: next })}
       empty="Keine Champions gefunden" />
   </div>`;
 
@@ -287,5 +288,88 @@ function MatchReport({ champion, data }) {
         <${Ranking} title="Beschwörerzauber" ranking=${r.spellCombos} render=${(keys) => html`<${SpellIcons} data=${data} keys=${keys} />`} />
       </div>`;
   }
-  return html`<${Card} title="Match-Statistik" aside=${html`<span class="muted">${sourceLabel}</span>`}>${body}<//>`;
+  return html`<${Card} title="Match-Statistik" aside=${html`<span class="muted">${sourceLabel}</span>`}>${body}<//>
+    ${report.data && report.data.games > 0 ? html`<${Counters} counters=${report.data.counters} data=${data} source=${sourceLabel} />` : null}`;
+}
+
+const TIP_DELTA1 = 'Delta 1 laut Lolalytics: Matchup-Winrate gegenüber dem allgemeinen Durchschnitt, in Prozentpunkten.';
+const TIP_DELTA2 = 'Delta 2 laut Lolalytics: Matchup-Winrate gegenüber dem normalisierten Erwartungswert, in Prozentpunkten.';
+const TIP_RATING = 'Eigene Bewertung: (Delta 1 + 2 × Delta 2) / 3, bei wenigen Spielen abgeschwächt mit Spiele / (Spiele + 500).';
+
+const DELTA_SORTS = [
+  { value: 'rating', label: 'Bewertung', tip: TIP_RATING },
+  { value: 'delta1', label: 'Delta 1', tip: TIP_DELTA1 },
+  { value: 'delta2', label: 'Delta 2', tip: TIP_DELTA2 },
+];
+const DELTA_COLUMNS = DELTA_SORTS.map((s) => ({ key: s.value, value: (line) => line[s.value] }));
+const COUNTERS_DEFAULTS = { deltaSort: 'rating' };
+
+function signedPoints(value) {
+  if (value === null || value === undefined) {
+    return html`<span class="muted">–</span>`;
+  }
+  return html`<span class=${value > 0 ? 'good' : value < 0 ? 'bad' : ''}>${value > 0 ? '+' : ''}${(value * 100).toFixed(2)}</span>`;
+}
+
+function CounterChampion({ data, championKey }) {
+  const champion = data.championByKey.get(championKey);
+  return champion
+    ? html`<div class="cell-hero"><${Img} src=${champion.icon} size=${30} cls="round" /><strong>${champion.name}</strong></div>`
+    : html`<span class="muted">#${championKey}</span>`;
+}
+
+function CounterList({ title, tip, lines, data }) {
+  const winRateClass = useWinRateClass();
+  return html`<div class="ranking">
+    <h4 data-tip=${tip}>${title}</h4>
+    ${lines.length === 0 ? html`<p class="muted small">keine Daten</p>` : lines.map((line) => html`<div class="rank-line" key=${line.champion}>
+      <div class="rank-key"><${CounterChampion} data=${data} championKey=${line.champion} /></div>
+      <div class="rank-stats">
+        <span class=${winRateClass(line.winRate)}>${percent(line.winRate, WR_DECIMALS)}</span>
+        <small>${line.games.toLocaleString('de-DE')} Spiele</small>
+      </div>
+    </div>`)}
+  </div>`;
+}
+
+function DeltaRanking({ lines, data }) {
+  const [view, setView] = useViewState('champion-counters', COUNTERS_DEFAULTS);
+  const winRateClass = useWinRateClass();
+  const hasDeltas = lines.some((line) => line.rating !== null);
+  const sorted = sortRows(lines, DELTA_COLUMNS, { key: view.deltaSort, dir: -1 });
+  let body;
+  if (lines.length === 0) {
+    body = html`<p class="muted small">keine Daten</p>`;
+  } else if (!hasDeltas) {
+    body = html`<p class="muted small">Lolalytics liefert für diese Matchups keine Delta-Werte.</p>`;
+  } else {
+    body = html`<div class="counter-scroll"><${DataGrid}
+      head=${['Gegner', 'WR', html`<span data-tip=${TIP_DELTA1}>Delta 1</span>`, html`<span data-tip=${TIP_DELTA2}>Delta 2</span>`,
+        html`<span data-tip=${TIP_RATING}>Bewertung</span>`, 'Spiele']}
+      rows=${sorted.map((line) => [
+        html`<${CounterChampion} data=${data} championKey=${line.champion} />`,
+        html`<span class=${winRateClass(line.winRate)}>${percent(line.winRate, WR_DECIMALS)}</span>`,
+        signedPoints(line.delta1), signedPoints(line.delta2), html`<strong>${signedPoints(line.rating)}</strong>`,
+        line.games.toLocaleString('de-DE'),
+      ])} /></div>`;
+  }
+  return html`<div class="ranking counter-delta">
+    <div class="counter-delta-head">
+      <h4>Delta</h4>
+      ${hasDeltas ? html`<${Segmented} label="Delta sortieren nach" value=${view.deltaSort} options=${DELTA_SORTS}
+        onChange=${(deltaSort) => setView({ deltaSort })} />` : null}
+    </div>
+    ${body}
+  </div>`;
+}
+
+/** Strong/Weak zeigen nur die Winrates der Website, die eigene Bewertung steht ausschließlich im Eintrag Delta. */
+function Counters({ counters, data, source }) {
+  return html`<${Card} title="Counters" aside=${html`<span class="muted">${source} · Gegner ${counters.lane} · ab ${counters.minGames.toLocaleString('de-DE')} Spielen</span>`}>
+    <div class="rankings">
+      <${CounterList} title="Strong Against" tip="Höchste Winrate gegen diese Gegner" lines=${counters.strong} data=${data} />
+      <${CounterList} title="Weak Against" tip="Niedrigste Winrate gegen diese Gegner" lines=${counters.weak} data=${data} />
+      <${DeltaRanking} lines=${counters.delta} data=${data} />
+    </div>
+  <//>`;
 }

@@ -342,6 +342,9 @@ table.data.compact td { padding: 3px 10px 3px 0; font-size: 12.5px; }
 .rank-stats span { font-weight: 650; }
 .rank-stats small { color: var(--text-3); }
 .rank-stats.wide { flex: 0 1 auto; }
+.counter-delta { grid-column: 1 / -1; }
+.counter-delta-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.counter-scroll { max-height: 360px; overflow-y: auto; }
 .icon-row { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 3px; }
 .icon-link { display: block; border-radius: 7px; transition: transform var(--ease); }
 .icon-link:hover { transform: translateY(-1px) scale(1.06); }

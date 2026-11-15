@@ -10,6 +10,7 @@ import java.nio.file.Path;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -75,10 +76,32 @@ class LolalyticsStateTest {
         LolalyticsPairs.Stat matchup = build.matchups().byLane().get("top").get(266);
         assertEquals(0.5736, matchup.winRate(), 1e-9);
         assertEquals(1630, matchup.games());
+        assertEquals(0.0888, matchup.delta1(), 1e-9);
+        assertEquals(0.0316, matchup.delta2(), 1e-9);
         assertEquals(17893.03, build.damage().magic(), 1e-9);
         assertEquals(5325.13, build.damage().trueDamage(), 1e-9);
         assertEquals(List.of(new LolalyticsBuild.LengthBucket(200, 400), new LolalyticsBuild.LengthBucket(360, 600)),
                 build.gameLength());
+    }
+
+    @Test
+    void missingDeltaColumnsKeepTheBuildUsable() throws IOException {
+        String page = LolalyticsPages.build().replace("\"d1\"", "\"x1\"").replace("\"d2\"", "\"x2\"");
+        LolalyticsPairs.Stat matchup = LolalyticsState.parseBuild(LolalyticsState.extractBuild(page))
+                .matchups().byLane().get("top").get(266);
+        assertEquals(0.5736, matchup.winRate(), 1e-9);
+        assertEquals(1630, matchup.games());
+        assertNull(matchup.delta1());
+        assertNull(matchup.delta2());
+    }
+
+    @Test
+    void teamValuesStayWithoutDeltas() throws IOException {
+        LolalyticsPairs.Stat teammate = LolalyticsState.parseTeam(LolalyticsState.extractTeam(LolalyticsPages.team(777, 52.69, 10_694)))
+                .byLane().get("top").get(777);
+        assertEquals(0.5269, teammate.winRate(), 1e-9);
+        assertNull(teammate.delta1());
+        assertNull(teammate.delta2());
     }
 
     @Test

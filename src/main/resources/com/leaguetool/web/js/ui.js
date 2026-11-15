@@ -191,7 +191,7 @@ const OVERSCAN = 6;
  * Tabelle, die nur die sichtbaren Zeilen rendert. Scrollen und Tippen bleiben dadurch unabhängig von der
  * Datenmenge flüssig; Bilder werden nur für sichtbare Zeilen geladen.
  */
-export function VirtualTable({ rows, columns, rowKey, selected, onSelect, sort, onSort, rowHeight = 48, empty }) {
+export function VirtualTable({ rows, columns, rowKey, selected, onSelect, onDeselect, sort, onSort, rowHeight = 48, empty }) {
   const scroller = useRef();
   const frame = useRef(0);
   const [viewport, setViewport] = useState({ top: 0, height: 600 });
@@ -268,7 +268,7 @@ export function VirtualTable({ rows, columns, rowKey, selected, onSelect, sort, 
           const key = rowKey(row);
           return html`<div key=${key} role="row" class=${`vt-row ${key === selected ? 'selected' : ''}`}
             style=${{ gridTemplateColumns: template, height: `${rowHeight}px`, transform: `translateY(${(first + offset) * rowHeight}px)` }}
-            onClick=${() => onSelect(row)}>
+            onClick=${() => (key === selected && onDeselect ? onDeselect() : onSelect(row))}>
             ${columns.map((c, i) => html`<div key=${c.key} role="gridcell" class=${`vt-td ${c.align || ''} ${i === 0 ? 'sticky' : ''}`}>${c.render(row)}</div>`)}
           </div>`;
         })}

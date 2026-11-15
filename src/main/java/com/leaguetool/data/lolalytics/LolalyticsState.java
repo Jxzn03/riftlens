@@ -33,6 +33,8 @@ final class LolalyticsState {
     private static final int MAX_DEPTH = 12;
     /** Mehr Einträge pro Liste braucht keine Rangliste; hält den Cache klein. */
     private static final int MAX_ENTRIES = 60;
+    /** Optional, damit eine geänderte Seite nur die Delta-Anzeige kostet und nicht Build und Draft. */
+    private static final List<String> DELTA_COLUMNS = List.of("d1", "d2");
     /** Tier-Nummer des Seitenzustands → Anzeige; 0 = ohne Tier. */
     private static final List<String> TIERS = List.of("", "S+", "S", "S-", "A+", "A", "A-", "B+", "B", "B-", "C+", "C",
             "C-", "D+", "D", "D-");
@@ -113,7 +115,7 @@ final class LolalyticsState {
         out.set("pagePick", summary.path("pick").path("runes"));
         out.set("pageWin", summary.path("win").path("runes"));
         out.set("runes", resolve(objects, build.get("runes"), 0).path("stats"));
-        out.set("enemy", compactPairs(resolve(objects, build.get("enemy_h"), 0), resolve(objects, build.get("enemy"), 0)));
+        out.set("enemy", compactPairs(resolve(objects, build.get("enemy_h"), 0), resolve(objects, build.get("enemy"), 0), DELTA_COLUMNS));
         out.set("damage", header.path("damage"));
         JsonNode time = resolve(objects, build.get("sidebar"), 0).path("time");
         out.set("time", time.path("time"));
@@ -133,7 +135,7 @@ final class LolalyticsState {
             throw new IOException("Lolalytics: Team-Daten fehlen in der Antwort (Schnittstelle geändert?)");
         }
         ObjectNode out = JsonNodeFactory.instance.objectNode();
-        out.set("team", compactPairs(root.path("team_h"), root.path("team")));
+        out.set("team", compactPairs(root.path("team_h"), root.path("team"), List.of()));
         return JSON.writeValueAsString(out);
     }
 
@@ -141,8 +143,12 @@ final class LolalyticsState {
         return pairs(JSON.readTree(json).path("team"));
     }
 
-    /** Hält je Paarung nur Champion, Winrate und Spiele; die Spalten werden über die Kopfzeile gefunden. */
-    private static ObjectNode compactPairs(JsonNode header, JsonNode lanes) throws IOException {
+    /**
+     * Hält je Paarung Champion, Winrate und Spiele; die Spalten werden über die Kopfzeile gefunden.
+     *
+     * @param optional weitere Spalten, die hinten angehängt werden; fehlt eine, steht dort {@code null}
+     */
+    private static ObjectNode compactPairs(JsonNode header, JsonNode lanes, List<String> optional) throws IOException {
         ObjectNode out = JsonNodeFactory.instance.objectNode();
         if (!lanes.isObject() || lanes.isEmpty()) {
             return out;
@@ -150,22 +156,36 @@ final class LolalyticsState {
         int id = column(header, "id");
         int winRate = column(header, "wr");
         int games = column(header, "n");
+        List<Integer> extra = optional.stream().map(name -> indexOf(header, name)).toList();
         for (Map.Entry<String, JsonNode> lane : fields(lanes)) {
             ArrayNode rows = out.putArray(lane.getKey());
             for (JsonNode row : lane.getValue()) {
-                rows.addArray().add(row.path(id)).add(row.path(winRate)).add(row.path(games));
+                ArrayNode compact = rows.addArray().add(row.path(id)).add(row.path(winRate)).add(row.path(games));
+                extra.forEach(column -> compact.add(column < 0 ? NullNode.instance : row.path(column)));
             }
         }
         return out;
     }
 
     private static int column(JsonNode header, String name) throws IOException {
+        int index = indexOf(header, name);
+        if (index < 0) {
+            throw new IOException("Lolalytics: Spalte fehlt in den Paarungen (Seite geändert?): " + name);
+        }
+        return index;
+    }
+
+    private static int indexOf(JsonNode header, String name) {
         for (int i = 0; i < header.size(); i++) {
             if (name.equals(header.path(i).asText())) {
                 return i;
             }
         }
-        throw new IOException("Lolalytics: Spalte fehlt in den Paarungen (Seite geändert?): " + name);
+        return -1;
+    }
+
+    private static Double fractionOrNull(JsonNode value) {
+        return value.isNumber() ? value.asDouble() / 100.0 : null;
     }
 
     private static LolalyticsPairs pairs(JsonNode lanes) {
@@ -173,7 +193,8 @@ final class LolalyticsState {
         for (Map.Entry<String, JsonNode> lane : fields(lanes)) {
             Map<Integer, LolalyticsPairs.Stat> rows = new HashMap<>();
             for (JsonNode row : lane.getValue()) {
-                rows.put(row.path(0).asInt(), new LolalyticsPairs.Stat(row.path(1).asDouble() / 100.0, row.path(2).asInt()));
+                rows.put(row.path(0).asInt(), new LolalyticsPairs.Stat(row.path(1).asDouble() / 100.0, row.path(2).asInt(),
+                        fractionOrNull(row.path(3)), fractionOrNull(row.path(4))));
             }
             byLane.put(lane.getKey(), rows);
         }

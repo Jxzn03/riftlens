@@ -199,6 +199,12 @@ class WebServerTest {
         assertEquals(List.of(3118, 3020, 4645), json.convertValue(r.path("coreBuilds").path("lines").path(0).path("key"),
                 new TypeReference<List<Integer>>() { }));
         assertEquals("Q", r.path("skillOrders").path("lines").path(0).path("key").path(0).asText());
+        JsonNode counters = r.path("counters");
+        assertEquals("Mid", counters.path("lane").asText(), "ohne Rollenfilter gilt die Hauptlane");
+        assertEquals(5797, counters.path("minGames").asInt(), "1 % der Spiele des Champions");
+        assertTrue(counters.path("strong").isArray());
+        assertTrue(counters.path("weak").isArray());
+        assertTrue(counters.path("delta").isArray());
     }
 
     @Test
