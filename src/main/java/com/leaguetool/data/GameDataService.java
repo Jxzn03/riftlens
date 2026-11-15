@@ -48,7 +48,12 @@ public final class GameDataService {
 
     /** Lädt den aktuellen Patch (oder offline den neuesten gecachten). */
     public GameData loadLatest() throws IOException {
-        String patch = ddragon.latestPatch();
+        return loadLatest(false);
+    }
+
+    /** @param checkNow Versionsliste sofort neu abfragen (erster Ladevorgang nach dem Programmstart) */
+    public GameData loadLatest(boolean checkNow) throws IOException {
+        String patch = ddragon.latestPatch(checkNow);
         try {
             return load(patch);
         } catch (IOException e) {

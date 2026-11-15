@@ -1,6 +1,6 @@
 // App-Rahmen: Navigation, Filterleiste, Schnellsuche, Dialoge, Statuszeile.
 import { html, useState, useEffect, useMemo, useRef } from '/vendor/htm-preact.js';
-import { store, useStore, useFetch, useStatsUrl, api, go, normalize, percent, toast, TIERS } from './core.js';
+import { store, useStore, useFetch, useStatsUrl, api, go, normalize, percent, toast, setPref, TIERS } from './core.js';
 import { Icon, Img, Button, Select, Segmented, Switch, Spinner, Loading, ErrorNote } from './ui.js';
 import { ChampionsView } from './champions.js';
 import { ItemsView } from './items.js';
@@ -92,6 +92,7 @@ function TopBar({ data, view }) {
   const filter = useStore((s) => s.filter);
   const dataSource = useStore((s) => s.dataSource);
   const theme = useStore((s) => s.theme);
+  const advancedTips = useStore((s) => Boolean(s.prefs.advancedTips));
   const metaUrl = useStatsUrl('/api/stats/meta');
   const meta = useFetch(metaUrl, { keep: true });
   const setFilter = (patch) => store.set({ filter: { ...store.get().filter, ...patch } });
@@ -114,14 +115,14 @@ function TopBar({ data, view }) {
       <${Icon} name="search" size=${16} /><span>Alles durchsuchen …</span><kbd>Strg K</kbd>
     </button>
     ${STAT_VIEWS.includes(view) ? html`<div class="filters">
-      <${Segmented} label="Zeitraum" value=${dataSource.period} options=${PERIODS} onChange=${(period) => setSource({ period })} />
+      <${Segmented} label="Zeitraum" value=${dataSource.period} options=${advancedTips ? PERIODS : PERIODS.map(({ tip, ...option }) => option)} onChange=${(period) => setSource({ period })} />
       <${Select} label="Rang-Bereich" value=${dataSource.tier} options=${TIERS} onChange=${(tier) => setSource({ tier })} />
       ${ROLE_FILTER_VIEWS.includes(view) ? html`<${Select} label="Rolle" value=${filter.role} onChange=${(role) => setFilter({ role })}
         options=${[{ value: '', label: 'Alle Rollen' }, ...(meta.data ? meta.data.roles : [])]} />` : null}
-      <span class="match-count" data-tip="Analysierte Champion-Picks und durchschnittliche Winrate laut Lolalytics">${count}</span>
+      <span class="match-count" data-tip=${advancedTips ? 'Analysierte Champion-Picks und durchschnittliche Winrate laut Lolalytics' : undefined}>${count}</span>
     </div>` : null}
     <div class="topbar-end">
-      <span class=${`patch-chip ${data.offline ? 'offline' : ''}`} data-tip=${data.offline ? 'Offline aus dem Cache' : 'Aktueller Patch von Data Dragon'}>
+      <span class=${`patch-chip ${data.offline ? 'offline' : ''}`} data-tip=${advancedTips ? (data.offline ? 'Offline aus dem Cache' : 'Aktueller Patch von Data Dragon') : undefined}>
         <i></i>Patch ${data.patch}
       </span>
       <${Button} icon="refresh" kind="icon" title="Neu laden" tip="Spieldaten neu laden"
@@ -236,6 +237,7 @@ function SettingsDialog() {
   const [key, setKey] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
+  const advancedTips = useStore((s) => Boolean(s.prefs.advancedTips));
 
   useEffect(() => {
     if (loaded.data && !form) {
@@ -276,6 +278,7 @@ function SettingsDialog() {
       <${Switch} checked=${form.offline} onChange=${(offline) => set({ offline })}>Offline-Modus (nur Cache verwenden)<//>
       <${Switch} checked=${form.wikiEnabled} onChange=${(wikiEnabled) => set({ wikiEnabled })}>Zusatzdaten aus dem LoL-Wiki laden<//>
       <${Switch} checked=${form.lolalyticsEnabled} onChange=${(lolalyticsEnabled) => set({ lolalyticsEnabled })}>Lolalytics-Statistiken erlauben (öffentliche Seiten, gecacht)<//>
+      <${Switch} checked=${advancedTips} onChange=${(on) => setPref({ advancedTips: on })}>Show Advanced Tooltips (zusätzliche Hover-Infos in der Champions-Statistik)<//>
       <div class="divider"></div>
       <${Switch} checked=${form.riotEnabled} onChange=${(riotEnabled) => set({ riotEnabled })}>Riot-API verwenden (Summoner-Abfrage, Verifizierung)<//>
       <label class="field"><span>Riot-API-Key</span>
@@ -295,6 +298,9 @@ function SettingsDialog() {
         ? `Automatisch gefunden: ${form.lcuDetected}. Nur ausfüllen, wenn League woanders liegt.`
         : 'Automatisch kein League gefunden. Ordner mit LeagueClient.exe eintragen; auch der Riot-Games-Ordner oder die Datei selbst gehen.'}</p>
     </div>` : null}
+    <p class="legal-note">RiftLens isn't endorsed by Riot Games and doesn't reflect the views or opinions of Riot Games or anyone
+      officially involved in producing or managing Riot Games properties. Riot Games, and all associated properties are
+      trademarks or registered trademarks of Riot Games, Inc.</p>
   <//>`;
 }
 

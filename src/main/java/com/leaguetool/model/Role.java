@@ -5,7 +5,7 @@ import java.util.Optional;
 
 /** Position wie in match-v5 {@code teamPosition}. */
 public enum Role {
-    TOP("Top"), JUNGLE("Jungle"), MIDDLE("Mid"), BOTTOM("Bot"), UTILITY("Support");
+    TOP("Top"), JUNGLE("Jungle"), MIDDLE("Mid"), BOTTOM("ADC"), UTILITY("Support");
 
     private final String label;
 

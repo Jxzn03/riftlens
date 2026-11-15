@@ -8,12 +8,12 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Skillung der ersten Level. Lolalytics liefert nur die ersten sechs Skill-Punkte; die folgenden Level ergeben sich aus
- * der Max-Reihenfolge und der Rangbegrenzung im Spiel.
+ * Skillung aller 18 Level. Lolalytics liefert nur die ersten sechs Skill-Punkte; die folgenden Level ergeben sich aus
+ * der Max-Reihenfolge und den Rangbegrenzungen im Spiel (Ultimate auf 6, 11 und 16).
  */
 public final class SkillPath {
 
-    public static final int LEVELS = 9;
+    public static final int LEVELS = 18;
     private static final int ULTIMATE_LEVEL = 6;
     private static final int MAX_RANK = 5;
 
@@ -44,7 +44,9 @@ public final class SkillPath {
     }
 
     private static AbilitySlot next(Map<AbilitySlot, Integer> ranks, List<AbilitySlot> maxOrder, int level) {
-        if (level >= ULTIMATE_LEVEL && !ranks.containsKey(AbilitySlot.R)) {
+        // Die Ultimate erreicht Rang 1/2/3 frühestens auf Level 6/11/16.
+        int ultimateLimit = level >= 16 ? 3 : level >= 11 ? 2 : level >= 6 ? 1 : 0;
+        if (ranks.getOrDefault(AbilitySlot.R, 0) < ultimateLimit) {
             return AbilitySlot.R;
         }
         // Grundfähigkeiten erreichen Rang n frühestens auf Level 2n − 1.

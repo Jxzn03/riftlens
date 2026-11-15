@@ -92,8 +92,18 @@ public final class FileCache {
 
     /** {@code true}, wenn der Eintrag existiert und jünger als {@code maxAge} ist. */
     public boolean isFresh(String scope, String key, Duration maxAge) throws IOException {
+        return isFresh(scope, key, maxAge, Instant.EPOCH);
+    }
+
+    /**
+     * Wie {@link #isFresh(String, String, Duration)}, zusätzlich muss der Eintrag nach {@code notBefore} geschrieben
+     * sein (z. B. nach einem Patchwechsel).
+     */
+    public boolean isFresh(String scope, String key, Duration maxAge, Instant notBefore) throws IOException {
+        Instant limit = Instant.now().minus(maxAge);
+        Instant threshold = notBefore != null && notBefore.isAfter(limit) ? notBefore : limit;
         return lastModified(scope, key)
-                .map(t -> t.isAfter(Instant.now().minus(maxAge)))
+                .map(t -> t.isAfter(threshold))
                 .orElse(false);
     }
 
@@ -117,7 +127,16 @@ public final class FileCache {
      */
     public CacheResult getFreshOrStale(String scope, String key, Duration maxAge, IoSupplier<String> fetcher)
             throws IOException {
-        if (isFresh(scope, key, maxAge)) {
+        return getFreshOrStale(scope, key, maxAge, Instant.EPOCH, fetcher);
+    }
+
+    /**
+     * Wie {@link #getFreshOrStale(String, String, Duration, IoSupplier)}; Einträge von vor {@code notBefore} gelten als
+     * veraltet, bleiben aber Rückfall ohne Netz.
+     */
+    public CacheResult getFreshOrStale(String scope, String key, Duration maxAge, Instant notBefore,
+                                       IoSupplier<String> fetcher) throws IOException {
+        if (isFresh(scope, key, maxAge, notBefore)) {
             return new CacheResult(readText(scope, key).orElseThrow(), true, false);
         }
         try {

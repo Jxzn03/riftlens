@@ -25,11 +25,14 @@ import java.util.regex.Pattern;
  * @param affects        betroffene Einheiten, z. B. "Enemies"
  * @param spellshield    Interaktion mit Zauberschilden
  * @param projectile     Projektil ("True"/"False" bzw. leer)
+ * @param staticCooldown {@code true}, wenn das Wiki nur eine statische Abklingzeit ({@code static}) angibt; Haste
+ *                       wirkt darauf laut Wiki nicht
  */
 public record WikiAbility(String champion, AbilitySlot slot, String name, String description,
                           List<WikiLeveling> levelings, String cooldownText, List<Double> cooldownValues,
                           String costText, String costType, String rangeText, String castTime, String damageType,
-                          String targeting, String affects, String spellshield, String projectile) {
+                          String targeting, String affects, String spellshield, String projectile,
+                          boolean staticCooldown) {
 
     /** Immobilisierende Kontrolleffekte laut Wiki (Airborne, Forced Action, Root, Sleep, Stasis, Stun, Suppression, Suspension). */
     private static final Pattern IMMOBILIZING = Pattern.compile("\\b(airborne|knock(s|ing|ed)?\\s+(\\w+\\s+)?(up|back|aside)"

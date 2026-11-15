@@ -18,14 +18,15 @@ class SkillPathTest {
 
     @Test
     void continuesTheStartAlongTheMaxOrder() {
-        assertEquals(List.of(Q, E, W, Q, Q, R, Q, E, Q), SkillPath.firstLevels(List.of(Q, E, W, Q, Q, R), QEW));
+        assertEquals(List.of(Q, E, W, Q, Q, R, Q, E, Q, E, R, E, E, W, W, R, W, W), SkillPath.firstLevels(List.of(Q, E, W, Q, Q, R), QEW));
     }
 
     @Test
     void respectsTheRankLimitOfEachLevel() {
         // Q steht nach Level 7 auf Rang 4 und darf erst auf Level 9 Rang 5 erreichen.
         List<AbilitySlot> path = SkillPath.firstLevels(List.of(W, Q, E, Q, Q, R), List.of(Q, W, E));
-        assertEquals(List.of(W, Q, E, Q, Q, R, Q, W, Q), path);
+        assertEquals(18, path.size());
+        assertEquals(List.of(W, Q, E, Q, Q, R, Q, W, Q), path.subList(0, 9));
     }
 
     @Test
@@ -36,7 +37,7 @@ class SkillPathTest {
     @Test
     void anEarlyUltimateIsNotTakenAgain() {
         // Champions mit R ab Level 1 (z. B. Jayce) bekommen die Punkte weiter nach Max-Reihenfolge.
-        assertEquals(List.of(R, Q, E, Q, W, Q, Q, E, Q), SkillPath.firstLevels(List.of(R, Q, E, Q, W, Q), QEW));
+        assertEquals(List.of(R, Q, E, Q, W, Q, Q, E, Q), SkillPath.firstLevels(List.of(R, Q, E, Q, W, Q), QEW).subList(0, 9));
     }
 
     @Test
@@ -47,7 +48,19 @@ class SkillPathTest {
 
     @Test
     void aMaxOrderThatCannotFillTheLevelsGivesNoPath() {
-        assertEquals(SkillPath.LEVELS, SkillPath.firstLevels(List.of(Q, E, W, Q, Q, R), List.of(W)).size());
+        assertEquals(SkillPath.LEVELS, SkillPath.firstLevels(List.of(Q, E, W, Q, Q, R), QEW).size());
         assertTrue(SkillPath.firstLevels(List.of(Q, Q, Q, Q, Q, R), List.of(Q)).isEmpty());
+    }
+
+    @Test
+    void ultimateIsRankedAtLevels6_11And16() {
+        List<AbilitySlot> path = SkillPath.firstLevels(List.of(Q, E, W, Q, Q, R), QEW);
+        assertEquals(R, path.get(5));
+        assertEquals(R, path.get(10));
+        assertEquals(R, path.get(15));
+        assertEquals(3, path.stream().filter(R::equals).count());
+        assertEquals(5, path.stream().filter(Q::equals).count());
+        assertEquals(5, path.stream().filter(W::equals).count());
+        assertEquals(5, path.stream().filter(E::equals).count());
     }
 }

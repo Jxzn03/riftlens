@@ -74,7 +74,7 @@ class WikiItemsTest {
     }
 
     private static WikiAbility ability(String description) {
-        return new WikiAbility("X", AbilitySlot.Q, "Name", description, List.of(), "", List.of(), "", "", "", "", "", "", "", "", "");
+        return new WikiAbility("X", AbilitySlot.Q, "Name", description, List.of(), "", List.of(), "", "", "", "", "", "", "", "", "", false);
     }
 
     @Test

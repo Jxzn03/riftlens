@@ -21,8 +21,9 @@ import java.util.Objects;
  *   <li>Adaptive Kraft: 1 Punkt ergibt 0.6 Bonus-AD oder 1 AP, je nachdem, was höher ist; bei Gleichstand
  *       entscheidet der adaptive Typ des Champions.</li>
  * </ul>
- * Nicht berücksichtigt: bedingte Passiven und Stacks, Champion-Passiven, Runen,
- * Verlangsamungen und die alte Abklingzeitverringerung ({@link StatType#COOLDOWN_REDUCTION}).
+ * Runen und Shards kommen über {@link RuneEffects} als Bonus-Werte dazu. Nicht berücksichtigt: bedingte
+ * Item-Passiven und Stacks, Champion-Passiven, Verlangsamungen und die alte Abklingzeitverringerung
+ * ({@link StatType#COOLDOWN_REDUCTION}).
  */
 public final class ChampionBuildCalculator {
 
@@ -72,14 +73,17 @@ public final class ChampionBuildCalculator {
         double maxMana = lvl.mp() + bonusMana;
         double manaRegen = lvl.mpRegen() * (1 + b.get(StatType.MANA_REGEN) / 100.0)
                 + b.get(StatType.MANA_REGEN_FLAT);
-        double bonusHealth = b.get(StatType.HEALTH) * (1 + b.get(StatType.ITEM_HEALTH_AMP) / 100.0)
-                + bonusMana * b.get(StatType.HEALTH_PER_BONUS_MANA) / 100.0;
-        double maxHealth = lvl.hp() + bonusHealth;
+        // Warmog's verstärkt nur Leben aus Items; Runen-Leben kommt danach dazu, Overgrowth wirkt aufs gesamte Leben.
+        double maxHealth = (lvl.hp() + b.get(StatType.HEALTH) * (1 + b.get(StatType.ITEM_HEALTH_AMP) / 100.0)
+                + b.get(StatType.RUNE_HEALTH) + bonusMana * b.get(StatType.HEALTH_PER_BONUS_MANA) / 100.0)
+                * (1 + b.get(StatType.MAX_HEALTH_PERCENT) / 100.0);
+        double bonusHealth = maxHealth - lvl.hp();
         double healthRegen = lvl.hpRegen() * (1 + b.get(StatType.HEALTH_REGEN) / 100.0)
                 + b.get(StatType.HEALTH_REGEN_FLAT);
 
-        double moveSpeedRaw = rawMoveSpeed(base.moveSpeed(), b.get(StatType.MOVE_SPEED),
-                b.get(StatType.MOVE_SPEED_PERCENT));
+        double moveBonusFactor = 1 + b.get(StatType.MOVE_BONUS_AMP) / 100.0;
+        double moveSpeedRaw = rawMoveSpeed(base.moveSpeed(), b.get(StatType.MOVE_SPEED) * moveBonusFactor,
+                b.get(StatType.MOVE_SPEED_PERCENT) * moveBonusFactor);
         double moveSpeed = applyMoveSpeedCaps(moveSpeedRaw);
         double adaptiveForce = b.get(StatType.ADAPTIVE_FORCE)
                 + moveSpeed * b.get(StatType.ADAPTIVE_PER_MOVE_SPEED) / 100.0;
@@ -105,10 +109,11 @@ public final class ChampionBuildCalculator {
         double healShieldPower = b.get(StatType.HEAL_SHIELD_POWER)
                 + bonusMana * b.get(StatType.HSP_PER_BONUS_MANA) / 100.0
                 + baseManaRegenFactor * b.get(StatType.HSP_PER_100_BASE_MANA_REGEN);
-        double bonusArmor = b.get(StatType.ARMOR);
-        double armor = lvl.armor() + bonusArmor;
-        double bonusMr = b.get(StatType.MAGIC_RESIST);
-        double magicResist = lvl.magicResist() + bonusMr;
+        double resistFactor = 1 + b.get(StatType.RESIST_PERCENT) / 100.0;
+        double armor = (lvl.armor() + b.get(StatType.ARMOR)) * resistFactor;
+        double bonusArmor = armor - lvl.armor();
+        double magicResist = (lvl.magicResist() + b.get(StatType.MAGIC_RESIST)) * resistFactor;
+        double bonusMr = magicResist - lvl.magicResist();
 
         double bonusAs = StatCalculator.bonusAttackSpeedPercent(base.attackSpeedPerLevel(), lvl.level())
                 + b.get(StatType.ATTACK_SPEED);

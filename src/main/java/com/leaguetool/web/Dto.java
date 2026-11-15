@@ -5,6 +5,9 @@ import com.leaguetool.calc.CooldownCalculator;
 import com.leaguetool.calc.DamageInput;
 import com.leaguetool.calc.FinalStats;
 import com.leaguetool.calc.ItemStatParser;
+import com.leaguetool.calc.RuneEffects;
+import com.leaguetool.data.PatchTracker;
+import com.leaguetool.data.runeeffects.RuneEffectUpdater;
 import com.leaguetool.calc.Scaling;
 import com.leaguetool.calc.ScalingStat;
 import com.leaguetool.calc.StatBlock;
@@ -83,20 +86,28 @@ final class Dto {
 
     // ------------------------------------------------------------------ Bootstrap
 
-    static Map<String, Object> bootstrap(GameData data, int version, ItemPassiveUpdater.Report passives) {
+    static Map<String, Object> bootstrap(GameData data, int version, ItemPassiveUpdater.Report passives,
+                                         RuneEffectUpdater.Report runes, PatchTracker.Change patchChange) {
         String patch = data.patch();
         List<Item> riftItems = Item.summonersRiftItems(data.items());
         return obj(
                 "version", version,
                 "patch", patch,
                 "offline", data.offline(),
+                "patchChange", patchChange == null ? null : obj("from", patchChange.previous(), "to", patchChange.current(),
+                        "at", patchChange.changedAt().toString()),
                 "itemPassives", obj("patch", passives.patch(), "checkedAt", passives.checkedAt(), "count", passives.count(),
                         "changes", passives.changes(), "review", passives.review(), "notes", passives.notes()),
+                "runeEffectStatus", obj("patch", runes.patch(), "checkedAt", runes.checkedAt(), "count", runes.count(),
+                        "changes", runes.changes(), "review", runes.review(), "notes", runes.notes()),
                 "champions", data.champions().stream().map(c -> champion(c, patch)).toList(),
                 "items", data.items().stream().map(i -> item(i, patch, riftItems.contains(i))).toList(),
                 "runeTrees", data.runeTrees().stream().map(Dto::runeTree).toList(),
                 "spells", data.summonerSpells().stream().map(s -> spell(s, patch)).toList(),
-                "shards", StatShard.ALL.stream().map(s -> obj("id", s.id(), "name", s.name())).toList());
+                "shards", StatShard.ALL.stream().map(s -> obj("id", s.id(), "name", s.name())).toList(),
+                "shardRows", RuneEffects.shardRows(),
+                "runeEffects", RuneEffects.all().stream().map(e -> obj("id", e.id(), "kind", e.kind().name().toLowerCase(),
+                        "maxStacks", e.maxStacks(), "stackLabel", e.stackLabel(), "summary", e.summary())).toList());
     }
 
     private static Map<String, Object> champion(Champion c, String patch) {
@@ -275,14 +286,21 @@ final class Dto {
         rows.add(row("Angriffstempo", as, "+" + Text.num(f.bonusAttackSpeed(), 1) + " %"));
         rows.add(row("Lauftempo", Text.num(f.moveSpeed(), 1),
                 f.moveSpeedRaw() != f.moveSpeed() ? "roh " + Text.num(f.moveSpeedRaw(), 1) : ""));
-        rows.add(row("Ability Haste", Text.num(f.abilityHaste()), Text.percent(f.cooldownReduction()) + " CDR"));
+        rows.add(row("Ability Haste", hasteText(f.abilityHaste()), Text.percent(f.cooldownReduction()) + " CDR"));
         addSpecificHaste(rows, "Haste Grundfähigkeiten", f, StatType.BASIC_ABILITY_HASTE);
         addSpecificHaste(rows, "Haste Ultimate", f, StatType.ULTIMATE_HASTE);
         addSpecificHaste(rows, "Haste Immobilisierungen", f, StatType.IMMOBILIZE_ABILITY_HASTE);
+        if (f.summonerSpellHaste() > 0) {
+            double h = f.summonerSpellHaste();
+            rows.add(row("Haste Beschwörerzauber", Text.num(h), Text.percent(h / (100 + h)) + " kürzer"));
+        }
         rows.add(row("Krit-Chance", Text.num(f.critChance()) + " %", ""));
         if (f.healShieldPower() > 0) {
             rows.add(row("Heil- und Schildstärke", Text.num(f.healShieldPower()) + " %", ""));
         }
+        addPercentRow(rows, "Lebensraub", f, StatType.LIFE_STEAL);
+        addPercentRow(rows, "Zähigkeit", f, StatType.TENACITY);
+        addPercentRow(rows, "Verlangsamungsresistenz", f, StatType.SLOW_RESIST);
         rows.add(row("Eff. Leben (physisch)", Text.num(f.effectiveHealthPhysical(), 0), ""));
         rows.add(row("Eff. Leben (magisch)", Text.num(f.effectiveHealthMagic(), 0), ""));
         return rows;
@@ -291,11 +309,24 @@ final class Dto {
     private static void addSpecificHaste(List<Map<String, Object>> rows, String label, FinalStats f, StatType type) {
         if (f.bonus().has(type)) {
             double total = f.abilityHaste() + f.bonus().get(type);
-            rows.add(row(label, Text.num(total), Text.percent(CooldownCalculator.cooldownReduction(total)) + " CDR"));
+            rows.add(row(label, hasteText(total), Text.percent(CooldownCalculator.cooldownReduction(total)) + " CDR"));
         }
     }
 
-    /** Fähigkeitstempo des Builds je Slot, inklusive der Boni nur für bestimmte Fähigkeiten. */
+    /** Prozentwert aus Items und Runen, nur wenn vorhanden. */
+    private static void addPercentRow(List<Map<String, Object>> rows, String label, FinalStats f, StatType type) {
+        if (f.bonus().has(type)) {
+            rows.add(row(label, Text.num(f.bonus().get(type)) + " %", ""));
+        }
+    }
+
+    /** Haste mit Hinweis, wenn der Cap von 500 greift. */
+    private static String hasteText(double haste) {
+        return haste > CooldownCalculator.HASTE_CAP
+                ? Text.num(haste) + " (gekappt auf " + Text.num(CooldownCalculator.HASTE_CAP) + ")" : Text.num(haste);
+    }
+
+    /** Fähigkeitstempo des Builds je Slot, inklusive der Boni nur für bestimmte Fähigkeiten (gekappt auf 500). */
     static Map<String, Double> hasteBySlot(List<WikiAbility> abilities, FinalStats stats) {
         Map<String, Double> haste = new LinkedHashMap<>();
         for (AbilitySlot slot : AbilitySlot.values()) {
@@ -303,6 +334,21 @@ final class Dto {
             haste.put(slot.name(), stats.abilityHaste(slot, immobilizes));
         }
         return haste;
+    }
+
+    /**
+     * Slots, deren Abklingzeit laut Wiki statisch ist (alle Wiki-Fähigkeiten des Slots nur mit {@code static}). Haste
+     * verringert sie nicht.
+     */
+    static List<String> staticCooldownSlots(List<WikiAbility> abilities) {
+        List<String> slots = new ArrayList<>();
+        for (AbilitySlot slot : AbilitySlot.values()) {
+            List<WikiAbility> inSlot = abilities.stream().filter(a -> a.slot() == slot).toList();
+            if (!inSlot.isEmpty() && inSlot.stream().allMatch(WikiAbility::staticCooldown)) {
+                slots.add(slot.name());
+            }
+        }
+        return slots;
     }
 
     private static Map<String, Object> finalRow(String label, double total, double bonus, int decimals) {
@@ -410,7 +456,7 @@ final class Dto {
     }
 
     private static Map<String, Object> runePage(RunePageKey key) {
-        return obj("primary", key.primaryPerks(), "sub", key.subPerks(),
+        return obj("primary", key.primaryPerks(), "sub", key.subPerks(), "shardIds", key.shards(),
                 "shards", key.shards().stream().map(StatShard::nameOf).collect(Collectors.joining(" / ")));
     }
 
@@ -418,12 +464,15 @@ final class Dto {
     private static <K> Map<String, Object> ranking(StatRanking<K> ranking, Function<K, Object> keyView) {
         boolean best = !ranking.best().isEmpty();
         List<StatLine<K>> lines = best ? ranking.best() : ranking.mostFrequent();
+        Function<StatLine<K>, Map<String, Object>> view = line -> {
+            Map<String, Object> m = statLine(line);
+            m.put("key", keyView.apply(line.key()));
+            return m;
+        };
+        // Meistgespielter Eintrag unabhängig von der Winrate; der Core-Build zeigt ihn unter den besten.
         return obj("best", best, "minGames", ranking.minGames(),
-                "lines", lines.stream().limit(TOP).map(line -> {
-                    Map<String, Object> m = statLine(line);
-                    m.put("key", keyView.apply(line.key()));
-                    return m;
-                }).toList());
+                "lines", lines.stream().limit(TOP).map(view).toList(),
+                "mostPlayed", ranking.top().map(view).orElse(null));
     }
 
     // ------------------------------------------------------------------ Lolalytics
@@ -437,7 +486,7 @@ final class Dto {
     private static final int LATE_ITEMS = 8;
 
     private static final Map<String, String> LANE_LABELS = Map.of("top", "Top", "jungle", "Jungle", "middle", "Mid",
-            "bottom", "Bot", "support", "Support");
+            "bottom", "ADC", "support", "Support");
 
     /** Zeile der Champions-Tabelle. */
     static Map<String, Object> lolalyticsChampionStat(LolalyticsFullTierList.Row row, Double strength) {
@@ -516,9 +565,10 @@ final class Dto {
         return start.isEmpty() || order.isEmpty() ? List.of() : SkillPath.firstLevels(start.get().key(), order.get().key());
     }
 
+    /** Counters aus Sicht des Gegners: beste und schlechteste Picks gegen den Champion (siehe {@link LolalyticsCounters}). */
     private static Map<String, Object> counters(LolalyticsCounters c) {
         return obj("lane", LANE_LABELS.getOrDefault(c.lane(), c.lane()), "minGames", c.minGames(),
-                "strong", counterLines(c.strong()), "weak", counterLines(c.weak()), "delta", counterLines(c.delta()));
+                "best", counterLines(c.best()), "worst", counterLines(c.worst()), "delta", counterLines(c.delta()));
     }
 
     private static List<Map<String, Object>> counterLines(List<LolalyticsCounters.Line> lines) {

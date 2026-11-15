@@ -7,6 +7,8 @@ import com.leaguetool.calc.BuildCalculator;
 import com.leaguetool.calc.BuildTotals;
 import com.leaguetool.calc.ChampionBuildCalculator;
 import com.leaguetool.calc.FinalStats;
+import com.leaguetool.calc.RuneEffects;
+import com.leaguetool.calc.StatBlock;
 import com.leaguetool.calc.StatCalculator;
 import com.leaguetool.config.AppSettings;
 import com.leaguetool.data.GameData;
@@ -34,6 +36,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -94,7 +97,8 @@ final class ApiRoutes {
         GameData data = ctx.awaitData();
         byte[] cached = ctx.bootstrapJson(data);
         if (cached == null) {
-            cached = json.writeValueAsBytes(Dto.bootstrap(data, ctx.dataVersion(), ctx.itemPassives().latest()));
+            cached = json.writeValueAsBytes(Dto.bootstrap(data, ctx.dataVersion(), ctx.itemPassives().latest(),
+                    ctx.runeEffects().latest(), ctx.patchChange()));
             ctx.setBootstrapJson(data, cached);
         }
         return cached;
@@ -130,31 +134,88 @@ final class ApiRoutes {
 
     private Object levels(Champion champion, Map<String, String> params) {
         BuildTotals totals = totals(items(params));
+        RunePage runes = runePage(params);
         double asRatio = doubleParam(params, "asRatio", champion.stats().attackSpeed());
         AdaptiveType adaptiveType = adaptiveType(champion);
         List<List<Map<String, Object>>> finals = new ArrayList<>();
         for (int level = StatCalculator.MIN_LEVEL; level <= StatCalculator.MAX_LEVEL; level++) {
-            FinalStats f = ChampionBuildCalculator.compute(champion.stats(), level, totals.stats(), asRatio, adaptiveType);
+            FinalStats f = ChampionBuildCalculator.compute(champion.stats(), level, totals.stats().plus(runes.at(level)),
+                    asRatio, adaptiveType);
             finals.add(Dto.finalRows(f));
         }
         return Dto.obj("base", Dto.baseRows(champion), "finals", finals, "gold", totals.totalGold(),
-                "itemCount", totals.itemCount());
+                "itemCount", totals.itemCount(), "runeCount", runes.size());
     }
 
     private Object insights(Champion champion, Map<String, String> params) throws IOException {
         Optional<WikiClient> wiki = ctx.wiki();
-        if (wiki.isEmpty()) {
-            return Dto.obj("disabled", true);
-        }
         List<Item> build = items(params);
+        RunePage runes = runePage(params);
+        int level = Math.max(StatCalculator.MIN_LEVEL, Math.min(StatCalculator.MAX_LEVEL, (int) doubleParam(params, "level", 11)));
+        StatBlock bonus = totals(build).stats().plus(runes.at(level));
+        if (wiki.isEmpty()) {
+            // Haste hängt nicht vom Wiki ab; ohne Wiki fehlen nur Immobilisierungen und statische Abklingzeiten.
+            FinalStats stats = ChampionBuildCalculator.compute(champion.stats(), level, bonus,
+                    champion.stats().attackSpeed(), adaptiveType(champion));
+            return Dto.obj("disabled", true, "itemCount", build.size(), "runeCount", runes.size(),
+                    "haste", Dto.hasteBySlot(List.of(), stats),
+                    "summonerSpellHaste", stats.summonerSpellHaste(), "staticCooldowns", List.of());
+        }
         List<WikiAbility> abilities = wiki.get().abilities(champion.id());
         WikiChampionData wikiChampion = wiki.get().champion(champion.id()).orElse(null);
-        int level = Math.max(StatCalculator.MIN_LEVEL, Math.min(StatCalculator.MAX_LEVEL, (int) doubleParam(params, "level", 11)));
         double asRatio = wikiChampion == null ? champion.stats().attackSpeed() : wikiChampion.asRatio();
-        FinalStats stats = ChampionBuildCalculator.compute(champion.stats(), level, totals(build).stats(), asRatio,
-                adaptiveType(champion));
-        return Dto.obj("itemCount", build.size(), "abilities", Dto.wikiAbilities(abilities, stats),
-                "haste", Dto.hasteBySlot(abilities, stats));
+        FinalStats stats = ChampionBuildCalculator.compute(champion.stats(), level, bonus, asRatio, adaptiveType(champion));
+        return Dto.obj("itemCount", build.size(), "runeCount", runes.size(), "abilities", Dto.wikiAbilities(abilities, stats),
+                "haste", Dto.hasteBySlot(abilities, stats), "summonerSpellHaste", stats.summonerSpellHaste(),
+                "staticCooldowns", Dto.staticCooldownSlots(abilities));
+    }
+
+    /** Runenseite des Build-Rechners: {@code runes=8010,9111}, {@code shards=5008,5008,5001}, {@code stacks=9105:10}. */
+    record RunePage(List<Integer> runes, List<Integer> shards, Map<Integer, Integer> stacks) {
+
+        StatBlock at(int level) {
+            return RuneEffects.stats(runes, shards, stacks, level);
+        }
+
+        int size() {
+            return runes.size() + shards.size();
+        }
+    }
+
+    private static final int MAX_RUNES = 6;
+    private static final int MAX_SHARDS = 3;
+
+    static RunePage runePage(Map<String, String> params) {
+        List<Integer> runes = ints(params.get("runes"), "Runen-ID").stream().distinct().limit(MAX_RUNES).toList();
+        List<Integer> shards = ints(params.get("shards"), "Shard-ID").stream().limit(MAX_SHARDS).toList();
+        Map<Integer, Integer> stacks = new HashMap<>();
+        String raw = params.getOrDefault("stacks", "");
+        for (String part : raw.isBlank() ? new String[0] : raw.split(",")) {
+            String[] kv = part.split(":");
+            List<Integer> pair = kv.length == 2 ? ints(kv[0] + "," + kv[1], "Stapel") : List.of();
+            if (pair.size() != 2) {
+                throw new ApiException(400, "Ungültige Stapel-Angabe: " + part);
+            }
+            if (runes.contains(pair.get(0))) {
+                stacks.put(pair.get(0), pair.get(1));
+            }
+        }
+        return new RunePage(runes, shards, stacks);
+    }
+
+    private static List<Integer> ints(String raw, String what) {
+        List<Integer> values = new ArrayList<>();
+        if (raw == null || raw.isBlank()) {
+            return values;
+        }
+        for (String part : raw.split(",")) {
+            try {
+                values.add(Integer.parseInt(part.trim()));
+            } catch (NumberFormatException e) {
+                throw new ApiException(400, "Ungültige " + what + ": " + part);
+            }
+        }
+        return values;
     }
 
     /** Adaptiver Typ laut Wiki; ohne Wiki aus den Data-Dragon-Werten des Champions. */
@@ -314,7 +375,8 @@ final class ApiRoutes {
                 .or(() -> Platform.fromId(ctx.settings().platform())).orElse(Platform.EUW1);
         int count = Math.max(1, Math.min(SummonerLookup.MAX_MATCHES, (int) doubleParam(params, "count", 50)));
         return new SummonerLookup(ctx.riotClient(platform), ctx.cache(), ctx.awaitData().patch(),
-                (done, total) -> ctx.publish("summoner-progress", Dto.obj("done", done, "total", total)))
+                (done, total, cached) -> ctx.publish("summoner-progress",
+                        Dto.obj("done", done, "total", total, "cached", cached)))
                 .lookup(params.get("riotId"), count);
     }
 

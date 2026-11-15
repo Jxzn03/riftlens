@@ -280,7 +280,15 @@ export function VirtualTable({ rows, columns, rowKey, selected, onSelect, onDese
           const key = rowKey(row);
           return html`<div key=${key} role="row" class=${`vt-row ${key === selected ? 'selected' : ''}`}
             style=${{ gridTemplateColumns: template, height: `${rowHeight}px`, transform: `translateY(${(first + offset) * rowHeight}px)` }}
-            onClick=${() => (key === selected && onDeselect ? onDeselect() : onSelect(row))}>
+            onClick=${() => {
+              if (key === selected && onDeselect) {
+                // Erneuter Klick hebt die Auswahl auf; die Tabelle soll danach auch nicht mehr fokussiert wirken.
+                onDeselect();
+                scroller.current.blur();
+              } else {
+                onSelect(row);
+              }
+            }}>
             ${columns.map((c, i) => html`<div key=${c.key} role="gridcell" class=${`vt-td ${c.align || ''} ${i === 0 ? 'sticky' : ''}`}>${c.render(row)}</div>`)}
           </div>`;
         })}

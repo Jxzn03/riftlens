@@ -27,4 +27,13 @@ class CooldownCalculatorTest {
         assertEquals(10, CooldownCalculator.cooldown(10, -50), EPS);
         assertEquals(0, CooldownCalculator.cooldownReduction(-20), EPS);
     }
+
+    @Test
+    void hasteIsCappedAt500() {
+        assertEquals(500.0 / 600, CooldownCalculator.cooldownReduction(500), EPS, "Wiki: 83,33 %");
+        assertEquals(500.0 / 600, CooldownCalculator.cooldownReduction(800), EPS);
+        assertEquals(10 * 100.0 / 600, CooldownCalculator.cooldown(10, 1000), EPS);
+        assertEquals(300 * 100.0 / 1100, CooldownCalculator.summonerSpellCooldown(300, 1000), EPS,
+                "für Summoner Spell Haste nennt das Wiki keinen Cap");
+    }
 }

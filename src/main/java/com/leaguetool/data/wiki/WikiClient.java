@@ -12,6 +12,7 @@ import java.io.IOException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -23,6 +24,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Predicate;
+import java.util.function.Supplier;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
@@ -30,7 +32,8 @@ import java.util.stream.Collectors;
  * Client für das League-Wiki (MediaWiki-API) für Zusatzdaten: Champion-Basiswerte aus
  * {@code Module:ChampionData/data} und Fähigkeitsdetails aus {@code Template:Data_<Champion>/<Fähigkeit>}.
  *
- * <p>Antworten werden im {@link FileCache#GLOBAL}-Scope gespeichert und sind 3 Tage frisch; danach wird
+ * <p>Antworten werden im {@link FileCache#GLOBAL}-Scope gespeichert und sind 3 Tage frisch, höchstens aber bis zum
+ * nächsten Patchwechsel (Fähigkeiten und Werte ändern sich mit dem Patch); danach wird
  * netz-first geladen, bei Fehlern mit Rückfall auf den veralteten Cache. Ergebnisse werden zusätzlich im
  * Speicher gehalten. Weiterleitungen (z. B. "The Darkin Blade 2" → "The Darkin Blade") werden von der API
  * aufgelöst ({@code redirects=1}) und nur einmal geliefert.
@@ -45,6 +48,8 @@ public final class WikiClient {
     static final String ITEM_DATA_TITLE = "Module:ItemData/data";
     static final String ITEM_DATA_KEY = "wiki/itemdata.json";
     private static final Duration ITEM_DATA_MAX_AGE = Duration.ofDays(1);
+    static final String RUNE_PAGE_TITLE = "Rune";
+    static final String RUNE_PAGE_KEY = "wiki/rune.json";
     private static final int MAX_TITLES_PER_QUERY = 50;
     private static final Pattern SAFE_ID = Pattern.compile("[A-Za-z0-9_]+");
     private static final String QUERY = "?action=query&prop=revisions&rvprop=content&rvslots=main"
@@ -53,6 +58,7 @@ public final class WikiClient {
     private final HttpFetcher http;
     private final FileCache cache;
     private final String apiUrl;
+    private final Supplier<Instant> notBefore;
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
     private final Object championLock = new Object();
@@ -66,9 +72,18 @@ public final class WikiClient {
 
     /** Konstruktor mit abweichender API-URL (Tests). */
     public WikiClient(HttpFetcher http, FileCache cache, String apiUrl) {
+        this(http, cache, apiUrl, () -> Instant.EPOCH);
+    }
+
+    /**
+     * @param notBefore Zeitpunkt des letzten Patchwechsels: ältere Cache-Einträge gelten als veraltet und werden neu
+     *                  geholt (ohne Netz bleiben sie nutzbar)
+     */
+    public WikiClient(HttpFetcher http, FileCache cache, String apiUrl, Supplier<Instant> notBefore) {
         this.http = http;
         this.cache = cache;
         this.apiUrl = apiUrl;
+        this.notBefore = notBefore;
     }
 
     /**
@@ -100,6 +115,16 @@ public final class WikiClient {
     public Map<Integer, WikiItems.Entry> itemData(boolean refresh) throws IOException {
         return load(ITEM_DATA_KEY, refresh ? Duration.ZERO : ITEM_DATA_MAX_AGE,
                 () -> http.getText(queryUrl(List.of(ITEM_DATA_TITLE))), this::parseItemModule, parsed -> true);
+    }
+
+    /**
+     * Shards der Wiki-Seite „Rune“ (Werte und Reihen).
+     *
+     * @throws IOException wenn weder Netz noch Cache verfügbar sind oder die Tabelle nicht lesbar ist
+     */
+    public WikiRuneShards.Shards runeShards() throws IOException {
+        return load(RUNE_PAGE_KEY, () -> http.getText(queryUrl(List.of(RUNE_PAGE_TITLE))),
+                json -> WikiRuneShards.parse(moduleContent(json, RUNE_PAGE_TITLE)), parsed -> true);
     }
 
     /** Wiki-Daten zu einer Data-Dragon-ID (z. B. "MonkeyKing"). */
@@ -187,7 +212,7 @@ public final class WikiClient {
     private <T> T load(String key, Duration maxAge, FileCache.IoSupplier<String> fetch, IoFunction<String, T> parser,
                        Predicate<T> complete) throws IOException {
         List<T> fromNetwork = new ArrayList<>(1);
-        FileCache.CacheResult r = cache.getFreshOrStale(FileCache.GLOBAL, key, maxAge, () -> {
+        FileCache.CacheResult r = cache.getFreshOrStale(FileCache.GLOBAL, key, maxAge, notBefore.get(), () -> {
             String content = fetch.get();
             fromNetwork.add(parser.apply(content));
             return content;

@@ -31,8 +31,9 @@ export const store = createStore({
   summonerProgress: null,
   draftProgress: null,
   build: [],
+  runePage: null, // wird unten mit EMPTY_RUNE_PAGE belegt
   split: {},
-  prefs: { level: 1, haste: 0, previewLevel: 11 },
+  prefs: { level: 1, haste: 0, previewLevel: 11, advancedTips: false },
   views: {},
   meta: null,
   busy: 0,
@@ -182,6 +183,43 @@ export function useStatsUrl(path) {
   return path ? statsUrl(path) : null;
 }
 
+const CHAMPION_ROLES = 'champion-roles';
+
+/**
+ * Rolle eines Champions für Vorschau und Fähigkeiten. Von Hand gewählt (je Champion gespeichert) oder automatisch:
+ * dann gilt der Rollenfilter und ohne Filter die häufigste Rolle laut Lolalytics.
+ *
+ * @returns {{ role: string, chosen: string, setRole: (role: string) => void }} role leer = häufigste Rolle
+ */
+export function useChampionRole(championKey) {
+  const roles = useStore((s) => s.views[CHAMPION_ROLES]) || {};
+  const filterRole = useStore((s) => s.filter.role);
+  const chosen = roles[championKey] || '';
+  const setRole = (role) => {
+    const views = store.get().views;
+    const next = { ...(views[CHAMPION_ROLES] || {}) };
+    if (role) {
+      next[championKey] = role;
+    } else {
+      delete next[championKey];
+    }
+    store.set({ views: { ...views, [CHAMPION_ROLES]: next } });
+  };
+  return { role: chosen || filterRole || '', chosen, setRole };
+}
+
+/** Wie {@link useStatsUrl}, aber mit der Rolle des Champions statt des Rollenfilters. */
+export function useChampionStatsUrl(path, role) {
+  const url = useStatsUrl(path);
+  if (!url) {
+    return null;
+  }
+  const [base, query] = url.split('?');
+  const params = new URLSearchParams(query);
+  params.set('role', role || '');
+  return `${base}?${params}`;
+}
+
 /**
  * Farbklasse einer Winrate: um den Durchschnitt des gewählten Rang-Bereichs, ±1 Punkt, weil die Winrates in den
  * großen Datensätzen eng beieinanderliegen.
@@ -244,6 +282,8 @@ export function useDeferredUrl(url, delay) {
 
 // ------------------------------------------------------------------ Spieldaten
 
+let announcedPatchChange = null;
+
 export async function loadData() {
   try {
     const data = await api.get('/api/bootstrap');
@@ -262,11 +302,18 @@ export async function loadData() {
       }
     });
     data.shardById = new Map(data.shards.map((s) => [s.id, s.name]));
+    data.runeEffectById = new Map((data.runeEffects || []).map((e) => [e.id, e]));
     clearResponseCache();
+    // Erster Start nach einem Patchwechsel: einmal je Programmlauf melden.
+    if (data.patchChange && announcedPatchChange !== data.patchChange.at) {
+      announcedPatchChange = data.patchChange.at;
+      toast(`Neuer Patch ${data.patchChange.to}${data.patchChange.from ? ` (vorher ${data.patchChange.from})` : ''}: Item- und Runenwerte abgeglichen, Wiki- und Statistikdaten werden neu geladen.`);
+    }
     store.set({
       data,
       bootError: null,
       build: store.get().build.filter((id) => data.itemById.has(id)),
+      runePage: sanitizeRunePage(store.get().runePage, data),
       status: `Patch ${data.patch} geladen: ${data.champions.length} Champions, ${data.items.length} Items`
         + (data.offline ? ' (offline aus dem Cache)' : ''),
     });
@@ -290,6 +337,116 @@ export function addToBuild(id) {
 
 export function removeFromBuild(index) {
   store.set({ build: store.get().build.filter((_, i) => i !== index) });
+}
+
+// ------------------------------------------------------------------ Runenseite des Build-Rechners
+
+/**
+ * Leere Runenseite: Primärbaum mit Keystone und drei Reihen, Sekundärbaum mit zwei Runen aus verschiedenen Reihen,
+ * drei Shards und Stapel/Schalter je Rune (Werte siehe calc.RuneEffects).
+ */
+export const EMPTY_RUNE_PAGE = Object.freeze({
+  primary: null, keystone: null, rows: [null, null, null], secondary: null, secondaryRunes: [],
+  shards: [null, null, null], stacks: {},
+});
+store.set({ runePage: EMPTY_RUNE_PAGE });
+
+export function setRunePage(patch) {
+  store.set({ runePage: { ...store.get().runePage, ...patch } });
+}
+
+/** Alle gewählten Runen-IDs (ohne Shards). */
+export function runePageRunes(page) {
+  return [page.keystone, ...page.rows, ...page.secondaryRunes].filter((id) => id !== null && id !== undefined);
+}
+
+/** Entfernt nach einem Patch unbekannte Runen und unpassende Shards; ältere oder kaputte Stände werden geleert. */
+export function sanitizeRunePage(page, data) {
+  if (!page || typeof page !== 'object') {
+    return EMPTY_RUNE_PAGE;
+  }
+  const treeOk = (id) => data.treeById.has(id);
+  const runeIn = (id, tree, slot) => {
+    const rune = data.runeById.get(id);
+    return Boolean(rune) && rune.treeId === tree && (slot === undefined || rune.slot === slot);
+  };
+  const primary = treeOk(page.primary) ? page.primary : null;
+  const secondary = treeOk(page.secondary) && page.secondary !== primary ? page.secondary : null;
+  const rows = [0, 1, 2].map((i) => (Array.isArray(page.rows) && runeIn(page.rows[i], primary, i + 1) ? page.rows[i] : null));
+  const secondaryRunes = (Array.isArray(page.secondaryRunes) ? page.secondaryRunes : [])
+    .filter((id) => runeIn(id, secondary) && data.runeById.get(id).slot > 0).slice(0, 2);
+  const rowsData = data.shardRows || [];
+  const shards = [0, 1, 2].map((i) => (Array.isArray(page.shards) && (rowsData[i] || []).includes(page.shards[i]) ? page.shards[i] : null));
+  const stacks = page.stacks && typeof page.stacks === 'object' ? page.stacks : {};
+  return {
+    primary, keystone: runeIn(page.keystone, primary, 0) ? page.keystone : null, rows, secondary, secondaryRunes,
+    shards, stacks,
+  };
+}
+
+/** Nur die Form prüfen (vor dem Laden der Spieldaten); die Inhalte prüft {@link sanitizeRunePage}. */
+function shapeRunePage(page) {
+  if (!page || typeof page !== 'object') {
+    return EMPTY_RUNE_PAGE;
+  }
+  const ids = (list, length) => Array.from({ length }, (_, i) => (Array.isArray(list) && Number.isInteger(list[i]) ? list[i] : null));
+  return {
+    primary: Number.isInteger(page.primary) ? page.primary : null,
+    keystone: Number.isInteger(page.keystone) ? page.keystone : null,
+    rows: ids(page.rows, 3),
+    secondary: Number.isInteger(page.secondary) ? page.secondary : null,
+    secondaryRunes: ids(page.secondaryRunes, 2).filter((id) => id !== null),
+    shards: ids(page.shards, 3),
+    stacks: page.stacks && typeof page.stacks === 'object' ? page.stacks : {},
+  };
+}
+
+/**
+ * Übernimmt eine Runenseite aus der Statistik ({@code primary}: Keystone und Reihen, {@code sub}: zwei Runen,
+ * {@code shardIds}) in den Build-Rechner. Eingestellte Stapel bleiben erhalten.
+ */
+export function importRunePage(lines) {
+  const { data, runePage } = store.get();
+  const rune = (id) => data.runeById.get(id);
+  const primaryRunes = (lines.primary || []).map(rune).filter(Boolean);
+  const keystone = primaryRunes.find((r) => r.slot === 0);
+  const primary = keystone ? keystone.treeId : primaryRunes.length ? primaryRunes[0].treeId : null;
+  const rows = [1, 2, 3].map((slot) => (primaryRunes.find((r) => r.treeId === primary && r.slot === slot) || { id: null }).id);
+  const secondaryRunes = (lines.sub || []).map(rune).filter((r) => r && r.treeId !== primary && r.slot > 0).map((r) => r.id).slice(0, 2);
+  const secondary = secondaryRunes.length ? rune(secondaryRunes[0]).treeId : null;
+  store.set({
+    runePage: sanitizeRunePage({
+      primary, keystone: keystone ? keystone.id : null, rows, secondary, secondaryRunes,
+      shards: lines.shardIds || [], stacks: runePage.stacks,
+    }, data),
+  });
+  toast('Runenseite in den Build-Rechner übernommen');
+}
+
+/** Abfrage für Build-Endpunkte: Items plus Runenseite ({@code runes}, {@code shards}, {@code stacks}). */
+export function buildQuery(build, page) {
+  const runes = runePageRunes(page);
+  const shards = page.shards.filter((id) => id !== null);
+  const stacks = runes.filter((id) => page.stacks[id] > 0).map((id) => `${id}:${page.stacks[id]}`);
+  const parts = [`items=${build.join(',')}`];
+  if (runes.length) {
+    parts.push(`runes=${runes.join(',')}`);
+  }
+  // Shards nur vollständig: die Reihenfolge entscheidet über die Reihe.
+  if (shards.length === 3) {
+    parts.push(`shards=${shards.join(',')}`);
+  }
+  if (stacks.length) {
+    parts.push(`stacks=${stacks.join(',')}`);
+  }
+  return parts.join('&');
+}
+
+/** {@link buildQuery} mit dem aktuellen Build und der Runenseite aus dem Store. */
+export function useBuildQuery() {
+  const build = useStore((s) => s.build);
+  const page = useStore((s) => s.runePage);
+  return buildQuery(build, page);
 }
 
 export function setPref(patch) {
@@ -346,7 +503,7 @@ export function startRouter() {
 
 // ------------------------------------------------------------------ Zustand speichern
 
-const PERSISTED = ['theme', 'filter', 'dataSource', 'build', 'split', 'prefs', 'summonerRecent'];
+const PERSISTED = ['theme', 'filter', 'dataSource', 'build', 'runePage', 'split', 'prefs', 'summonerRecent'];
 let saveTimer = null;
 let lastSaved = null;
 
@@ -362,6 +519,10 @@ export async function loadUiState() {
     });
     if (Array.isArray(patch.build)) {
       patch.build = patch.build.filter((id) => Number.isInteger(id)).slice(0, MAX_BUILD);
+    }
+    if (patch.runePage !== undefined) {
+      const { data } = store.get();
+      patch.runePage = data ? sanitizeRunePage(patch.runePage, data) : shapeRunePage(patch.runePage);
     }
     store.set(patch);
   } catch {

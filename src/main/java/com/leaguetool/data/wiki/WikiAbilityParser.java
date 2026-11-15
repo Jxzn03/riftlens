@@ -62,8 +62,10 @@ public final class WikiAbilityParser {
         }
 
         String cooldownRaw = p.getOrDefault("cooldown", "");
-        if (cooldownRaw.isBlank()) {
-            cooldownRaw = p.getOrDefault("static", "");
+        // Statische Abklingzeit: Haste verringert sie laut Wiki nicht.
+        boolean staticCooldown = cooldownRaw.isBlank() && !p.getOrDefault("static", "").isBlank();
+        if (staticCooldown) {
+            cooldownRaw = p.get("static");
         }
         String range = WikiMarkup.toPlain(p.get("range"));
         if (range.isEmpty()) {
@@ -75,7 +77,7 @@ public final class WikiAbilityParser {
                 WikiMarkup.toPlain(p.get("cost")), WikiMarkup.toPlain(p.get("costtype")), range,
                 WikiMarkup.toPlain(p.get("cast time")), WikiMarkup.toPlain(p.get("damagetype")),
                 WikiMarkup.toPlain(p.get("targeting")), WikiMarkup.toPlain(p.get("affects")),
-                WikiMarkup.toPlain(p.get("spellshield")), WikiMarkup.toPlain(p.get("projectile")));
+                WikiMarkup.toPlain(p.get("spellshield")), WikiMarkup.toPlain(p.get("projectile")), staticCooldown);
     }
 
     /** {@code skill}-Parameter → Slot: I/P → P, Q, W, E, R. */

@@ -4,8 +4,12 @@ import { store, useStore, useViewState, api, go, percent } from './core.js';
 import { Icon, Img, Button, Select, Card, Spinner, Empty, Tag, DataGrid, ItemIcons, SpellIcons } from './ui.js';
 
 const DEFAULTS = { query: '', platform: '', count: '50', result: null, error: null, loading: false, mode: '' };
-const COUNTS = [20, 50, 100].map((n) => ({ value: String(n), label: `${n} Matches` }));
+const COUNTS = [20, 50, 100, 200, 300, 500, 1000].map((n) => ({ value: String(n), label: `${n} Matches` }));
 const MAX_RECENT = 8;
+// Dev-Key: 100 Anfragen in 2 Minuten, also gut 1,2 s je Match, sobald das Kontingent aufgebraucht ist.
+const SECONDS_PER_MATCH = 1.2;
+const SLOW_COUNT = 200;
+const HUGE_COUNT = 1000;
 
 const wrClass = (value) => (value >= 0.52 ? 'good' : value < 0.48 ? 'bad' : '');
 const number = (value) => value.toLocaleString('de-DE');
@@ -75,6 +79,30 @@ function modesOf(matches) {
   return [...modes.values()].sort((a, b) => b.games - a.games);
 }
 
+/**
+ * Häufige Mitspieler in der aktuellen Auswahl (ohne Remakes): Winrate zusammen und die eigene Winrate in den
+ * übrigen Spielen zum Vergleich.
+ */
+function matesOf(mates, matches, minGames) {
+  const valid = matches.filter((m) => !m.remake);
+  const rows = mates.map((mate) => ({ ...mate, games: 0, wins: 0 }));
+  let wins = 0;
+  valid.forEach((m) => {
+    wins += m.win ? 1 : 0;
+    (m.mates || []).forEach((index) => {
+      rows[index].games += 1;
+      rows[index].wins += m.win ? 1 : 0;
+    });
+  });
+  return rows.filter((r) => r.games >= minGames)
+    .map((r) => ({ ...r, otherGames: valid.length - r.games, otherWins: wins - r.wins }))
+    .sort((a, b) => b.games - a.games || b.wins / b.games - a.wins / a.games);
+}
+
+function minutes(seconds) {
+  return Math.max(1, Math.ceil(seconds / 60));
+}
+
 export function SummonerView() {
   const data = useStore((s) => s.data);
   const dialog = useStore((s) => s.dialog);
@@ -123,6 +151,17 @@ export function SummonerView() {
         <${Select} label="Anzahl Matches" value=${view.count} onChange=${(count) => setView({ count })} options=${COUNTS} />
         <${Button} kind="primary" icon="search" disabled=${view.loading || !view.query.trim() || !platform} onClick=${() => search(view.query, platform)}>Abfragen<//>
       </div>
+      ${Number(view.count) >= HUGE_COUNT ? html`<div class="huge-hint">
+        <strong><${Icon} name="alert" size=${15} /> 1000 Matches: sehr langer erster Abruf</strong>
+        <ul>
+          <li>Rund ${minutes(HUGE_COUNT * SECONDS_PER_MATCH)} Minuten mit einem Dev- oder Personal-Key (100 Anfragen in 2 Minuten). Die App muss so lange offen bleiben.</li>
+          <li>Ein Abbruch verliert nichts: alle 50 Matches wird gespeichert, ein neuer Versuch lädt nur den Rest.</li>
+          <li>Riot hält Matches nur etwa zwei Jahre vor. Bei wenig gespielten Konten kommen weniger als 1000 zurück.</li>
+          <li>Speicher: etwa 200–300 KB für diesen Spieler.</li>
+        </ul>
+      </div>` : Number(view.count) >= SLOW_COUNT ? html`<p class="muted small slow-hint"><${Icon} name="alert" size=${14} />
+        Der erste Abruf von ${view.count} Matches dauert wegen Riots Rate-Limit (100 Anfragen in 2 Minuten) bis zu
+        ca. ${minutes(Number(view.count) * SECONDS_PER_MATCH)} Min. Geladene Matches werden gespeichert, danach kommen nur neue Spiele hinzu.</p>` : null}
       ${recent.length ? html`<div class="recent-chips">
         ${recent.map((r) => html`<button type="button" key=${`${r.riotId}-${r.platform}`} class="chip-link recent"
           disabled=${view.loading} onClick=${() => search(r.riotId, r.platform)}>${r.riotId}<small>${r.platform.toUpperCase()}</small></button>`)}
@@ -134,9 +173,18 @@ export function SummonerView() {
       <${Button} icon="settings" onClick=${() => store.set({ dialog: 'settings' })}>Optionen öffnen<//>
     </section>` : null}
     ${view.loading ? html`<${Progress} />` : null}
-    ${view.error ? html`<section class="card notice bad"><${Icon} name="alert" size=${16} /><p>${view.error}</p></section>` : null}
+    ${view.error ? html`<section class="card notice bad"><${Icon} name="alert" size=${16} /><p>${view.error}</p></section>
+    <section class="card key-help">
+      <strong>Neuen API-Key erstellen</strong>
+      <ol>
+        <li>Auf <a href="https://developer.riotgames.com/" target="_blank" rel="noopener noreferrer">developer.riotgames.com</a> mit dem Riot-Konto anmelden.</li>
+        <li>Auf „Regenerate API Key“ klicken.</li>
+        <li>Mit „Copy API Key“ kopieren und in den Optionen einfügen.</li>
+      </ol>
+      <small>Dev-Keys laufen nach 24 Stunden ab.</small>
+    </section>` : null}
     ${view.result ? html`<${Result} key=${`${view.result.gameName}${view.result.tagLine}`} result=${view.result} data=${data} mode=${view.mode}
-        onMode=${(mode) => setView({ mode })} />`
+        onMode=${(mode) => setView({ mode })} onSearch=${(riotId) => search(riotId, view.result.platform)} />`
       : !view.loading && !view.error ? html`<${Empty} title="Summoner abfragen">Gib eine Riot-ID ein, um Ränge, meistgespielte Champions, Winrates und Spielmodi zu sehen.<//>` : null}
   </div>`;
 }
@@ -144,16 +192,26 @@ export function SummonerView() {
 function Progress() {
   const progress = useStore((s) => s.summonerProgress);
   const fraction = progress && progress.total ? (progress.done / progress.total) * 100 : 0;
+  const remaining = progress ? progress.total - progress.done : 0;
+  let text = 'Suche Summoner …';
+  if (progress && progress.total === 0) {
+    text = `${progress.cached} Matches aus dem Cache, werte aus …`;
+  } else if (progress) {
+    text = `Lade neue Matches ${progress.done} von ${progress.total}${progress.cached ? ` · ${progress.cached} aus dem Cache` : ''} …`;
+  }
   return html`<section class="card progress-block">
-    <div class="loading"><${Spinner} small /> <span>${progress ? `Lade Matches ${progress.done} von ${progress.total} …` : 'Suche Summoner …'}</span></div>
+    <div class="loading"><${Spinner} small /> <span>${text}</span></div>
     <div class="progress"><span style=${{ width: `${fraction}%` }}></span></div>
+    ${remaining > 50 ? html`<small class="muted">Noch bis zu ca. ${minutes(remaining * SECONDS_PER_MATCH)} Min.: Riot erlaubt mit einem Dev-Key nur 100 Anfragen in 2 Minuten. Bereits geladene Matches bleiben gespeichert.</small>` : null}
   </section>`;
 }
 
-function Result({ result, data, mode, onMode }) {
+function Result({ result, data, mode, onMode, onSearch }) {
   const modes = useMemo(() => modesOf(result.matches), [result]);
   const matches = useMemo(() => (mode ? result.matches.filter((m) => m.mode === mode) : result.matches), [result, mode]);
   const stats = useMemo(() => aggregate(matches), [matches]);
+  const minShared = result.minSharedGames || 3;
+  const mates = useMemo(() => matesOf(result.mates || [], matches, minShared), [result, matches]);
   const allGames = modes.reduce((sum, m) => sum + m.games, 0);
   const allWins = modes.reduce((sum, m) => sum + m.wins, 0);
   const { total } = stats;
@@ -206,6 +264,25 @@ function Result({ result, data, mode, onMode }) {
             `${(c.kills / c.games).toFixed(1)} / ${(c.deaths / c.games).toFixed(1)} / ${(c.assists / c.games).toFixed(1)}`,
             c.seconds ? (c.cs / (c.seconds / 60)).toFixed(1) : '–',
           ])} />`}
+      <//>
+      <${Card} title="Häufige Mitspieler" aside=${html`<span class="muted">ab ${minShared} gemeinsamen Spielen</span>`}>
+        ${mates.length === 0 ? html`<p class="muted">Keine Mitspieler mit mindestens ${minShared} gemeinsamen Spielen in dieser Auswahl.</p>` : html`<${DataGrid}
+          head=${['Mitspieler', 'Spiele', 'WR zusammen', 'S / N', 'WR ohne', 'Differenz']}
+          rows=${mates.map((m) => {
+            const together = m.wins / m.games;
+            const without = m.otherGames ? m.otherWins / m.otherGames : null;
+            const diff = without === null ? null : (together - without) * 100;
+            return [
+              m.name ? html`<button type="button" class="mate-link" onClick=${() => onSearch(`${m.name}#${m.tag}`)}>${m.name}<span class="muted">#${m.tag}</span></button>`
+                : html`<span class="muted">Unbekannter Spieler</span>`,
+              m.games,
+              html`<strong class=${wrClass(together)}>${percent(together)}</strong>`,
+              `${m.wins} / ${m.games - m.wins}`,
+              without === null ? '–' : html`<span class=${wrClass(without)}>${percent(without)}</span>`,
+              diff === null ? '–' : html`<strong class=${diff >= 2 ? 'good' : diff <= -2 ? 'bad' : ''}>${diff > 0 ? '+' : ''}${diff.toLocaleString('de-DE', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} Pp.</strong>`,
+            ];
+          })} />`}
+        <p class="muted small">Riot meldet keine Premades. Als Mitspieler zählt, wer in dieser Auswahl mehrfach im eigenen Team war; „WR ohne“ ist deine Winrate in den übrigen Spielen.</p>
       <//>
       <${Card} title="Letzte Matches" aside=${html`<span class="muted">${matches.length} angezeigt</span>`}>
         <div class="match-list">${matches.map((m) => html`<${MatchRow} key=${m.id} match=${m} data=${data} />`)}</div>

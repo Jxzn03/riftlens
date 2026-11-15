@@ -193,14 +193,26 @@ public final class RiotApiClient implements RiotApi {
                 + segment(puuid) + "/top?count=" + count);
     }
 
-    /** match-v5: die letzten Match-IDs über alle Spielmodi. */
-    public List<String> recentMatchIds(String puuid, int count) throws IOException {
+    /** account-v1 {@code /riot/account/v1/accounts/by-puuid/{puuid}}: aktuelle Riot-ID zu einer PUUID. */
+    public RiotAccount accountByPuuid(String puuid) throws IOException {
+        JsonNode root = getJson(platform.accountBaseUrl() + "/riot/account/v1/accounts/by-puuid/" + segment(puuid));
+        return new RiotAccount(puuid, root.path("gameName").asText(""), root.path("tagLine").asText(""));
+    }
+
+    /**
+     * match-v5: Match-IDs über alle Spielmodi, neueste zuerst. Riot liefert höchstens 100 je Aufruf; ältere Seiten
+     * folgen über {@code start}.
+     */
+    public List<String> recentMatchIds(String puuid, int start, int count) throws IOException {
         if (count < 1 || count > 100) {
             throw new IllegalArgumentException("count muss zwischen 1 und 100 liegen: " + count);
         }
+        if (start < 0) {
+            throw new IllegalArgumentException("start darf nicht negativ sein: " + start);
+        }
         List<String> ids = new ArrayList<>();
         for (JsonNode id : getJson(platform.matchBaseUrl() + "/lol/match/v5/matches/by-puuid/" + segment(puuid)
-                + "/ids?start=0&count=" + count)) {
+                + "/ids?start=" + start + "&count=" + count)) {
             if (id.isTextual()) {
                 ids.add(id.asText());
             }

@@ -2,9 +2,10 @@
 import { html, useMemo, useEffect } from '/vendor/htm-preact.js';
 import {
   useStore, useViewState, useFetch, select, go, normalize, sortRows, addToBuild, removeFromBuild, store, MAX_BUILD,
+  runePageRunes,
 } from './core.js';
 import {
-  Img, Card, Button, Select, SearchInput, Switch, Tag, DataGrid, VirtualTable, MasterDetail, Empty, Icon,
+  Img, Card, Button, Select, SearchInput, Switch, Tag, DataGrid, VirtualTable, MasterDetail, Empty, Icon, RuneIcons,
 } from './ui.js';
 
 const DEFAULTS = { q: '', tag: '', completed: false, sort: { key: 'name', dir: 1 } };
@@ -69,6 +70,8 @@ export function ItemsView({ id }) {
 
 function BuildPanel({ data }) {
   const build = useStore((s) => s.build);
+  const runePage = useStore((s) => s.runePage);
+  const runes = runePageRunes(runePage);
   const totals = useFetch(build.length ? `/api/build?items=${build.join(',')}` : null, { keep: true }).data;
   const slots = Array.from({ length: MAX_BUILD }, (_, i) => build[i]);
   return html`<section class="build-panel">
@@ -88,6 +91,10 @@ function BuildPanel({ data }) {
       })}
     </div>
     ${build.length === 0 ? html`<p class="muted small">Leer – Items im Detail über „Zum Build hinzufügen“ ergänzen.</p>` : null}
+    <div class="build-runes">
+      ${runes.length ? html`<${RuneIcons} data=${data} ids=${runes} size=${26} />` : html`<span class="muted small">Keine Runenseite</span>`}
+      <${Button} kind="ghost" onClick=${() => go('runes', 'page')}>${runes.length ? 'Runen bearbeiten' : 'Runen wählen'}<//>
+    </div>
     ${build.length && totals ? html`<div class="stat-chips">${totals.stats.map((s) => html`<span class="stat-chip" key=${s.label}><strong>${s.value}</strong> ${s.label}</span>`)}</div>
       ${totals.unparsed.length ? html`<details class="unparsed"><summary>Nicht verrechnet (${totals.unparsed.length})</summary>${totals.unparsed.map((u, i) => html`<p class="muted small" key=${i}>• ${u}</p>`)}</details>` : null}` : null}
   </section>`;

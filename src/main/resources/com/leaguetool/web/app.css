@@ -287,7 +287,11 @@ kbd {
 .detail { padding: 0 0 22px; display: flex; flex-direction: column; gap: 12px; animation: rise 180ms ease-out; }
 .detail > *:not(.hero) { margin-inline: 16px; }
 .detail > .plain-hero { margin-top: 16px; }
-.detail > .detail-tabs { position: sticky; top: 0; z-index: 6; margin-inline: 0; padding: 8px 16px; background: var(--bg-2); border-bottom: 1px solid var(--line); }
+.detail > .detail-tabs { position: sticky; top: 0; z-index: 6; margin-inline: 0; padding: 8px 16px; background: var(--bg-2); border-bottom: 1px solid var(--line); display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.champion-role { margin-left: auto; max-width: 100%; overflow-x: auto; }
+.card .champion-role { display: flex; justify-content: flex-end; margin-bottom: 8px; }
+.champion-role .segmented { height: 28px; padding: 1px; gap: 1px; }
+.champion-role .segmented button { padding: 0 8px; font-size: 12px; }
 @keyframes rise { from { opacity: 0; transform: translateY(5px); } }
 
 .hero { position: relative; height: 240px; overflow: hidden; display: flex; align-items: flex-end; background: var(--surface); }
@@ -345,6 +349,12 @@ table.data.compact td { padding: 3px 10px 3px 0; font-size: 12.5px; }
 .ranking h4, .wiki-box h4 { font-size: 12.5px; font-weight: 700; }
 .rank-line { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 4px 0; border-top: 1px solid var(--line); min-height: 42px; }
 .rank-key { min-width: 0; }
+/* Vier Zeilen im Platz von dreien (3 × 42 px): drei beste und der meistgespielte Eintrag. */
+.ranking.compact .rank-line { min-height: 30px; padding: 1px 0; }
+.ranking.compact .rank-stats { line-height: 1.15; }
+.ranking.compact .rank-stats small { font-size: 11px; }
+.ranking.compact .rank-key { display: flex; align-items: center; gap: 6px; }
+.ranking.compact .rank-key .tag { flex: none; }
 .rank-stats { text-align: right; flex: none; display: flex; flex-direction: column; font-variant-numeric: tabular-nums; }
 .rank-stats span { font-weight: 650; }
 .rank-stats small { color: var(--text-3); }
@@ -365,8 +375,9 @@ table.data.compact td { padding: 3px 10px 3px 0; font-size: 12.5px; }
 .skills-sep { color: var(--text-3); margin: 0 4px; }
 .skills kbd, .skill-path kbd { font-size: 11.5px; padding: 2px 7px; background: var(--accent-soft); color: var(--accent); }
 .skill-path { padding-top: 6px; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 6px; }
-.skill-path-grid { display: grid; grid-template-columns: repeat(9, minmax(0, 1fr)); gap: 3px; text-align: center; }
+.skill-path-grid { display: grid; grid-template-columns: repeat(18, minmax(0, 1fr)); gap: 2px; text-align: center; }
 .skill-path-grid > div { display: flex; flex-direction: column; align-items: center; gap: 3px; }
+.skill-path-grid kbd { padding: 2px 0; width: 100%; box-sizing: border-box; text-align: center; font-size: 11px; }
 .skill-path-grid small { color: var(--text-3); font-variant-numeric: tabular-nums; }
 .sort-head { display: inline-flex; align-items: center; gap: 3px; color: inherit; font: inherit; }
 .sort-head:hover { color: var(--text); }
@@ -399,6 +410,31 @@ table.data.compact td { padding: 3px 10px 3px 0; font-size: 12.5px; }
 .rune-btn:hover { background: var(--row-hover); }
 .rune-btn.selected { background: var(--accent-soft); border-color: var(--accent); }
 .rune-detail { display: flex; align-items: center; gap: 13px; }
+.list-icon { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 8px; background: var(--accent-soft); color: var(--accent); flex: none; }
+.rune-page-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 12px; align-items: start; }
+.tree-picker { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.tree-btn { display: flex; align-items: center; gap: 6px; padding: 5px 10px 5px 6px; border-radius: 999px; border: 1px solid var(--line); font-size: 12.5px; transition: background var(--ease), border-color var(--ease); }
+.tree-btn .img { background: transparent; }
+.tree-btn:hover:not(:disabled) { background: var(--row-hover); }
+.tree-btn.selected { background: var(--accent-soft); border-color: var(--accent); font-weight: 600; }
+.tree-btn:disabled { opacity: .35; cursor: not-allowed; }
+.shard-title { margin: 14px 0 6px; font-size: 12.5px; font-weight: 700; }
+.shard-rows { display: flex; flex-direction: column; gap: 8px; }
+.shard-row { display: flex; flex-direction: column; gap: 4px; }
+.shard-options { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.shard-btn { display: flex; flex-direction: column; gap: 2px; padding: 7px 9px; border-radius: 9px; border: 1px solid var(--line); text-align: left; font-size: 12px; transition: background var(--ease), border-color var(--ease); }
+.shard-btn small { color: var(--text-3); font-size: 11px; }
+.shard-btn:hover { background: var(--row-hover); }
+.shard-btn.selected { background: var(--accent-soft); border-color: var(--accent); }
+.rune-effects { display: flex; flex-direction: column; gap: 6px; }
+.rune-effect { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-top: 1px solid var(--line); flex-wrap: wrap; }
+.rune-effect:first-child { border-top: 0; }
+.rune-effect .img { background: transparent; }
+.rune-effect.none { opacity: .7; }
+.rune-effect-text { flex: 1; min-width: 200px; display: flex; flex-direction: column; }
+.rune-effect-control { min-width: 220px; display: flex; flex-direction: column; gap: 2px; }
+.shard-dot { width: 32px; height: 32px; display: grid; place-items: center; border-radius: 50%; background: var(--accent-soft); color: var(--accent); font-weight: 700; flex: none; }
+.build-runes { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
 .rune-detail .img { background: transparent; }
 
 /* Abilities */
@@ -422,6 +458,16 @@ table.data.compact td { padding: 3px 10px 3px 0; font-size: 12.5px; }
 .chip-link.recent small { color: var(--text-3); }
 .notice { flex-direction: row; align-items: center; justify-content: space-between; gap: 12px; }
 .notice.bad { justify-content: flex-start; border-color: var(--bad); }
+.key-help { gap: 6px; font-size: 13px; }
+.key-help ol { margin: 0; padding-left: 20px; display: grid; gap: 2px; }
+.key-help a { text-decoration: underline; }
+.slow-hint { display: flex; align-items: center; gap: 6px; margin: 0; }
+.huge-hint { border: 1px solid var(--bad); border-radius: var(--radius); padding: 8px 12px; font-size: 13px; display: grid; gap: 4px; }
+.huge-hint strong { display: flex; align-items: center; gap: 6px; color: var(--bad); }
+.legal-note { margin: 14px 0 0; padding-top: 10px; border-top: 1px solid var(--line); font-size: 11.5px; line-height: 1.45; color: var(--text-3); }
+.huge-hint ul { margin: 0; padding-left: 20px; display: grid; gap: 2px; }
+.mate-link { background: none; border: 0; padding: 0; color: inherit; font: inherit; cursor: pointer; text-align: left; }
+.mate-link:hover { text-decoration: underline; }
 .summoner-result { display: flex; flex-direction: column; gap: 12px; }
 .rank-cards { display: flex; gap: 10px; flex-wrap: wrap; }
 .rank-card { flex: 1; min-width: 220px; display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; align-items: baseline; padding: 12px 14px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); }
@@ -615,3 +661,11 @@ table.data.compact td { padding: 3px 10px 3px 0; font-size: 12.5px; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 1ms !important; transition-duration: 1ms !important; }
 }
+
+.spell-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 8px; margin-bottom: 8px; }
+.spell-chip { display: flex; align-items: center; gap: 10px; min-width: 0; font-size: 12.5px; padding: 6px 10px; background: var(--surface-2); border: 1px solid var(--line-2); border-radius: var(--radius-s); }
+.spell-name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.spell-cd { margin-left: auto; white-space: nowrap; color: var(--text-3); }
+.spell-cd strong { color: var(--text); }
+
+.detail > .empty { height: auto; min-height: 0; padding: 20px 28px 12px; }

@@ -35,6 +35,7 @@ class ItemPassiveTextParserTest {
             "Gain 30 Ultimate Ability Haste.;ULTIMATE_HASTE;30",
             "Abilities with immobilizing effects have their cooldown reduced equivalent to 20 ability haste.;IMMOBILIZE_ABILITY_HASTE;20",
             "Gain 20 Ability Haste for your abilities with Immobilizing effects.;IMMOBILIZE_ABILITY_HASTE;20",
+            "Gain 10 Summoner Spell Haste.;SUMMONER_SPELL_HASTE;10",
     })
     void recognizesSingleEffects(String line, StatType type, double value) {
         assertEquals(List.of(new ItemPassiveTextParser.Effect(type, value)), ItemPassiveTextParser.parse(line));

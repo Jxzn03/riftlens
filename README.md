@@ -84,12 +84,18 @@ Rang-Bereich von Iron bis Challenger (Standard **Emerald+**). Die Wahl bleibt ge
 **Datenquellen:** Eine Tierlisten-Seite liefert alle Champions (ohne Rollenfilter je Champion die Hauptlane), eine
 Champion-Seite Builds, Runen, Spells und Skill-Reihenfolgen. Der Core-Build enthält auch Boots.
 
+**Rolle je Champion:** Über den Reitern der Vorschau wählst du die Rolle des Champions. **Auto** nimmt den
+Rollenfilter und ohne Filter die häufigste Rolle. Eine andere Rolle lädt ihre Daten erst bei Auswahl und gilt für
+Match-Statistik und Counters. Die Wahl bleibt je Champion gespeichert.
+
 **Abrufregeln:** höchstens ein Abruf alle 2 Sekunden, 12 Stunden Cache, nur für privaten Eigengebrauch.
 
 **Ranglisten und Farben**
 
 - Ranglisten berücksichtigen nur Einträge mit mindestens 1 % der Spiele des Champions, damit keine Nischen-Builds
   aus ohnehin gewonnenen Spielen oben stehen.
+- Beim Core-Build steht unter den drei besten zusätzlich der meistgespielte Build, unabhängig von der Winrate
+  (Markierung „Meistgespielt“; ist er schon unter den besten, wird nur diese Zeile markiert).
 - Grün oder Rot bei Winrates: mindestens 1 Punkt über bzw. mehr als 1 Punkt unter dem Durchschnitt des gewählten
   Datensatzes.
 
@@ -153,18 +159,27 @@ Duos und Matchups addieren sich. Kleine Stichproben werden zur Erwartung hin geg
 
 ### Summoner-Tab (Riot-API)
 
-**Eingabe:** Riot-ID (`Name#TAG`), Region und Anzahl der Matches (20, 50 oder 100). Ein API-Key in den Optionen ist
-nötig, und die Riot-Abfragen müssen in den Einstellungen aktiviert sein (Standard: aus). Die Region ist standardmäßig
-`EUW1`.
+**Eingabe:** Riot-ID (`Name#TAG`), Region und Anzahl der Matches (20, 50, 100, 200, 300, 500 oder 1000). Ein API-Key in den
+Optionen ist nötig, und die Riot-Abfragen müssen in den Einstellungen aktiviert sein (Standard: aus). Die Region ist
+standardmäßig `EUW1`. Schlägt eine Abfrage fehl, steht unter dem Fehler eine Anleitung für einen neuen Dev-Key.
 
-**Anzeige:** Ränge, meistgespielte Champions mit Winrate, KDA und CS/Min, Spielmodi, Rollen, Meisterschaft und
-Match-Verlauf. Ein Klick auf einen Spielmodus filtert die Auswertung.
+**Anzeige:** Ränge, meistgespielte Champions mit Winrate, KDA und CS/Min, häufige Mitspieler, Spielmodi, Rollen,
+Meisterschaft und Match-Verlauf. Ein Klick auf einen Spielmodus filtert die Auswertung.
+
+**Häufige Mitspieler (Duo):** Riot meldet keine Premades. Als Mitspieler gilt, wer in der Auswahl mindestens dreimal im
+eigenen Team war (Arena: im selben Zweierteam). Angezeigt werden Spiele und Winrate zusammen, die eigene Winrate in den
+übrigen Spielen und die Differenz. Ein Klick auf den Namen fragt diesen Spieler ab.
 
 **Hinweise**
 
 - Winrates beziehen sich auf die abgerufenen Matches, Remakes zählen nicht mit.
-- Abgerufene Matches liegen gekürzt in `cache/_global/riot/match/` und kosten danach keine API-Anfrage mehr.
-- Mit einem Dev-Key gelten 100 Anfragen in 2 Minuten, 100 neue Matches dauern dadurch etwas.
+- Riot liefert höchstens 100 Match-IDs je Aufruf; größere Mengen werden seitenweise geholt.
+- Je Spieler liegt eine gzip-Datei `cache/_global/riot/history/<puuid>.json.gz` mit der eigenen Zeile je Match und
+  den Teamkollegen (PUUID, Riot-ID), etwa 100–150 KB für 500 und 200–300 KB für 1000 Spiele (höchstens 1200 Matches
+  je Spieler). Weitere Abfragen laden nur neue Spiele.
+- Mit einem Dev- oder Personal-Key gelten 100 Anfragen in 2 Minuten. Der erste Abruf dauert dadurch bei 500 Matches
+  etwa 10, bei 1000 etwa 20 Minuten; für 1000 erscheint ein eigener Warnhinweis. Die Anzeige schätzt die Restzeit.
+  Zwischendurch wird gespeichert, ein Abbruch verliert nichts. Riot hält Matches nur etwa zwei Jahre vor.
 
 ## Konfiguration
 
@@ -173,15 +188,24 @@ Match-Verlauf. Ein Klick auf einen Spielmodus filtert die Auswertung.
 Alles liegt im Home-Verzeichnis des Tools, standardmäßig `~/.leaguetool` (Windows: `C:\Users\<name>\.leaguetool`).
 Überschreibbar mit `-Dleaguetool.home=…` oder der Umgebungsvariable `LEAGUETOOL_HOME`.
 
+**Patchwechsel:** Beim ersten Start nach einem neuen Patch erneuert die App alles Patch-Abhängige selbst und meldet das
+kurz: Data-Dragon-Daten des neuen Patches, Item-Passiven, Runen- und Shard-Werte (abgeglichen und gespeichert), die
+Wiki-Championdaten sofort, Wiki-Fähigkeiten und Lolalytics-Statistiken beim nächsten Aufruf. Spätere Starts mit
+demselben Patch nutzen den gespeicherten Stand. Ohne Netz bleiben die alten Daten nutzbar. Die Lolalytics-Team-Werte
+für die Draft-Synergien behalten ihre 12 Stunden Cache.
+
 | Pfad | Inhalt |
 |---|---|
 | `settings.properties` | Einstellungen (Sprache, Offline-Modus, Wiki/Riot/Lolalytics an/aus, Rang-Bereich, Plattform, optional API-Key) |
 | `cache/<patch>/data/<sprache>/…` | Data-Dragon-JSON pro Patch (unveränderlich, cache-first) |
 | `cache/<patch>/img/…`, `cache/_global/img/…` | Bilder (Champions, Items, Spells, Runen) |
-| `cache/_global/ddragon/versions.json` | Patch-Liste (6 h frisch, sonst Netz mit Cache-Fallback) |
-| `cache/_global/wiki/…` | Wiki-Zusatzdaten (3 Tage frisch, Item-Daten 1 Tag, sonst Netz mit Cache-Fallback) |
-| `cache/_global/lolalytics/…` | Lolalytics-Abrufe (12 h frisch, sonst Netz mit Cache-Fallback) |
-| `cache/_global/riot/match/…` | Abgerufene Matches in gekürzter Form |
+| `cache/_global/ddragon/versions.json` | Patch-Liste (beim Programmstart frisch geprüft, danach 6 h, sonst Netz mit Cache-Fallback) |
+| `cache/_global/patch/state.json` | Zuletzt geladener Patch und Zeitpunkt des letzten Patchwechsels |
+| `cache/_global/wiki/…` | Wiki-Zusatzdaten (3 Tage frisch, Item-Daten 1 Tag, höchstens bis zum Patchwechsel, sonst Netz mit Cache-Fallback) |
+| `cache/_global/lolalytics/…` | Lolalytics-Abrufe (12 h frisch, Statistiken höchstens bis zum Patchwechsel, sonst Netz mit Cache-Fallback) |
+| `cache/_global/rune-effects/` | Stand und Verlauf der automatisch abgeglichenen Runen- und Shard-Werte |
+| `cache/_global/riot/history/…` | Match-Historie je Spieler (gzip, Summoner-Tab) |
+| `cache/_global/riot/match/…` | Früherer Match-Cache; wird nur noch gelesen und in die Historie übernommen |
 | `cache/_global/item-passives/` | Stand und Verlauf der automatischen Item-Passiv-Updates |
 | `modern-ui/` | UI-Zustand (`ui-state.json`) und Browserprofil |
 
@@ -219,7 +243,7 @@ Pakete unter `com.leaguetool`:
 | `model` | Records: Champion, Ability, Item, RuneTree/Rune, SummonerSpell, … |
 | `calc` | Stats nach Level, Item-Stat-Summen, Cooldowns mit Ability Haste, Schadensvorschau |
 | `draft` | Draft-Bewertung und Vorschläge, Rollen-Vorhersage, Datenbeschaffung aus Lolalytics |
-| `stats` | Datenformen der Statistik-Anzeige (Ranglisten, Wilson-Intervall) und Item-Einordnung |
+| `stats` | Datenformen der Statistik-Anzeige (Ranglisten, Wilson-Intervall, Bayes-Ranking) und Item-Einordnung |
 | `web` | Oberfläche: lokaler Server und JSON-API (Frontend in `src/main/resources/com/leaguetool/web`) |
 | `config`, `util` | Einstellungen, Text-/Patch-Hilfen |
 
@@ -229,7 +253,11 @@ Pakete unter `com.leaguetool`:
 
 - **Werte mit Build / Schadensvorschau** rechnen immer aktive Item-Effekte ein (z. B. Rabadons +30 % AP, Riftmaker,
   Awe, adaptive Kraft von Swiftmarch, Haste nur für bestimmte Fähigkeiten).
-- **Nicht berücksichtigt:** bedingte Passiven und Stacks, Champion-Passiven, Runen und gegnerische Resistenzen.
+- **Runenseite:** Im Tab Runen unter „Runenseite (Build-Rechner)“ Primär- und Sekundärbaum, Runen und Shards wählen; eine
+  Seite aus der Champion-Statistik lässt sich mit „In Build-Rechner“ übernehmen. Verrechnet werden Shards und Runen mit
+  Werten (z. B. Transcendence, Cosmic Insight, Celerity); Stapel (Legend, Ultimate Hunter, Gathering Storm) und
+  Bedingungen (Conditioning nach 12 Minuten, Absolute Focus) stellt man ein. Schaden von Keystones und Item Haste nicht.
+- **Nicht berücksichtigt:** bedingte Item-Passiven und Stacks, Champion-Passiven und gegnerische Resistenzen.
   Ratios auf Zielwerte (z. B. „% des maximalen Lebens des Ziels“) werden nicht eingerechnet.
 - Ob eine Fähigkeit immobilisiert (Imperial Mandate), wird aus ihrer Wiki-Beschreibung gelesen.
 - Angriffstempo-Obergrenze im Rechner: 3.003 (seit Patch V25.S1.3, laut Wiki).

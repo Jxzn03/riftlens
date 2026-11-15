@@ -55,9 +55,18 @@ public final class DDragonClient {
         return locale;
     }
 
-    /** Alle regulären Versionen, neueste zuerst. */
+    /** Alle regulären Versionen, neueste zuerst (versions.json bis zu 6 Stunden aus dem Cache). */
     public List<String> versions() throws IOException {
-        FileCache.CacheResult r = cache.getFreshOrStale(FileCache.GLOBAL, VERSIONS_KEY, VERSIONS_MAX_AGE, () -> {
+        return versions(false);
+    }
+
+    /**
+     * @param checkNow {@code true} fragt versions.json sofort neu ab (beim Programmstart, damit ein neuer Patch beim
+     *                 ersten Start erkannt wird); ohne Netz gilt der Cache
+     */
+    public List<String> versions(boolean checkNow) throws IOException {
+        Duration maxAge = checkNow ? Duration.ZERO : VERSIONS_MAX_AGE;
+        FileCache.CacheResult r = cache.getFreshOrStale(FileCache.GLOBAL, VERSIONS_KEY, maxAge, () -> {
             String text = http.getText(baseUrl + "/api/versions.json");
             regularVersions(text); // validieren, bevor gecacht wird
             return text;
@@ -84,8 +93,13 @@ public final class DDragonClient {
      * der neueste Patch-Ordner im Cache verwendet.
      */
     public String latestPatch() throws IOException {
+        return latestPatch(false);
+    }
+
+    /** Wie {@link #latestPatch()}; {@code checkNow} siehe {@link #versions(boolean)}. */
+    public String latestPatch(boolean checkNow) throws IOException {
         try {
-            return versions().get(0);
+            return versions(checkNow).get(0);
         } catch (IOException e) {
             List<String> cached = cache.cachedPatches();
             if (!cached.isEmpty()) {

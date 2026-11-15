@@ -160,6 +160,85 @@ class WebServerTest {
     }
 
     @Test
+    void insightsDeliverBuildHasteAndSummonerSpellHasteEvenWithoutWiki() throws Exception {
+        // Das Fixture enthält keine Haste-Items; die Auswertung der Item-Texte prüfen die calc-Tests.
+        HttpResponse<String> response = get("/api/champions/Ahri/insights?level=11&items=3157", true);
+        assertEquals(200, response.statusCode(), response.body());
+        JsonNode data = json.readTree(response.body());
+        assertTrue(data.path("disabled").asBoolean(), "Wiki ist im Test aus");
+        assertEquals(1, data.path("itemCount").asInt());
+        assertEquals(5, data.path("haste").size(), "Haste je Slot P, Q, W, E, R auch ohne Wiki");
+        assertTrue(data.path("summonerSpellHaste").isNumber());
+        assertEquals(0, data.path("staticCooldowns").size());
+    }
+
+    @Test
+    void levelsIncludeTheRunePage() throws Exception {
+        JsonNode plain = json.readTree(get("/api/champions/Ahri/levels", true).body());
+        // Ultimate Hunter mit 5 Stapeln, Shards: Ability Haste, Adaptive Force, Health (65).
+        HttpResponse<String> response = get("/api/champions/Ahri/levels?runes=8106&shards=5007,5008,5011&stacks=8106:5", true);
+        assertEquals(200, response.statusCode(), response.body());
+        JsonNode withRunes = json.readTree(response.body());
+        assertEquals(4, withRunes.path("runeCount").asInt());
+        JsonNode level1 = withRunes.path("finals").path(0);
+        double health = level1.path(0).path("total").asDouble();
+        assertEquals(plain.path("finals").path(0).path(0).path("total").asDouble() + 65, health, 0.6);
+        assertTrue(rowValue(level1, "Ability Haste").startsWith("8"), level1.toString());
+        assertTrue(rowValue(level1, "Haste Ultimate").startsWith("39"), "8 + 6 + 5 × 5");
+
+        assertEquals(400, get("/api/champions/Ahri/levels?runes=abc", true).statusCode());
+        assertEquals(400, get("/api/champions/Ahri/levels?runes=8106&stacks=8106", true).statusCode());
+    }
+
+    private static String rowValue(JsonNode rows, String label) {
+        for (JsonNode row : rows) {
+            if (label.equals(row.path("label").asText())) {
+                return row.path("total").asText();
+            }
+        }
+        return "";
+    }
+
+    @Test
+    void firstStartAfterAPatchChangeRefreshesOnceAndIsReported() throws Exception {
+        // Letzter bekannter Patch älter als der aktuelle (16.22.1 laut Fixture): wie beim ersten Start nach einem Patch.
+        java.nio.file.Path state = settings.cacheDir().resolve("_global/patch/state.json");
+        java.nio.file.Files.writeString(state, "{\"patch\":\"16.21.1\",\"changedAt\":\"1970-01-01T00:00:00Z\"}");
+        java.nio.file.Files.deleteIfExists(settings.cacheDir().resolve("_global/rune-effects/state.json"));
+
+        WebContext second = new WebContext(settings, fake, BASE);
+        try {
+            second.reload().join();
+            assertTrue(second.patchChange() != null && second.patchChange().isNew());
+            assertEquals("16.21.1", second.patchChange().previous());
+            assertEquals(PATCH, second.runeEffects().latest().patch(), "Runenwerte für den neuen Patch abgeglichen");
+            assertTrue(java.nio.file.Files.readString(state).contains(PATCH));
+        } finally {
+            second.awaitData();
+            second.close();
+        }
+        WebContext third = new WebContext(settings, fake, BASE);
+        try {
+            third.reload().join();
+            assertEquals(null, third.patchChange(), "zweiter Start mit demselben Patch: kein erneuter Abgleich");
+        } finally {
+            third.awaitData();
+            third.close();
+        }
+    }
+
+    @Test
+    void bootstrapDescribesRuneEffectsAndShardRows() throws Exception {
+        JsonNode data = json.readTree(get("/api/bootstrap", true).body());
+        assertEquals(3, data.path("shardRows").size());
+        boolean transcendence = false;
+        for (JsonNode e : data.path("runeEffects")) {
+            transcendence |= e.path("id").asInt() == 8210 && "always".equals(e.path("kind").asText());
+        }
+        assertTrue(transcendence);
+    }
+
+    @Test
     void unknownChampionIsNotFound() throws Exception {
         assertEquals(404, get("/api/champions/GibtEsNicht/levels", true).statusCode());
     }
@@ -198,14 +277,19 @@ class WebServerTest {
         assertEquals(579_664, r.path("games").asInt());
         assertEquals(List.of(3118, 3020, 4645), json.convertValue(r.path("coreBuilds").path("lines").path(0).path("key"),
                 new TypeReference<List<Integer>>() { }));
+        JsonNode mostPlayed = r.path("coreBuilds").path("mostPlayed");
+        assertEquals(3, mostPlayed.path("key").size(), "Meistgespielter Core-Build mit 3 Items");
+        for (JsonNode line : r.path("coreBuilds").path("lines")) {
+            assertTrue(mostPlayed.path("games").asInt() >= line.path("games").asInt(), "mostPlayed hat die meisten Spiele");
+        }
         assertEquals("Q", r.path("skillOrders").path("lines").path(0).path("key").path(0).asText());
-        assertEquals(List.of("W", "Q", "E", "Q", "Q", "R", "Q", "W", "Q"),
+        assertEquals(List.of("W", "Q", "E", "Q", "Q", "R", "Q", "W", "Q", "W", "R", "W", "W", "E", "E", "R", "E", "E"),
                 json.convertValue(r.path("skillPath"), new TypeReference<List<String>>() { }));
         JsonNode counters = r.path("counters");
         assertEquals("Mid", counters.path("lane").asText(), "ohne Rollenfilter gilt die Hauptlane");
         assertEquals(5797, counters.path("minGames").asInt(), "1 % der Spiele des Champions");
-        assertTrue(counters.path("strong").isArray());
-        assertTrue(counters.path("weak").isArray());
+        assertTrue(counters.path("best").isArray(), "Sicht des Gegners: beste Picks gegen den Champion");
+        assertTrue(counters.path("worst").isArray());
         assertTrue(counters.path("delta").isArray());
         JsonNode lateItems = r.path("lateItems");
         assertEquals(2, lateItems.size(), "Core-Item und zu seltene Items fallen weg (lateItems)");

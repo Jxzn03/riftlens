@@ -39,7 +39,9 @@ public final class ItemPassives {
             new ItemPassive(3073, "Experimental Hexplate", "Hexcharged", StatType.ULTIMATE_HASTE, 30),
             new ItemPassive(3118, "Malignance", "Scorn", StatType.ULTIMATE_HASTE, 20),
             new ItemPassive(3050, "Zeke's Convergence", "Cryocombustion", StatType.ULTIMATE_HASTE, 15),
-            new ItemPassive(4005, "Imperial Mandate", "Control", StatType.IMMOBILIZE_ABILITY_HASTE, 20));
+            new ItemPassive(4005, "Imperial Mandate", "Control", StatType.IMMOBILIZE_ABILITY_HASTE, 20),
+            new ItemPassive(3158, "Ionian Boots of Lucidity", "Ionian Insight", StatType.SUMMONER_SPELL_HASTE, 10),
+            new ItemPassive(3171, "Crimson Lucidity", "Ionian Insight", StatType.SUMMONER_SPELL_HASTE, 20));
 
     private static volatile Map<Integer, List<ItemPassive>> current = index(BASELINE);
 

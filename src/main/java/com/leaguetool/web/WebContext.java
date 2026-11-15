@@ -9,7 +9,9 @@ import com.leaguetool.data.ddragon.ImageRef;
 import com.leaguetool.data.http.HttpFetcher;
 import com.leaguetool.data.http.JavaHttpFetcher;
 import com.leaguetool.data.http.OfflineAwareFetcher;
+import com.leaguetool.data.PatchTracker;
 import com.leaguetool.data.itempassives.ItemPassiveUpdater;
+import com.leaguetool.data.runeeffects.RuneEffectUpdater;
 import com.leaguetool.data.lcu.LcuHttpTransport;
 import com.leaguetool.data.lcu.LcuLocator;
 import com.leaguetool.data.lcu.LcuSync;
@@ -53,6 +55,8 @@ public final class WebContext implements AutoCloseable {
     private final ExecutorService background = Executors.newCachedThreadPool(daemon("lt-web-worker"));
     private final LolalyticsClient lolalytics;
     private final ItemPassiveUpdater itemPassives;
+    private final RuneEffectUpdater runeEffects;
+    private final PatchTracker patchTracker;
     private final LcuSync lcu;
     private final LcuLocator lcuLocator;
     private final RateLimiter riotLimiter = RateLimiter.riotDevKey();
@@ -68,6 +72,9 @@ public final class WebContext implements AutoCloseable {
 
     private CompletableFuture<GameData> loading;
     private long generation;
+    /** Versionsliste beim ersten Laden nach dem Programmstart frisch abfragen, damit ein neuer Patch sofort zählt. */
+    private volatile boolean versionsChecked;
+    private volatile PatchTracker.Change lastPatchChange;
     private GameData classifierData;
     private ItemClassifier classifier;
 
@@ -80,8 +87,11 @@ public final class WebContext implements AutoCloseable {
         this.ddragonBase = ddragonBase;
         this.cache = new FileCache(settings.cacheDir());
         this.http = new OfflineAwareFetcher(fetcher, settings::offline);
+        this.patchTracker = new PatchTracker(cache);
         this.lolalytics = new LolalyticsClient(http, cache);
+        this.lolalytics.setNotBefore(patchTracker::changedAt);
         this.itemPassives = new ItemPassiveUpdater(cache);
+        this.runeEffects = new RuneEffectUpdater(cache);
         this.lcuLocator = new LcuLocator(settings::lcuFolder);
         this.lcu = new LcuSync(lcuLocator::find, LcuHttpTransport::new, state -> publish("lcu", ClientSyncEndpoint.json(state)));
         rebuildServices();
@@ -119,26 +129,72 @@ public final class WebContext implements AutoCloseable {
         return itemPassives;
     }
 
+    RuneEffectUpdater runeEffects() {
+        return runeEffects;
+    }
+
+    /** Patchwechsel, den dieser Programmlauf erkannt hat, oder {@code null}. */
+    PatchTracker.Change patchChange() {
+        PatchTracker.Change change = lastPatchChange;
+        return change != null && change.isNew() ? change : null;
+    }
+
     synchronized void rebuildServices() {
         GameData shown = gameData;
         gameDataService = new GameDataService(new DDragonClient(http, cache, settings.locale(), ddragonBase), shown);
-        wiki = new WikiClient(http, cache);
+        wiki = newWikiClient();
     }
 
-    /** Startet das Laden des aktuellen Patches; ein laufender älterer Ladevorgang wird verworfen. */
+    private WikiClient newWikiClient() {
+        return new WikiClient(http, cache, WikiClient.API_URL, patchTracker::changedAt);
+    }
+
+    /**
+     * Startet das Laden des aktuellen Patches; ein laufender älterer Ladevorgang wird verworfen.
+     *
+     * <p>Beim ersten Start nach einem Patchwechsel ({@link PatchTracker}) wird alles Patch-Abhängige erneuert: Data
+     * Dragon liegt je Patch im Cache, Item-Passiven und Runenwerte werden neu abgeglichen, Wiki- und Lolalytics-Einträge
+     * von vor dem Wechsel gelten als veraltet (Wiki-Championdaten werden gleich vorgeladen, der Rest beim ersten
+     * Zugriff). Bei späteren Starts mit demselben Patch gilt der gespeicherte Stand.
+     */
     public synchronized CompletableFuture<GameData> reload() {
         GameDataService service = gameDataService;
         long gen = ++generation;
+        boolean checkVersions = !versionsChecked;
         loading = CompletableFuture.supplyAsync(() -> {
             try {
-                GameData data = service.loadLatest();
-                itemPassives.update(data, wiki().orElse(null));
+                GameData data = service.loadLatest(checkVersions);
+                versionsChecked = true;
+                PatchTracker.Change change = patchTracker.observe(data.patch(), data.offline());
+                if (change.isNew()) {
+                    synchronized (this) {
+                        wiki = newWikiClient(); // im Speicher gehaltene Wiki-Daten des alten Patches verwerfen
+                    }
+                }
+                lastPatchChange = change.isNew() ? change : lastPatchChange;
+                WikiClient wikiClient = wiki().orElse(null);
+                itemPassives.update(data, wikiClient);
+                runeEffects.update(data, wikiClient, change.isNew());
+                if (change.isNew() && wikiClient != null) {
+                    prefetchWiki(wikiClient);
+                }
                 return data;
             } catch (IOException e) {
                 throw new UncheckedIOException(e);
             }
         }, background).whenComplete((data, error) -> onLoaded(gen, data));
         return loading;
+    }
+
+    /** Lädt die Wiki-Championdaten des neuen Patches im Hintergrund vor; Fehler zeigen sich erst beim Zugriff. */
+    private void prefetchWiki(WikiClient client) {
+        background.execute(() -> {
+            try {
+                client.championData();
+            } catch (IOException | RuntimeException e) {
+                // ohne Netz bleibt der alte Stand nutzbar
+            }
+        });
     }
 
     private void onLoaded(long gen, GameData data) {

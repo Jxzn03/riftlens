@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -101,6 +102,7 @@ class WikiAbilityParserTest {
     void aatroxUltimateAndStaticPassiveCooldown() {
         WikiAbility r = aatrox("World Ender");
         assertEquals(List.of(120.0, 100.0, 80.0), r.cooldownValues());
+        assertFalse(r.staticCooldown(), "normale Abklingzeit: Haste wirkt");
         assertEquals(List.of("Bonus Movement Speed", "Bonus Attack Damage", "Increased Healing"),
                 r.levelings().stream().map(WikiLeveling::label).toList());
         assertEquals(List.of(60.0, 80.0, 100.0), r.levelings().get(0).valuesPerRank());
@@ -108,6 +110,7 @@ class WikiAbilityParserTest {
         WikiAbility p = aatrox("Deathbringer Stance");
         assertEquals(AbilitySlot.P, p.slot());
         assertEquals("22 – 10 (based on level)", p.cooldownText());
+        assertTrue(p.staticCooldown(), "nur 'static': Haste wirkt laut Wiki nicht");
         assertTrue(p.cooldownValues().isEmpty());
         assertTrue(p.description().contains("reduced to 25% against minions"), p.description());
     }

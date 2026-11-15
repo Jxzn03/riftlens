@@ -30,8 +30,8 @@ import java.util.Objects;
  * @param attackRange             Reichweite
  * @param moveSpeedRaw            Lauftempo vor den Soft-Caps
  * @param moveSpeed               Lauftempo nach den Soft-Caps
- * @param abilityHaste            Fähigkeitstempo
- * @param cooldownReduction       daraus folgende Abklingzeitverringerung (0..1, 100 Haste = 0.5)
+ * @param abilityHaste            Fähigkeitstempo für alle Fähigkeiten (ungekappt, ohne Basic/Ultimate Haste)
+ * @param cooldownReduction       daraus folgende Abklingzeitverringerung (0..1, 100 Haste = 0.5, Cap 500 Haste)
  * @param critChance              kritische Trefferchance in Prozent (0..100)
  * @param healShieldPower         Heil- und Schildstärke in Prozent
  * @param effectiveHealthPhysical effektives Leben gegen normalen Schaden
@@ -72,8 +72,9 @@ public record FinalStats(
     }
 
     /**
-     * Fähigkeitstempo für eine bestimmte Fähigkeit, inklusive der Boni nur für Grundfähigkeiten, Ultimates oder
-     * Immobilisierungen.
+     * Fähigkeitstempo für eine bestimmte Fähigkeit: Ability Haste plus Basic Ability Haste (Q, W, E) bzw. Ultimate
+     * Haste (R) und Haste für Immobilisierungen. Die Arten addieren sich, die Summe ist laut Wiki auf
+     * {@link CooldownCalculator#HASTE_CAP} begrenzt.
      *
      * @param immobilizes {@code true}, wenn die Fähigkeit Gegner immobilisiert
      */
@@ -83,11 +84,22 @@ public record FinalStats(
             case R -> bonus.get(StatType.ULTIMATE_HASTE);
             case P -> 0;
         };
-        return abilityHaste + specific + (immobilizes ? bonus.get(StatType.IMMOBILIZE_ABILITY_HASTE) : 0);
+        return CooldownCalculator.capped(
+                abilityHaste + specific + (immobilizes ? bonus.get(StatType.IMMOBILIZE_ABILITY_HASTE) : 0));
+    }
+
+    /** Summoner Spell Haste (Beschwörerzauber); wirkt nicht auf Fähigkeiten. */
+    public double summonerSpellHaste() {
+        return bonus.get(StatType.SUMMONER_SPELL_HASTE);
     }
 
     /** Abklingzeit einer Fähigkeit mit dem Fähigkeitstempo dieses Champions. */
     public double cooldown(double baseCooldown) {
         return CooldownCalculator.cooldown(baseCooldown, abilityHaste);
+    }
+
+    /** Abklingzeit eines Beschwörerzaubers mit der Summoner Spell Haste dieses Builds. */
+    public double summonerSpellCooldown(double baseCooldown) {
+        return CooldownCalculator.summonerSpellCooldown(baseCooldown, summonerSpellHaste());
     }
 }

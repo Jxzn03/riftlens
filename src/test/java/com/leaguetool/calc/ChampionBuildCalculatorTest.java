@@ -184,6 +184,33 @@ class ChampionBuildCalculatorTest {
         assertEquals(55, f.abilityHaste(AbilitySlot.E, true), EPS);
         assertEquals(40, f.abilityHaste(AbilitySlot.R, false), EPS);
         assertEquals(10, f.abilityHaste(AbilitySlot.P, false), EPS);
+        assertEquals(0, f.summonerSpellHaste(), EPS, "Ability Haste wirkt nicht auf Beschwörerzauber");
+    }
+
+    @Test
+    void runeValuesFollowTheirOwnRules() {
+        // 1000 Grundleben, 50 Rüstung, 40 MR, 330 Lauftempo (siehe flat()).
+        StatBlock bonus = StatBlock.of(StatType.HEALTH, 100).with(StatType.ITEM_HEALTH_AMP, 10)
+                .with(StatType.RUNE_HEALTH, 50).with(StatType.MAX_HEALTH_PERCENT, 3.5)
+                .with(StatType.ARMOR, 8).with(StatType.MAGIC_RESIST, 8).with(StatType.RESIST_PERCENT, 3)
+                .with(StatType.MOVE_SPEED_PERCENT, 10).with(StatType.MOVE_BONUS_AMP, 7);
+        FinalStats f = ChampionBuildCalculator.compute(flat(330, 0.625), 1, bonus);
+        assertEquals((1000 + 110 + 50) * 1.035, f.maxHealth(), EPS, "Warmog's nur aufs Item-Leben, Overgrowth aufs ganze");
+        assertEquals(f.maxHealth() - 1000, f.bonusHealth(), EPS);
+        assertEquals(58 * 1.03, f.armor(), EPS, "Conditioning: +8, dann +3 % auf die gesamte Rüstung");
+        assertEquals(48 * 1.03, f.magicResist(), EPS);
+        assertEquals(330 * 1.107, f.moveSpeedRaw(), EPS, "Celerity: 10 % Lauftempo wirken als 10,7 %");
+    }
+
+    @Test
+    void totalHasteIsCappedAt500ButSummonerSpellHasteIsSeparate() {
+        StatBlock bonus = StatBlock.of(StatType.ABILITY_HASTE, 480).with(StatType.ULTIMATE_HASTE, 50)
+                .with(StatType.SUMMONER_SPELL_HASTE, 20);
+        FinalStats f = ChampionBuildCalculator.compute(flat(330, 0.625), 1, bonus);
+        assertEquals(480, f.abilityHaste(AbilitySlot.Q, false), EPS);
+        assertEquals(500, f.abilityHaste(AbilitySlot.R, false), EPS, "Ability + Ultimate Haste zusammen gekappt");
+        assertEquals(20, f.summonerSpellHaste(), EPS);
+        assertEquals(300 * 100.0 / 120, f.summonerSpellCooldown(300), EPS, "Flash: 300 s mit 20 Summoner Spell Haste");
     }
 
     @Test

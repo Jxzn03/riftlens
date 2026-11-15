@@ -2,7 +2,6 @@ package com.leaguetool.web;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.leaguetool.cache.FileCache;
 import com.leaguetool.data.riot.LeagueEntry;
 import com.leaguetool.data.riot.RiotAccount;
@@ -10,56 +9,71 @@ import com.leaguetool.data.riot.RiotApiClient;
 import com.leaguetool.data.riot.RiotApiException;
 
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.BiConsumer;
 
 /**
- * Fragt einen Summoner über die Riot-API ab: Profil, Ränge, Meisterschaft und die letzten Matches.
+ * Fragt einen Summoner über die Riot-API ab: Profil, Ränge, Meisterschaft, die letzten Matches (bis
+ * {@value #MAX_MATCHES}) und häufige Mitspieler.
  *
- * <p>Matches ändern sich nicht mehr und werden gekürzt im Datei-Cache abgelegt. Wiederholte Abfragen kosten dadurch
- * nur die fünf Profil-Aufrufe und schonen das Rate-Limit (Dev-Key: 100 Anfragen in 2 Minuten).
+ * <p>Matches ändern sich nicht mehr und landen in der {@link SummonerHistory} des Spielers. Wiederholte Abfragen
+ * kosten dadurch nur die fünf Profil-Aufrufe, je 100 Matches eine Seite Match-IDs und die neuen Spiele. Der erste
+ * Abruf großer Mengen dauert wegen des Rate-Limits (Dev-Key: 100 Anfragen in 2 Minuten) mehrere Minuten.
  */
 final class SummonerLookup {
 
-    static final int MAX_MATCHES = 100;
+    static final int MAX_MATCHES = 1000;
+    /** Riots Obergrenze je Aufruf der Match-ID-Liste. */
+    private static final int PAGE_SIZE = 100;
+    /** Ab so vielen gemeinsamen Spielen gilt ein Teamkollege als häufiger Mitspieler (Duo/Premade). */
+    static final int MIN_SHARED_GAMES = 3;
+    private static final int MAX_MATES = 15;
+    private static final int MAX_NAME_LOOKUPS = 10;
+    /** Zwischendurch speichern, damit ein abgebrochener langer Abruf nicht von vorn beginnt. */
+    private static final int SAVE_EVERY = 50;
     /** Matches unter dieser Dauer (Sekunden) gelten als Remake. */
     private static final int MIN_DURATION_SEC = 300;
     private static final int MASTERY_COUNT = 10;
     private static final int PARALLEL_DOWNLOADS = 4;
+    private static final int PRACTICE_TOOL_QUEUE = 3140;
     private static final ObjectMapper JSON = new ObjectMapper();
-    private static final List<String> INFO_FIELDS = List.of("queueId", "gameMode", "gameDuration", "gameEndTimestamp",
-            "gameCreation");
-    private static final List<String> PARTICIPANT_FIELDS = List.of("puuid", "championId", "championName", "teamPosition",
-            "win", "kills", "deaths", "assists", "totalMinionsKilled", "neutralMinionsKilled", "gameEndedInEarlySurrender",
-            "summoner1Id", "summoner2Id", "item0", "item1", "item2", "item3", "item4", "item5", "item6");
     /** Nach Riots offizieller Liste (static.developer.riotgames.com/docs/lol/queues.json). */
     private static final Map<Integer, String> QUEUES = Map.ofEntries(
-            Map.entry(0, "Benutzerdefiniert"), Map.entry(1710, "Arena"), Map.entry(400, "Normal Draft"), Map.entry(420, "Ranked Solo/Duo"), Map.entry(430, "Normal Blind"),
+            Map.entry(0, "Custom Games"), Map.entry(1710, "Arena"), Map.entry(400, "Normal Draft"), Map.entry(420, "Ranked Solo/Duo"), Map.entry(430, "Normal Blind"),
             Map.entry(440, "Ranked Flex"), Map.entry(450, "ARAM"), Map.entry(480, "Swiftplay"), Map.entry(490, "Quickplay"),
-            Map.entry(700, "Clash"), Map.entry(710, "5 vs 5 Teamranked"), Map.entry(720, "ARAM Clash"), Map.entry(900, "ARURF"), Map.entry(1020, "One for All"),
+            Map.entry(700, "Clash"), Map.entry(710, "5v5 Teamranked"), Map.entry(720, "ARAM Clash"), Map.entry(900, "ARURF"), Map.entry(1020, "One for All"),
             Map.entry(1300, "Nexus Blitz"), Map.entry(1700, "Arena"), Map.entry(1900, "URF"), Map.entry(830, "Coop vs. KI"),
             Map.entry(840, "Coop vs. KI"), Map.entry(850, "Coop vs. KI"), Map.entry(870, "Coop vs. KI"),
             Map.entry(880, "Coop vs. KI"), Map.entry(890, "Coop vs. KI"), Map.entry(2300, "Brawl"),
-            Map.entry(2400, "ARAM: Mayhem"), Map.entry(3100, "Tournament Code (Custom Game)"));
+            Map.entry(2400, "ARAM: Mayhem"), Map.entry(3100, "Custom Games"), Map.entry(3130, "Custom Games"));
     private static final Map<String, String> POSITIONS = Map.of("TOP", "Top", "JUNGLE", "Jungle", "MIDDLE", "Mid",
-            "BOTTOM", "Bot", "UTILITY", "Support");
+            "BOTTOM", "ADC", "UTILITY", "Support");
     private static final Map<String, String> RANKED_QUEUES = Map.of("RANKED_SOLO_5x5", "Solo/Duo", "RANKED_FLEX_SR", "Flex");
 
     private final RiotApiClient api;
     private final FileCache cache;
     private final String patch;
-    private final BiConsumer<Integer, Integer> progress;
+    private final Progress progress;
 
-    /** @param progress erhält (fertig, gesamt) während die Matches geladen werden */
-    SummonerLookup(RiotApiClient api, FileCache cache, String patch, BiConsumer<Integer, Integer> progress) {
+    /** Fortschritt beim Laden: {@code done} von {@code total} neuen Matches, {@code cached} kamen aus dem Cache. */
+    @FunctionalInterface
+    interface Progress {
+        void report(int done, int total, int cached);
+    }
+
+    SummonerLookup(RiotApiClient api, FileCache cache, String patch, Progress progress) {
         this.api = api;
         this.cache = cache;
         this.patch = patch;
@@ -73,14 +87,14 @@ final class SummonerLookup {
             JsonNode summoner = summoner(account);
             List<LeagueEntry> ranked = api.leagueEntriesByPuuid(account.puuid());
             JsonNode masteries = api.topChampionMasteries(account.puuid(), MASTERY_COUNT);
-            List<Map<String, Object>> matches = matches(account.puuid(), matchCount);
+            Matches matches = matches(account.puuid(), matchCount);
             return Dto.obj(
                     "gameName", account.gameName(), "tagLine", account.tagLine(), "platform", api.platform().id(),
                     "level", summoner.path("summonerLevel").asInt(),
                     "icon", "/img/" + patch + "/profileicon/" + summoner.path("profileIconId").asInt() + ".png",
                     "ranked", ranked.stream().filter(e -> RANKED_QUEUES.containsKey(e.queueType())).map(SummonerLookup::ranked).toList(),
                     "mastery", mastery(masteries),
-                    "matches", matches);
+                    "matches", matches.rows(), "mates", matches.mates(), "minSharedGames", MIN_SHARED_GAMES);
         } catch (RiotApiException e) {
             throw new ApiException(e.isAuthProblem() ? 403 : 502, e.getMessage());
         }
@@ -137,37 +151,149 @@ final class SummonerLookup {
 
     // ------------------------------------------------------------------ Matches
 
-    private List<Map<String, Object>> matches(String puuid, int count) throws IOException {
-        List<String> ids = api.recentMatchIds(puuid, count);
+    /** Matches der Abfrage und daraus die häufigen Mitspieler. */
+    private record Matches(List<Map<String, Object>> rows, List<Map<String, Object>> mates) {
+    }
+
+    private Matches matches(String puuid, int count) throws IOException {
+        List<String> ids = matchIds(puuid, count);
+        SummonerHistory history = loadHistory(puuid);
+        List<String> missing = new ArrayList<>();
+        for (String id : ids) {
+            if (!history.contains(id) && !adoptLegacy(history, id)) {
+                missing.add(id);
+            }
+        }
+        try {
+            download(history, missing, ids.size() - missing.size());
+        } catch (IOException | RuntimeException e) {
+            // Bereits geladene Matches nicht verlieren, z. B. wenn der Key mitten im Abruf abläuft.
+            try {
+                save(history);
+            } catch (IOException suppressed) {
+                e.addSuppressed(suppressed);
+            }
+            throw e;
+        }
+        List<Map<String, Object>> rows = new ArrayList<>();
+        List<JsonNode> stored = new ArrayList<>();
+        for (String id : ids) {
+            history.match(id).filter(m -> !isExcluded(m.path("queueId").asInt())).ifPresent(m -> {
+                rows.add(matchRow(id, m, m.path("p")));
+                stored.add(m);
+            });
+        }
+        List<Map<String, Object>> mates = mates(history, rows, stored);
+        save(history);
+        return new Matches(rows, mates);
+    }
+
+    /** Übungstool (PRACTICETOOL, Queue 3140) zählt nicht zur Wertung und erscheint weder in Spielen noch bei Mitspielern. */
+    static boolean isExcluded(int queueId) {
+        return queueId == PRACTICE_TOOL_QUEUE;
+    }
+
+    /** Neueste Match-IDs, seitenweise zu je {@value #PAGE_SIZE} (Riots Obergrenze je Aufruf). */
+    private List<String> matchIds(String puuid, int count) throws IOException {
+        Set<String> ids = new LinkedHashSet<>();
+        for (int start = 0; start < count; start += PAGE_SIZE) {
+            int size = Math.min(PAGE_SIZE, count - start);
+            List<String> page = api.recentMatchIds(puuid, start, size);
+            ids.addAll(page);
+            if (page.size() < size) {
+                break;
+            }
+        }
+        return ids.stream().limit(count).toList();
+    }
+
+    private SummonerHistory loadHistory(String puuid) {
+        Optional<Path> file = cache.file(FileCache.GLOBAL, SummonerHistory.cacheKey(puuid));
+        if (file.isPresent()) {
+            try {
+                return SummonerHistory.read(puuid, Files.readAllBytes(file.get()));
+            } catch (IOException e) {
+                // Beschädigte Datei: neu aufbauen, die Matches werden erneut geladen.
+            }
+        }
+        return new SummonerHistory(puuid);
+    }
+
+    private void save(SummonerHistory history) throws IOException {
+        byte[] gzip = history.changedGzip();
+        if (gzip == null) {
+            return;
+        }
+        try {
+            cache.writeBytes(FileCache.GLOBAL, SummonerHistory.cacheKey(history.puuid()), gzip);
+        } catch (IOException e) {
+            history.markDirty();
+            throw e;
+        }
+    }
+
+    /**
+     * Übernimmt ein Match aus dem früheren Cache (eine Datei je Match, alle Teilnehmer ohne Riot-ID). Dort wird
+     * nichts mehr geschrieben; die Dateien bleiben für die Historien anderer Spieler lesbar.
+     */
+    private boolean adoptLegacy(SummonerHistory history, String id) {
+        try {
+            Optional<String> legacy = cache.readText(FileCache.GLOBAL, SummonerHistory.LEGACY_PREFIX + id + ".json");
+            return legacy.isPresent() && history.add(id, JSON.readTree(legacy.get()));
+        } catch (IOException e) {
+            return false;
+        }
+    }
+
+    /** Lädt die fehlenden Matches parallel; das Rate-Limit regelt der Client. */
+    private void download(SummonerHistory history, List<String> missing, int cached) throws IOException {
         AtomicInteger done = new AtomicInteger();
-        progress.accept(0, ids.size());
-        List<Future<Optional<JsonNode>>> downloads = new ArrayList<>();
-        List<Map<String, Object>> result = new ArrayList<>();
-        try (ExecutorService pool = Executors.newFixedThreadPool(PARALLEL_DOWNLOADS, r -> {
+        progress.report(0, missing.size(), cached);
+        if (missing.isEmpty()) {
+            return;
+        }
+        ExecutorService pool = Executors.newFixedThreadPool(PARALLEL_DOWNLOADS, r -> {
             Thread t = new Thread(r, "lt-summoner");
             t.setDaemon(true);
             return t;
-        })) {
-            for (String id : ids) {
+        });
+        try {
+            List<Future<?>> downloads = new ArrayList<>();
+            for (String id : missing) {
                 downloads.add(pool.submit(() -> {
-                    Optional<JsonNode> match = compactMatch(id);
-                    progress.accept(done.incrementAndGet(), ids.size());
-                    return match;
+                    fetchMatch(history, id);
+                    progress.report(done.incrementAndGet(), missing.size(), cached);
+                    return null;
                 }));
             }
-            for (int i = 0; i < ids.size(); i++) {
-                Optional<JsonNode> match = await(downloads.get(i));
-                if (match.isPresent()) {
-                    match(ids.get(i), match.get(), puuid).ifPresent(result::add);
+            for (int i = 0; i < downloads.size(); i++) {
+                await(downloads.get(i));
+                if ((i + 1) % SAVE_EVERY == 0) {
+                    save(history);
                 }
             }
+        } finally {
+            // Bei einem Fehler nicht auf die restlichen (gedrosselten) Abrufe warten.
+            pool.shutdownNow();
         }
-        return result;
     }
 
-    private static Optional<JsonNode> await(Future<Optional<JsonNode>> future) throws IOException {
+    private void fetchMatch(SummonerHistory history, String id) throws IOException {
         try {
-            return future.get();
+            if (!history.add(id, api.match(id).path("info"))) {
+                history.markGone(id);
+            }
+        } catch (RiotApiException e) {
+            if (!e.isNotFound()) {
+                throw e;
+            }
+            history.markGone(id);
+        }
+    }
+
+    private static void await(Future<?> future) throws IOException {
+        try {
+            future.get();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new IOException("Abfrage unterbrochen", e);
@@ -179,53 +305,67 @@ final class SummonerLookup {
         }
     }
 
-    /** Match aus dem Cache oder von der API; leer, wenn Riot es nicht (mehr) kennt. */
-    private Optional<JsonNode> compactMatch(String id) throws IOException {
-        String key = "riot/match/" + id + ".json";
-        Optional<String> cached = cache.readText(FileCache.GLOBAL, key);
-        if (cached.isPresent()) {
-            return Optional.of(JSON.readTree(cached.get()));
-        }
-        JsonNode full;
-        try {
-            full = api.match(id);
-        } catch (RiotApiException e) {
-            if (e.isNotFound()) {
-                return Optional.empty();
-            }
-            throw e;
-        }
-        JsonNode compact = compact(full.path("info"));
-        cache.writeText(FileCache.GLOBAL, key, JSON.writeValueAsString(compact));
-        return Optional.of(compact);
-    }
+    // ------------------------------------------------------------------ Mitspieler
 
-    private static JsonNode compact(JsonNode info) {
-        ObjectNode out = JSON.createObjectNode();
-        for (String field : INFO_FIELDS) {
-            if (info.has(field)) {
-                out.set(field, info.get(field));
+    /**
+     * Teamkollegen mit mindestens {@value #MIN_SHARED_GAMES} gemeinsamen Spielen (ohne Remakes), häufigste zuerst.
+     * Jede Match-Zeile bekommt {@code mates} mit Verweisen in diese Liste; die Winrate je Duo rechnet die Anzeige,
+     * damit der Modus-Filter mitwirkt.
+     */
+    private List<Map<String, Object>> mates(SummonerHistory history, List<Map<String, Object>> rows,
+                                            List<JsonNode> stored) throws IOException {
+        Map<Integer, Integer> games = new HashMap<>();
+        for (int i = 0; i < rows.size(); i++) {
+            if (!(Boolean) rows.get(i).get("remake")) {
+                stored.get(i).path("mates").forEach(ref -> games.merge(ref.asInt(), 1, Integer::sum));
             }
         }
-        var participants = out.putArray("participants");
-        for (JsonNode p : info.path("participants")) {
-            ObjectNode compact = participants.addObject();
-            for (String field : PARTICIPANT_FIELDS) {
-                if (p.has(field)) {
-                    compact.set(field, p.get(field));
+        List<Integer> selected = games.entrySet().stream()
+                .filter(e -> e.getValue() >= MIN_SHARED_GAMES)
+                .sorted(Map.Entry.<Integer, Integer>comparingByValue().reversed().thenComparing(Map.Entry.comparingByKey()))
+                .limit(MAX_MATES).map(Map.Entry::getKey).toList();
+        resolveNames(history, selected);
+        Map<Integer, Integer> position = new HashMap<>();
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (int ref : selected) {
+            SummonerHistory.Mate mate = history.mate(ref);
+            position.put(ref, result.size());
+            result.add(Dto.obj("name", mate.name(), "tag", mate.tag()));
+        }
+        for (int i = 0; i < rows.size(); i++) {
+            List<Integer> refs = new ArrayList<>();
+            stored.get(i).path("mates").forEach(ref -> {
+                Integer pos = position.get(ref.asInt());
+                if (pos != null) {
+                    refs.add(pos);
                 }
-            }
+            });
+            rows.get(i).put("mates", refs);
         }
-        return out;
+        return result;
     }
 
-    private static Optional<Map<String, Object>> match(String id, JsonNode info, String puuid) {
-        for (JsonNode p : info.path("participants")) {
-            if (puuid.equals(p.path("puuid").asText())) {
-                return Optional.of(matchRow(id, info, p));
+    /** Fehlende Riot-IDs (Mitspieler aus dem alten Cache) über account-v1 nachtragen, höchstens wenige Aufrufe. */
+    private void resolveNames(SummonerHistory history, List<Integer> refs) throws IOException {
+        int lookups = 0;
+        for (int ref : refs) {
+            SummonerHistory.Mate mate = history.mate(ref);
+            if (!mate.name().isBlank() || lookups >= MAX_NAME_LOOKUPS) {
+                continue;
+            }
+            lookups++;
+            try {
+                RiotAccount account = api.accountByPuuid(mate.puuid());
+                if (!account.gameName().isBlank()) {
+                    history.rename(ref, account.gameName(), account.tagLine());
+                }
+            } catch (RiotApiException e) {
+                if (e.isAuthProblem()) {
+                    throw e;
+                }
+                // Konto unbekannt oder Fehler: ohne Namen anzeigen.
             }
         }
-        return Optional.empty();
     }
 
     /**

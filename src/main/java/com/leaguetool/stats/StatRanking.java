@@ -8,8 +8,8 @@ import java.util.Optional;
  * Dieselben Statistik-Zeilen in zwei Sortierungen.
  *
  * @param mostFrequent alle Zeilen, häufigste zuerst ({@link StatLine#mostFrequent})
- * @param best         nur Zeilen mit mindestens {@code minGames} Spielen, höchste Wilson-Untergrenze zuerst
- *                     ({@link StatLine#bestByWilson})
+ * @param best         nur Zeilen mit mindestens {@code minGames} Spielen, höchste Bayes-Untergrenze zuerst
+ *                     ({@link BayesScore#best})
  * @param minGames     Mindest-Stichprobe für {@code best}
  */
 public record StatRanking<K>(List<StatLine<K>> mostFrequent, List<StatLine<K>> best, int minGames) {
@@ -20,7 +20,7 @@ public record StatRanking<K>(List<StatLine<K>> mostFrequent, List<StatLine<K>> b
     }
 
     public static <K> StatRanking<K> of(Collection<StatLine<K>> lines, int minGames) {
-        return new StatRanking<>(StatLine.mostFrequent(lines), StatLine.bestByWilson(lines, minGames), minGames);
+        return new StatRanking<>(StatLine.mostFrequent(lines), BayesScore.best(lines, minGames), minGames);
     }
 
     public boolean isEmpty() {
@@ -32,7 +32,7 @@ public record StatRanking<K>(List<StatLine<K>> mostFrequent, List<StatLine<K>> b
         return mostFrequent.isEmpty() ? Optional.empty() : Optional.of(mostFrequent.get(0));
     }
 
-    /** Beste Zeile nach Wilson (mit Mindest-Stichprobe). */
+    /** Beste Zeile nach Bayes-Untergrenze (mit Mindest-Stichprobe). */
     public Optional<StatLine<K>> topBest() {
         return best.isEmpty() ? Optional.empty() : Optional.of(best.get(0));
     }

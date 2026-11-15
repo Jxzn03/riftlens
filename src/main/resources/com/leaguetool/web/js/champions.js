@@ -2,7 +2,8 @@
 import { html, useMemo, useEffect } from '/vendor/htm-preact.js';
 import {
   useStore, useViewState, useFetch, useStatsUrl, useSourceLabel, useDeferredUrl, useWinRateClass, select, go, normalize,
-  sortRows, activeSort, percent, winRateText, summary, setPref,
+  sortRows, activeSort, percent, winRateText, summary, setPref, useChampionRole, useChampionStatsUrl,
+  useBuildQuery, runePageRunes, importRunePage,
 } from './core.js';
 import {
   Icon, Img, Card, Button, SearchInput, Segmented, Slider, Tag, Meter, DataGrid, RateCell, VirtualTable, MasterDetail, HelpTip,
@@ -14,7 +15,7 @@ const DETAIL_DEFAULTS = { tab: 'overview' };
 const DETAIL_TABS = [
   { value: 'overview', label: 'Übersicht' },
   { value: 'stats', label: 'Match-Statistik', tip: 'Build, Runen, Skills und Spells laut Lolalytics' },
-  { value: 'counters', label: 'Counters', tip: 'Strong Against, Weak Against und Delta-Werte dieses Champions' },
+  { value: 'counters', label: 'Counters', tip: 'Beste und schlechteste Picks gegen diesen Champion und Advanced Stats (Delta-Werte), aus Sicht des Gegners' },
 ];
 /** Nachkommastellen der Winrates auf der Champions-Seite. */
 const WR_DECIMALS = 2;
@@ -42,9 +43,9 @@ const gamesCell = (r) => (stat(r, 'games') === null ? html`<span class="muted">�
 
 function rateColumns(tips) {
   return [
-    { key: 'wr', title: 'WR', width: '68px', align: 'right', firstDir: -1, tip: tips.wr, value: (r) => stat(r, 'winRate'), render: (r) => html`<${RateCell} value=${stat(r, 'winRate')} decimals=${WR_DECIMALS} />` },
-    { key: 'pr', title: 'PR', width: '60px', align: 'right', firstDir: -1, tip: tips.pr, value: (r) => stat(r, 'pickRate'), render: (r) => html`<${RateCell} value=${stat(r, 'pickRate')} neutral />` },
-    { key: 'br', title: 'BR', width: '60px', align: 'right', firstDir: -1, tip: tips.br, value: banRate, render: (r) => html`<${RateCell} value=${banRate(r)} neutral />` },
+    { key: 'wr', title: 'Winrate', width: '84px', align: 'right', firstDir: -1, tip: tips.wr, value: (r) => stat(r, 'winRate'), render: (r) => html`<${RateCell} value=${stat(r, 'winRate')} decimals=${WR_DECIMALS} />` },
+    { key: 'pr', title: 'Pickrate', width: '84px', align: 'right', firstDir: -1, tip: tips.pr, value: (r) => stat(r, 'pickRate'), render: (r) => html`<${RateCell} value=${stat(r, 'pickRate')} neutral />` },
+    { key: 'br', title: 'Banrate', width: '84px', align: 'right', firstDir: -1, tip: tips.br, value: banRate, render: (r) => html`<${RateCell} value=${banRate(r)} neutral />` },
     { key: 'games', title: 'Spiele', width: '84px', align: 'right', firstDir: -1, tip: tips.games, value: (r) => stat(r, 'games'), render: gamesCell },
   ];
 }
@@ -84,6 +85,9 @@ const LOLALYTICS_COLUMNS = [
   ...LOLALYTICS_RATES.slice(0, 3), PBI_COLUMN, LOLALYTICS_RATES[3],
 ];
 
+/** Spaltenköpfe, deren Tooltip nur mit „Show Advanced Tooltips“ erscheint. */
+const PLAIN_HEAD_COLUMNS = new Set(['lane', 'tier', 'wr', 'pr', 'br', 'games']);
+
 /** Bei gefilterter Rolle zusätzlich die Stärke direkt hinter dem Tier. */
 const LOLALYTICS_ROLE_COLUMNS = [...LOLALYTICS_COLUMNS.slice(0, 3), STRENGTH_COLUMN, ...LOLALYTICS_COLUMNS.slice(3)];
 
@@ -93,7 +97,11 @@ export function ChampionsView({ id }) {
   // Eigener Zustand: Der Tab bleibt beim Durchklicken der Champions erhalten.
   const [detailView, setDetailView] = useViewState('champion-detail', DETAIL_DEFAULTS);
   const role = useStore((s) => s.filter.role);
-  const columns = role ? LOLALYTICS_ROLE_COLUMNS : LOLALYTICS_COLUMNS;
+  const advancedTips = useAdvancedTips();
+  const columns = useMemo(() => {
+    const all = role ? LOLALYTICS_ROLE_COLUMNS : LOLALYTICS_COLUMNS;
+    return advancedTips ? all : all.map((c) => (PLAIN_HEAD_COLUMNS.has(c.key) ? { ...c, tip: undefined } : c));
+  }, [role, advancedTips]);
   const sort = activeSort(columns, view.sort);
   const statsUrl = useStatsUrl('/api/stats/champions');
   const statsFetch = useFetch(statsUrl, { keep: true });
@@ -143,13 +151,16 @@ export function ChampionsView({ id }) {
 function ChampionDetail({ champion, tab, onTab }) {
   const data = useStore((s) => s.data);
   // Liegt über den Tabs, damit der Wechsel sofort und ohne neue Anfrage geht.
-  const report = useChampionReport(champion);
+  const roleState = useChampionRole(champion.key);
+  const report = useChampionReport(champion, roleState.role);
   const level = useStore((s) => s.prefs.level);
+  const advancedTips = useAdvancedTips();
   const build = useStore((s) => s.build);
+  const buildQuery = useBuildQuery();
   const wiki = useFetch(`/api/champions/${champion.id}/wiki`);
   const details = useFetch(`/api/champions/${champion.id}/detail`);
   const asRatio = wiki.data && wiki.data.asRatio !== undefined ? wiki.data.asRatio : '';
-  const levels = useFetch(`/api/champions/${champion.id}/levels?items=${build.join(',')}&asRatio=${asRatio}`, { keep: true });
+  const levels = useFetch(`/api/champions/${champion.id}/levels?${buildQuery}&asRatio=${asRatio}`, { keep: true });
   const i = champion.info;
 
   const overview = () => html`
@@ -176,7 +187,7 @@ function ChampionDetail({ champion, tab, onTab }) {
       ${details.loading ? html`<${Skeleton} lines=${4} />` : null}
       ${details.error ? html`<${ErrorNote} prefix="Fähigkeiten nicht verfügbar" error=${details.error} />` : null}
       ${details.data ? html`<div class="ability-list">${details.data.abilities.map((a) => html`
-        <div class="ability-row" key=${a.slot} data-tip=${a.description}>
+        <div class="ability-row" key=${a.slot} data-tip=${advancedTips ? a.description : undefined}>
           <${Img} src=${a.icon} size=${38} />
           <div><strong><span class="slot">${a.slotLabel}</span> ${a.name}</strong><small>${a.cooldownSummary}</small></div>
         </div>`)}</div>` : null}
@@ -197,21 +208,28 @@ function ChampionDetail({ champion, tab, onTab }) {
     <${WikiCompare} wiki=${wiki} />`;
 
   return html`<div class="detail">
-    <div class="detail-tabs"><${Segmented} label="Ansicht" value=${tab} options=${DETAIL_TABS} onChange=${onTab} /></div>
+    <div class="detail-tabs">
+      <${Segmented} label="Ansicht" value=${tab} onChange=${onTab}
+        options=${advancedTips ? DETAIL_TABS : DETAIL_TABS.map(({ tip, ...tab }) => tab)} />
+      <${ChampionRoleSelect} champion=${champion} roleState=${roleState} report=${report} />
+    </div>
     ${tab === 'counters' ? html`<${CountersTab} champion=${champion} report=${report} data=${data} />`
       : tab === 'stats' ? html`<${StatsTab} champion=${champion} report=${report} data=${data} />` : overview()}
   </div>`;
 }
 
 function BuildValues({ levels, level, build, data }) {
+  const runePage = useStore((s) => s.runePage);
   if (!levels) {
     return null;
   }
-  return html`<${Card} title="Werte mit Build">
-    ${build.length === 0
-      ? html`<p class="muted">Kein Build – in der Ansicht Items Gegenstände zum Build-Rechner hinzufügen.</p>`
-      : html`<div class="build-strip"><${ItemIcons} data=${data} ids=${build} size=${32} />
-          <span class="muted">${levels.itemCount} Items (${levels.gold.toLocaleString('de-DE')} Gold), Level ${level}. Mit dauerhaften prozentualen Item-Effekten (z. B. Rabadon's), ohne sonstige Passiven und Runen.</span></div>
+  const runes = runePageRunes(runePage);
+  const runeText = levels.runeCount ? `Runenseite mit ${runes.length} Runen${runePage.shards.every((s) => s !== null) ? ' und Shards' : ''}` : 'ohne Runen';
+  return html`<${Card} title="Werte mit Build" aside=${html`<${Button} kind="ghost" onClick=${() => go('runes', 'page')}>Runen bearbeiten<//>`}>
+    ${build.length === 0 && !levels.runeCount
+      ? html`<p class="muted">Kein Build – in der Ansicht Items Gegenstände zum Build-Rechner hinzufügen und unter Runen eine Runenseite wählen.</p>`
+      : html`<div class="build-strip"><${ItemIcons} data=${data} ids=${build} size=${32} /><${RuneIcons} data=${data} ids=${runes} size=${28} />
+          <span class="muted">${levels.itemCount} Items (${levels.gold.toLocaleString('de-DE')} Gold), ${runeText}, Level ${level}. Mit dauerhaften prozentualen Item-Effekten (z. B. Rabadon's), ohne sonstige Passiven.</span></div>
         <${DataGrid} head=${['Wert', 'Gesamt', 'davon Bonus']}
           rows=${levels.finals[level - 1].map((r) => [r.label, html`<strong>${r.total}</strong>`, r.bonus])} />
         ${data.itemPassives ? html`<${PassiveStatus} info=${data.itemPassives} />` : null}`}
@@ -220,8 +238,9 @@ function BuildValues({ levels, level, build, data }) {
 
 /** Stand der automatisch je Patch geprüften Item-Effekte; Details stehen im Tooltip. */
 function PassiveStatus({ info }) {
+  const advancedTips = useAdvancedTips();
   const tip = [...info.changes, ...info.review.map((r) => `Nicht auswertbar: ${r}`), ...info.notes].join('\n');
-  return html`<p class="muted small" data-tip=${tip || undefined}>
+  return html`<p class="muted small" data-tip=${advancedTips && tip ? tip : undefined}>
     Item-Effekte für Patch ${info.patch || '–'} geprüft: ${info.count} aktiv${info.changes.length ? ` · ${info.changes.length} automatisch aktualisiert` : ''}${info.review.length ? ` · ${info.review.length} nicht auswertbar` : ''}
   </p>`;
 }
@@ -245,29 +264,45 @@ function WikiCompare({ wiki }) {
   return html`<${Card} title="Zusatzdaten" aside=${html`<span class="muted">LoL-Wiki</span>`}>${body}<//>`;
 }
 
-/** Rangliste: beste nach Wilson-Untergrenze, sonst häufigste. */
-function Ranking({ title, ranking, render, children }) {
+/** Rangliste: beste nach Bayes-Untergrenze, sonst häufigste. */
+/**
+ * @param withMostPlayed zeigt unter den besten zusätzlich den meistgespielten Eintrag, kompakt im selben Platz; steht
+ *                       er schon unter den besten, wird nur diese Zeile markiert
+ */
+function Ranking({ title, ranking, render, children, withMostPlayed = false }) {
   const winRateClass = useWinRateClass();
+  const advancedTips = useAdvancedTips();
   const hasLines = ranking && ranking.lines.length > 0;
-  return html`<div class="ranking">
+  const mostPlayed = withMostPlayed && ranking ? ranking.mostPlayed : null;
+  const sameKey = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+  const mostPlayedListed = Boolean(mostPlayed) && ranking.lines.some((line) => sameKey(line.key, mostPlayed.key));
+  const row = (line, key, label) => html`<div class=${`rank-line ${label ? 'most-played' : ''}`} key=${key}>
+    <div class="rank-key">${render(line.key)}${label ? html`<${Tag} kind="soft">${label}<//>` : null}</div>
+    <div class="rank-stats" data-tip=${advancedTips ? summary(line, WR_DECIMALS) : undefined}>
+      <span class=${winRateClass(line.winRate)}>${percent(line.winRate, WR_DECIMALS)}</span>
+      <small>${percent(line.pickRate)} PR · ${line.games.toLocaleString('de-DE')} Spiele</small>
+    </div>
+  </div>`;
+  return html`<div class=${`ranking ${withMostPlayed ? 'compact' : ''}`}>
     <h4>${title}</h4>
     ${!hasLines ? html`<p class="muted small">keine Daten</p>` : html`
-      <p class="muted small">${ranking.best ? `beste nach Wilson-Untergrenze (≥ ${ranking.minGames.toLocaleString('de-DE')} Spiele)` : 'häufigste (zu wenige Spiele für ein Wilson-Ranking)'}</p>
-      ${ranking.lines.map((line, i) => html`<div class="rank-line" key=${i}>
-        <div class="rank-key">${render(line.key)}</div>
-        <div class="rank-stats" data-tip=${summary(line, WR_DECIMALS)}>
-          <span class=${winRateClass(line.winRate)}>${percent(line.winRate, WR_DECIMALS)}</span>
-          <small>${percent(line.pickRate)} PR · ${line.games.toLocaleString('de-DE')} Spiele</small>
-        </div>
-      </div>`)}`}
+      <p class="muted small">${ranking.best ? `beste nach Bayes-Untergrenze (≥ ${ranking.minGames.toLocaleString('de-DE')} Spiele)` : 'häufigste (zu wenige Spiele für ein Wilson-Ranking)'}</p>
+      ${ranking.lines.map((line, i) => row(line, i, mostPlayedListed && sameKey(line.key, mostPlayed.key) ? 'Meistgespielt' : null))}
+      ${mostPlayed && !mostPlayedListed ? row(mostPlayed, 'most-played', 'Meistgespielt') : null}`}
     ${children}
   </div>`;
 }
 
-/** Skillung je Level; Level 7–9 sind abgeleitet, weil Lolalytics nur die ersten sechs Punkte liefert. */
+/** Schalter "Show Advanced Tooltips" aus den Einstellungen (Standard aus). */
+const useAdvancedTips = () => useStore((s) => Boolean(s.prefs.advancedTips));
+
+const SKILL_PATH_TIP = 'Level 1–6: beste Startreihenfolge laut Lolalytics. Level 7–9 sind daraus und aus der besten Max-Reihenfolge abgeleitet, Lolalytics liefert sie nicht einzeln.';
+
+/** Skillung je Level; Level 7–18 sind abgeleitet, weil Lolalytics nur die ersten sechs Punkte liefert. */
 function SkillPathGrid({ path }) {
+  const advancedTips = useAdvancedTips();
   return html`<div class="skill-path">
-    <p class="muted small" data-tip="Level 1–6: beste Startreihenfolge laut Lolalytics. Level 7–9 sind daraus und aus der besten Max-Reihenfolge abgeleitet, Lolalytics liefert sie nicht einzeln.">Beste Skillung Level 1–${path.length}</p>
+    <p class="muted small" data-tip=${advancedTips ? SKILL_PATH_TIP : undefined}>Beste Skillung Level 1–${path.length}</p>
     <div class="skill-path-grid">${path.map((slot, i) => html`<div key=${i}><small>${i + 1}</small><kbd>${slot}</kbd></div>`)}</div>
   </div>`;
 }
@@ -276,10 +311,29 @@ export function SkillOrder({ order, separator }) {
   return html`<span class="skills">${order.map((slot, i) => html`<span key=${i} class="skills-part">${i > 0 ? html`<span class="skills-sep">${separator}</span>` : null}<kbd>${slot}</kbd></span>`)}</span>`;
 }
 
-function useChampionReport(champion) {
-  const url = useStatsUrl(`/api/stats/report/${champion.key}`);
+/** Report des Champions auf seiner Rolle; eine neue Rolle lädt erst dann ihre Daten. */
+export function useChampionReport(champion, role) {
+  const url = useChampionStatsUrl(`/api/stats/report/${champion.key}`, role);
   const deferred = useDeferredUrl(url, REPORT_DELAY);
   return { ...useFetch(deferred), pending: !deferred };
+}
+
+/**
+ * Rollenwahl eines Champions für alle Reiter. „Auto“ nennt die gerade verwendete Rolle: den Rollenfilter oder die
+ * häufigste Rolle laut Lolalytics (aus dem geladenen Report).
+ */
+export function ChampionRoleSelect({ champion, roleState, report }) {
+  const meta = useFetch(useStatsUrl('/api/stats/meta'), { keep: true });
+  const advancedTips = useAdvancedTips();
+  const roles = meta.data ? meta.data.roles : [];
+  const { chosen, role, setRole } = roleState;
+  const filterLabel = roles.find((r) => r.value === role)?.label;
+  const autoLane = !chosen && report.data && report.data.counters ? report.data.counters.lane : null;
+  const autoLabel = chosen ? 'Auto' : `Auto${autoLane ? ` (${autoLane})` : filterLabel ? ` (${filterLabel})` : ''}`;
+  return html`<div class="champion-role" data-tip=${advancedTips ? `Rolle von ${champion.name} für Match-Statistik, Counters und Fähigkeiten. Auto: Rollenfilter, sonst die häufigste Rolle. Eine andere Rolle lädt ihre Daten erst bei Auswahl.` : undefined}>
+    <${Segmented} label=${`Rolle von ${champion.name}`} value=${chosen} onChange=${setRole}
+      options=${[{ value: '', label: autoLabel }, ...roles]} />
+  </div>`;
 }
 
 /** Anzeige für Laden, Fehler und fehlende Spiele; {@code null}, wenn der Report vorliegt. */
@@ -298,25 +352,26 @@ function reportPlaceholder(report) {
 
 const LATE_ITEMS_TIP = 'Häufigste Items auf den Itemplätzen 3 bis 5 laut Lolalytics, Boots zählen nicht mit. Spiele und Winrate sind über alle drei Plätze zusammengerechnet, die Winrate nach Spielen gewichtet. Die Liste gilt über alle Spiele, nicht für einen bestimmten Core-Build. Winrates späterer Itemplätze sind überhöht, weil vor allem gut laufende Spiele so weit kommen.';
 
+function lateItemTip(line) {
+  const slots = line.slots.map((s) => `Itemplatz ${s.slot}: ${s.games.toLocaleString('de-DE')}`).join(' · ');
+  return `${percent(line.winRate, WR_DECIMALS)} WR · ${line.games.toLocaleString('de-DE')} Spiele (${slots})`;
+}
+
 /** Eigener Eintrag: Lolalytics kennt nur Builds mit 3 Items, danach gibt es Listen je Itemplatz. */
 function LateItems({ lines, data }) {
+  const advancedTips = useAdvancedTips();
   return html`<div class="ranking">
-    <h4 data-tip=${LATE_ITEMS_TIP}>Items nach dem Core-Build</h4>
+    <h4 data-tip=${advancedTips ? LATE_ITEMS_TIP : undefined}>Items nach dem Core-Build</h4>
     ${lines.length === 0 ? html`<p class="muted small">keine Daten</p>` : html`
       <p class="muted small">häufigste auf Itemplatz 3–5</p>
       <div class="late-items">${lines.map((line) => html`<div class="late-item" key=${line.item}>
         <${ItemIcons} data=${data} ids=${[line.item]} />
-        <div class="late-item-stats" data-tip=${lateItemTip(line)}>
+        <div class="late-item-stats" data-tip=${advancedTips ? lateItemTip(line) : undefined}>
           <span>${percent(line.pickRate, 1)}</span>
           <small>${percent(line.winRate, 1)} WR</small>
         </div>
       </div>`)}</div>`}
   </div>`;
-}
-
-function lateItemTip(line) {
-  const slots = line.slots.map((s) => `Itemplatz ${s.slot}: ${s.games.toLocaleString('de-DE')}`).join(' · ');
-  return `${percent(line.winRate, WR_DECIMALS)} WR · ${line.games.toLocaleString('de-DE')} Spiele (${slots})`;
 }
 
 function MatchReport({ report, data }) {
@@ -326,6 +381,8 @@ function MatchReport({ report, data }) {
   if (!body && report.data) {
     const r = report.data;
     const items = (ids) => html`<${ItemIcons} data=${data} ids=${ids} />`;
+    // Kleinere Icons: Core-Build zeigt vier Zeilen im Platz von dreien.
+    const coreItems = (ids) => html`<${ItemIcons} data=${data} ids=${ids} size=${24} />`;
     body = html`
       <div class="report-head">
         <div class="kpi"><strong>${r.games.toLocaleString('de-DE')}</strong><span>Spiele</span></div>
@@ -334,11 +391,12 @@ function MatchReport({ report, data }) {
         <div class="kpi"><strong>${percent(r.banRate)}</strong><span>Banrate</span></div>
       </div>
       <div class="rankings">
-        <${Ranking} title="Core-Build (erste 3 Items inkl. Boots)" ranking=${r.coreBuilds} render=${items} />
+        <${Ranking} title="Core-Build (erste 3 Items inkl. Boots)" ranking=${r.coreBuilds} render=${coreItems} withMostPlayed />
         <${LateItems} lines=${r.lateItems} data=${data} />
         <${Ranking} title="Boots" ranking=${r.boots} render=${items} />
         <${Ranking} title="Startitems" ranking=${r.starters} render=${items} />
-        <${Ranking} title="Runenseite" ranking=${r.runePages} render=${(page) => html`<span class="rune-page"><${RuneIcons} data=${data} ids=${page.primary} size=${26} /><${RuneIcons} data=${data} ids=${page.sub} size=${26} /><small class="muted">${page.shards}</small></span>`} />
+        <${Ranking} title="Runenseite" ranking=${r.runePages} render=${(page) => html`<span class="rune-page"><${RuneIcons} data=${data} ids=${page.primary} size=${26} /><${RuneIcons} data=${data} ids=${page.sub} size=${26} /><small class="muted">${page.shards}</small>
+          <button type="button" class="chip-link import" onClick=${() => importRunePage(page)}>In Build-Rechner</button></span>`} />
         <${Ranking} title="Skill-Reihenfolge (Max)" ranking=${r.skillOrders} render=${(order) => html`<${SkillOrder} order=${order} separator="›" />`}>
           ${r.skillPath.length > 0 ? html`<${SkillPathGrid} path=${r.skillPath} />` : null}
         <//>
@@ -358,37 +416,34 @@ function CountersTab({ champion, report, data }) {
   return html`${NAME_COLUMN.render({ c: champion })}
     ${placeholder || !report.data
       ? html`<${Card} title="Counters">${placeholder}<//>`
-      : html`<${Counters} counters=${report.data.counters} data=${data} source=${sourceLabel} />`}`;
+      : html`<${Counters} champion=${champion} counters=${report.data.counters} data=${data} source=${sourceLabel} />`}`;
 }
 
-const TIP_DELTA1 = 'Delta 1 laut Lolalytics: Matchup-Winrate gegenüber dem allgemeinen Durchschnitt, in Prozentpunkten.';
-const TIP_DELTA2 = 'Delta 2 laut Lolalytics: Matchup-Winrate gegenüber dem normalisierten Erwartungswert, in Prozentpunkten.';
-const TIP_RATING = 'Bewertung: Delta 2 × Spiele / (Spiele + 700). Schätzt, um wie viele Prozentpunkte der Champion besser abschneidet, als die Stärke beider Champions erwarten lässt.';
-const TIP_PICK = 'Geschätzte Winrate dieses Gegners gegen den ausgewählten Champion, Matchup-Abweichung bei wenigen Spielen gedämpft. Höher = besserer Pick gegen den Champion. Schätzung, kein Lolalytics-Wert; enthält Pick-Auswahl und Spielerniveau, sagt also nicht, wie du persönlich abschneidest.';
-
+// Counters aus Sicht des Gegners: Er hat den Champion gepickt, die Zeilen sind die Picks dagegen.
 const field = (name) => (line) => line[name];
 const deltaColumns = (data) => [
-  { key: 'name', title: 'Gegner', firstDir: 1, value: (line) => data.championByKey.get(line.champion)?.name ?? null },
+  { key: 'name', title: 'Pick', firstDir: 1, value: (line) => data.championByKey.get(line.champion)?.name ?? null },
   { key: 'winRate', title: 'WR', value: field('winRate') },
-  { key: 'delta1', title: 'Delta 1', tip: TIP_DELTA1, value: field('delta1') },
-  { key: 'delta2', title: 'Delta 2', tip: TIP_DELTA2, value: field('delta2') },
-  { key: 'rating', title: 'Bewertung', tip: TIP_RATING, value: field('rating') },
-  { key: 'pick', title: 'Pick-WR', tip: TIP_PICK, value: field('pick') },
+  { key: 'pick', title: 'Pick-WR', value: field('pick') },
+  { key: 'delta1', title: 'Delta 1', value: field('delta1') },
+  { key: 'delta2', title: 'Delta 2', value: field('delta2') },
+  { key: 'rating', title: 'Bewertung', value: field('rating') },
   { key: 'games', title: 'Spiele', value: field('games') },
 ];
 const COUNTERS_DEFAULTS = { deltaSort: 'rating', deltaDir: -1 };
 
-const DELTA_HELP_ROWS = [
-  ['Delta 1', 'Matchup-Winrate minus (100 − Durchschnitts-Winrate des Gegners)', 'Der Champion schlägt diesen Gegner öfter als ein durchschnittlicher Champion.'],
-  ['Delta 2', 'Matchup-Winrate minus normalisierter Erwartungswert der Paarung', 'Er gewinnt öfter, als die allgemeine Stärke beider Champions erwarten lässt. Bester Hinweis auf einen echten Counter.'],
-  ['Bewertung', 'Delta 2 × Spiele / (Spiele + 700)', 'Eigene Kennzahl, kein Lolalytics-Wert: geschätzter echter Matchup-Effekt, zwischen Champions vergleichbar. Delta 1 fließt nicht ein, weil es sich je Champion nur um einen festen Wert von Delta 2 unterscheidet.'],
-  ['Pick-WR', '2 × Durchschnitts-WR − (Matchup-WR − Delta 2 × 700 / (Spiele + 700))', 'Geschätzte Winrate des Gegners gegen diesen Champion, inklusive seiner allgemeinen Stärke. Bewertung zeigt, wer ihn gezielt kontert; Pick-WR, mit wem man gegen ihn am häufigsten gewinnt.'],
+const deltaHelpRows = (name) => [
+  ['WR', `Winrate des Picks gegen ${name}: 2 × Durchschnitts-WR − Matchup-WR von ${name}`, `Mit diesem Pick gewinnt man gegen ${name} so oft (Lolalytics-Daten aus Sicht von ${name}, gespiegelt).`],
+  ['Delta 1', `WR des Picks minus (100 − Durchschnitts-Winrate von ${name})`, `Der Pick schlägt ${name} öfter als ein durchschnittlicher Champion.`],
+  ['Delta 2', 'WR des Picks minus normalisierter Erwartungswert der Paarung', `Er gewinnt öfter gegen ${name}, als die allgemeine Stärke beider Champions erwarten lässt. Bester Hinweis auf einen echten Counter.`],
+  ['Bewertung', 'Delta 2 × Spiele / (Spiele + 700)', 'Eigene Kennzahl, kein Lolalytics-Wert: geschätzter echter Counter-Effekt, zwischen Picks vergleichbar. Delta 1 fließt nicht ein, weil es sich je Champion nur um einen festen Wert von Delta 2 unterscheidet.'],
+  ['Pick-WR', '2 × Durchschnitts-WR − (Matchup-WR − Delta 2 × 700 / (Spiele + 700))', `Geschätzte Winrate des Picks gegen ${name}, inklusive seiner allgemeinen Stärke. Bewertung zeigt, wer ${name} gezielt kontert; Pick-WR, mit wem man gegen ${name} am häufigsten gewinnt.`],
 ];
 
-function DeltaHelp() {
+function DeltaHelp({ name }) {
   return html`<${HelpTip} label="Erklärung der Delta-Werte">
-    <${DataGrid} head=${['Wert', 'Bedeutung', 'Aussage bei positivem Wert']} rows=${DELTA_HELP_ROWS} />
-    <p class="muted small">Alle Werte sind Prozentpunkte, keine Winrate. Die Delta-Definitionen stammen aus Website-Tooltips und Community-Beiträgen, nicht aus einer offiziellen Doku.</p>
+    <${DataGrid} head=${['Wert', 'Bedeutung', 'Aussage bei positivem Wert']} rows=${deltaHelpRows(name)} />
+    <p class="muted small">Sicht des Gegners: ${name} ist gepickt, die Zeilen sind die Picks dagegen. Deltas sind Prozentpunkte, keine Winrate. Die Delta-Definitionen stammen aus Website-Tooltips und Community-Beiträgen, nicht aus einer offiziellen Doku.</p>
   <//>`;
 }
 
@@ -408,8 +463,9 @@ function CounterChampion({ data, championKey }) {
 
 function CounterList({ title, tip, lines, data }) {
   const winRateClass = useWinRateClass();
+  const advancedTips = useAdvancedTips();
   return html`<div class="ranking">
-    <h4 data-tip=${tip}>${title}</h4>
+    <h4 data-tip=${advancedTips ? tip : undefined}>${title}</h4>
     ${lines.length === 0 ? html`<p class="muted small">keine Daten</p>` : lines.map((line) => html`<div class="rank-line" key=${line.champion}>
       <div class="rank-key"><${CounterChampion} data=${data} championKey=${line.champion} /></div>
       <div class="rank-stats">
@@ -420,7 +476,7 @@ function CounterList({ title, tip, lines, data }) {
   </div>`;
 }
 
-function DeltaRanking({ lines, data }) {
+function DeltaRanking({ name, lines, data }) {
   const [view, setView] = useViewState('champion-counters', COUNTERS_DEFAULTS);
   const winRateClass = useWinRateClass();
   const hasDeltas = lines.some((line) => line.rating !== null);
@@ -446,26 +502,29 @@ function DeltaRanking({ lines, data }) {
       rows=${sorted.map((line) => [
         html`<${CounterChampion} data=${data} championKey=${line.champion} />`,
         html`<span class=${winRateClass(line.winRate)}>${percent(line.winRate, WR_DECIMALS)}</span>`,
-        signedPoints(line.delta1), signedPoints(line.delta2), html`<strong>${signedPoints(line.rating)}</strong>`,
         line.pick === null ? html`<span class="muted">–</span>` : html`<strong class=${winRateClass(line.pick)}>${percent(line.pick, WR_DECIMALS)}</strong>`,
+        signedPoints(line.delta1), signedPoints(line.delta2), html`<strong>${signedPoints(line.rating)}</strong>`,
         line.games.toLocaleString('de-DE'),
       ])} />`;
   }
   return html`<div class="ranking counter-delta">
     <div class="counter-delta-head">
-      <h4>Delta <${DeltaHelp} /></h4>
+      <h4>Advanced Stats <${DeltaHelp} name=${name} /></h4>
     </div>
     ${body}
   </div>`;
 }
 
-/** Strong/Weak zeigen nur die Winrates der Website, die eigene Bewertung steht ausschließlich im Eintrag Delta. */
-function Counters({ counters, data, source }) {
-  return html`<${Card} title="Counters" aside=${html`<span class="muted">${source} · Gegner ${counters.lane} · ab ${counters.minGames.toLocaleString('de-DE')} Spielen</span>`}>
+/**
+ * Sicht des Gegners: Er hat den Champion gepickt, gesucht sind die besten Picks dagegen. Beste/Schlechteste Picks zeigen
+ * nur die (gespiegelte) Winrate laut Daten, die eigene Bewertung steht ausschließlich im Eintrag Advanced Stats.
+ */
+function Counters({ champion, counters, data, source }) {
+  return html`<${Card} title=${`Counters gegen ${champion.name}`} aside=${html`<span class="muted">${source} · Picks ${counters.lane} · ab ${counters.minGames.toLocaleString('de-DE')} Spielen</span>`}>
     <div class="rankings">
-      <${CounterList} title="Strong Against" tip="Höchste Winrate gegen diese Gegner" lines=${counters.strong} data=${data} />
-      <${CounterList} title="Weak Against" tip="Niedrigste Winrate gegen diese Gegner" lines=${counters.weak} data=${data} />
-      <${DeltaRanking} lines=${counters.delta} data=${data} />
+      <${CounterList} title="Beste Picks dagegen" tip=${`Höchste Winrate gegen ${champion.name}`} lines=${counters.best} data=${data} />
+      <${CounterList} title="Schlechteste Picks dagegen" tip=${`Niedrigste Winrate gegen ${champion.name}`} lines=${counters.worst} data=${data} />
+      <${DeltaRanking} name=${champion.name} lines=${counters.delta} data=${data} />
     </div>
   <//>`;
 }

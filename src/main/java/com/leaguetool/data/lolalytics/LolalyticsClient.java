@@ -29,6 +29,8 @@ public final class LolalyticsClient {
     private final HttpFetcher http;
     private final FileCache cache;
     private final Duration minInterval;
+    /** Letzter Patchwechsel: ältere Statistik-Einträge gelten als veraltet (nicht für die Team-Werte des Drafts). */
+    private volatile java.util.function.Supplier<java.time.Instant> notBefore = () -> java.time.Instant.EPOCH;
     private final java.util.Map<String, Object> locks = new java.util.concurrent.ConcurrentHashMap<>();
     private long lastRequestNanos;
     private boolean requestedBefore;
@@ -42,6 +44,14 @@ public final class LolalyticsClient {
         this.http = Objects.requireNonNull(http, "http");
         this.cache = Objects.requireNonNull(cache, "cache");
         this.minInterval = Objects.requireNonNull(minInterval, "minInterval");
+    }
+
+    /**
+     * Grenze für veraltete Einträge nach einem Patchwechsel. Gilt für Tierlisten und Champion-Statistiken; die
+     * Team-Werte ({@link #teammates}) behalten ihre 12 Stunden (Vorgabe für die Draft-Synergien).
+     */
+    public void setNotBefore(java.util.function.Supplier<java.time.Instant> notBefore) {
+        this.notBefore = Objects.requireNonNull(notBefore, "notBefore");
     }
 
     /** Name einer Rolle in den URLs von Lolalytics. */
@@ -63,7 +73,7 @@ public final class LolalyticsClient {
         String t = safe(tier, "emerald_plus");
         String l = safe(lane, "all");
         String key = "lolalytics/tierlist_" + t + "_" + l + ".html";
-        FileCache.CacheResult res = cache.getFreshOrStale(FileCache.GLOBAL, key, MAX_AGE, () -> fetch(t, l));
+        FileCache.CacheResult res = cache.getFreshOrStale(FileCache.GLOBAL, key, MAX_AGE, notBefore.get(), () -> fetch(t, l));
         try {
             return LolalyticsParser.parse(res.content());
         } catch (IOException e) {
@@ -103,7 +113,7 @@ public final class LolalyticsClient {
         // "v4": enthält PBI und Lane-Anteil; ältere Cache-Einträge ohne diese Felder dürfen nicht weiterverwendet werden.
         String key = "lolalytics/full_v4_" + t + "_" + l + "_" + period.cacheSuffix() + ".json";
         String url = BASE_URL + "?tier=" + t + "&lane=" + l + patchQuery(period);
-        return LolalyticsState.parseTierList(cachedExtract(key, url, LolalyticsState::extractTierList));
+        return LolalyticsState.parseTierList(cachedExtract(key, url, notBefore.get(), LolalyticsState::extractTierList));
     }
 
     /**
@@ -120,7 +130,7 @@ public final class LolalyticsClient {
         String key = "lolalytics/build_v4_" + slug + "_" + t + "_" + (l == null ? "main" : l) + "_" + period.cacheSuffix() + ".json";
         String url = "https://lolalytics.com/lol/" + slug + "/build/?tier=" + t + (l == null ? "" : "&lane=" + l)
                 + patchQuery(period);
-        return LolalyticsState.parseBuild(cachedExtract(key, url, LolalyticsState::extractBuild));
+        return LolalyticsState.parseBuild(cachedExtract(key, url, notBefore.get(), LolalyticsState::extractBuild));
     }
 
     /**
@@ -134,7 +144,8 @@ public final class LolalyticsClient {
         String key = "lolalytics/team_v1_" + slug + "_" + t + "_" + l + "_30d.json";
         String url = TEAM_API_URL + "?ep=build-team&v=1&patch=" + LolalyticsPeriod.LAST_30_DAYS.patchParam() + "&c=" + slug
                 + "&lane=" + l + "&tier=" + t + "&queue=ranked&region=all";
-        return LolalyticsState.parseTeam(cachedExtract(key, url, LolalyticsState::extractTeam));
+        // Bewusst ohne Patch-Grenze: Für die Draft-Synergien gelten 12 h Cache (Vorgabe des Nutzers).
+        return LolalyticsState.parseTeam(cachedExtract(key, url, java.time.Instant.EPOCH, LolalyticsState::extractTeam));
     }
 
     private static void requireSlug(String slug) {
@@ -151,9 +162,10 @@ public final class LolalyticsClient {
      * Holt die Seite höchstens einmal gleichzeitig je Eintrag und speichert nur die extrahierten Daten. Unbrauchbare
      * Antworten landen so gar nicht erst im Cache; ein älterer gültiger Eintrag bleibt dann erhalten.
      */
-    private String cachedExtract(String key, String url, Extractor extractor) throws IOException {
+    private String cachedExtract(String key, String url, java.time.Instant notBefore, Extractor extractor)
+            throws IOException {
         synchronized (locks.computeIfAbsent(key, k -> new Object())) {
-            return cache.getFreshOrStale(FileCache.GLOBAL, key, MAX_AGE, () -> {
+            return cache.getFreshOrStale(FileCache.GLOBAL, key, MAX_AGE, notBefore, () -> {
                 throttle();
                 return extractor.extract(http.getText(url));
             }).content();

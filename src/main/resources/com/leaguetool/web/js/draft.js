@@ -5,7 +5,7 @@ import { Icon, Img, Button, Select, Segmented, Switch, Card, Empty, ErrorNote, L
 
 const ROLES = [
   { value: 'TOP', label: 'Top' }, { value: 'JUNGLE', label: 'Jungle' }, { value: 'MIDDLE', label: 'Mid' },
-  { value: 'BOTTOM', label: 'Bot' }, { value: 'UTILITY', label: 'Support' },
+  { value: 'BOTTOM', label: 'ADC' }, { value: 'UTILITY', label: 'Support' },
 ];
 const roleLabel = (role) => ROLES.find((r) => r.value === role)?.label || role;
 const TEAM_SIZE = 5;
@@ -124,17 +124,19 @@ const CLIENT_STATUS = {
 };
 
 function ClientSync({ lcu, onToggle }) {
+  const advancedTips = useStore((s) => Boolean(s.prefs.advancedTips));
   const enabled = Boolean(lcu) && lcu.status !== 'OFF';
   const text = enabled ? CLIENT_STATUS[lcu.status] || lcu.message : '';
   return html`<div class="draft-client">
     <${Switch} checked=${enabled} onChange=${onToggle}
-      tip="Liest während der Champion-Auswahl Picks, Bans und eure Rollen aus dem League-Client (nur lesend, wie DraftGap). Keine Namen, keine Aktionen im Client.">Mit League-Client abgleichen<//>
+      tip=${advancedTips ? 'Liest während der Champion-Auswahl Picks, Bans und eure Rollen aus dem League-Client (nur lesend, wie DraftGap). Keine Namen, keine Aktionen im Client.' : undefined}>Mit League-Client abgleichen<//>
     ${text ? html`<span class=${`small draft-client-status ${lcu.status === 'CHAMP_SELECT' ? 'live' : 'muted'}`}>${text}</span>` : null}
   </div>`;
 }
 
 export function DraftView() {
   const data = useStore((s) => s.data);
+  const advancedTips = useStore((s) => Boolean(s.prefs.advancedTips));
   const dataSource = useStore((s) => s.dataSource);
   const [view, setView] = useViewState('draft', DEFAULTS);
   const { result, error, loading, requestId } = useDraftResult(view, dataSource);
@@ -229,17 +231,17 @@ export function DraftView() {
       <${Segmented} label="Bereich" value=${view.tab} onChange=${(tab) => setView({ tab })}
         options=${[{ value: 'picks', label: 'Beste Picks' }, { value: 'analysis', label: 'Draft-Analyse' }]} />
       <div class="draft-options">
-        <label class="draft-option" data-tip="Wie stark kleine Stichproben zur Erwartung gezogen werden. Die Prior-Spiele je Rollenpaar kommen aus der gemessenen Streuung (Lane-Matchup etwa 700, Duo Top+Mid etwa 14.000); der Faktor vervielfacht sie. Mittel entspricht der Stärke von DraftGap bei Champions.">
+        <label class="draft-option" data-tip="Wie stark kleine Stichproben zum Durchschnitt gezogen werden. Mittel entspricht DraftGap.">
           <span class="muted small">Risiko</span>
           <${Select} label="Risiko" value=${view.risk} options=${RISKS} onChange=${(risk) => setView({ risk })} />
         </label>
-        <label class="draft-option" data-tip="Mindestspiele eines Vorschlags auf seiner Rolle in den letzten 30 Tagen. Auto richtet sich nach der Spielmenge des Rang-Bereichs; in Emerald+ entspricht das etwa dem Standard von DraftGap.">
-          <span class="muted small">Vorschläge</span>
+        <label class="draft-option" data-tip=${advancedTips ? 'Mindestspiele eines Vorschlags auf seiner Rolle in den letzten 30 Tagen. Auto richtet sich nach der Spielmenge des Rang-Bereichs; in Emerald+ entspricht das etwa dem Standard von DraftGap.' : undefined}>
+          <span class="muted small">Games</span>
           <${Select} label="Mindestspiele" value=${view.minGames} onChange=${(minGames) => setView({ minGames })}
             options=${[{ value: AUTO_MIN_GAMES, label: result ? `Auto (ab ${result.minGames.toLocaleString('de-DE')})` : 'Auto' }, ...MIN_GAMES]} />
         </label>
         <${Switch} checked=${view.ignoreChampionWinRates} onChange=${(ignoreChampionWinRates) => setView({ ignoreChampionWinRates })}
-          tip="Bewertet nur Duos und Matchups, nicht die allgemeine Stärke der Champions">Nur Synergien und Matchups<//>
+          tip=${advancedTips ? 'Bewertet nur Duos und Matchups, nicht die allgemeine Stärke der Champions' : undefined}>Nur Synergien und Matchups<//>
       </div>
     </div>
 
@@ -446,7 +448,8 @@ function WinPanel({ analysis, picks, loading }) {
 }
 
 function Part({ label, rating, tip }) {
-  return html`<div class="draft-part" data-tip=${tip}>
+  const advancedTips = useStore((s) => Boolean(s.prefs.advancedTips));
+  return html`<div class="draft-part" data-tip=${advancedTips ? tip : undefined}>
     <span class="muted small">${label}</span><strong class=${toneOf(impact(rating))}>${impactText(rating)}</strong>
   </div>`;
 }
@@ -492,6 +495,7 @@ function Suggestions({ result, data, view, setView, onTake, busy, owned }) {
       </button>
     </th>`;
   };
+  const advancedTips = useStore((st) => Boolean(st.prefs.advancedTips));
   const sideText = result.side === 'ally' ? 'dein Team' : 'den Gegner';
   const baseText = result.side === 'ally' ? 'deines Teams' : 'des Gegners';
 
@@ -515,7 +519,7 @@ function Suggestions({ result, data, view, setView, onTake, busy, owned }) {
           <thead><tr>${columns.map(headCell)}</tr></thead>
           <tbody>${rest.map((s) => {
             const champion = data.championByKey.get(s.champion);
-            return html`<tr key=${`${s.champion}-${s.role}`} class="draft-row" onClick=${() => onTake(s)} data-tip="Pick übernehmen">
+            return html`<tr key=${`${s.champion}-${s.role}`} class="draft-row" onClick=${() => onTake(s)} data-tip=${advancedTips ? 'Pick übernehmen' : undefined}>
               <td class="muted">${s.rank}</td>
               <td><span class="draft-cell-champion">${champion ? html`<${Img} src=${champion.icon} size=${26} />` : null}${champion?.name || s.champion}</span></td>
               <td>${roleLabel(s.role)}</td><td><strong>${percent(s.winRate)}</strong></td>
@@ -532,10 +536,11 @@ function Suggestions({ result, data, view, setView, onTake, busy, owned }) {
 }
 
 function TopCard({ rank, suggestion: s, data, onTake, baseText }) {
+  const advancedTips = useStore((st) => Boolean(st.prefs.advancedTips));
   const champion = data.championByKey.get(s.champion);
   const details = [...s.details].sort((a, b) => Math.abs(b.rating) - Math.abs(a.rating)).slice(0, 3);
   return html`<button type="button" class=${`draft-top-card ${rank === 1 ? 'best' : ''}`} onClick=${() => onTake(s)}
-    data-tip=${`Pick übernehmen · Winrate ${baseText} mit diesem Pick`}>
+    data-tip=${advancedTips ? `Pick übernehmen · Winrate ${baseText} mit diesem Pick` : undefined}>
     <span class="draft-rank">${rank}</span>
     <span class="draft-top-head">
       ${champion ? html`<${Img} src=${champion.icon} size=${48} />` : null}

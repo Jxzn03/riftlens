@@ -39,6 +39,7 @@ public final class ItemPassiveTextParser {
     private static final Pattern IMMOBILIZE_HASTE = Pattern.compile(
             "abilities with immobilizing effects have their cooldown reduced equivalent to " + N + " ability haste");
     private static final Pattern IMMOBILIZE_HASTE_GAIN = Pattern.compile("gain " + N + " ability haste for abilities with immobilizing effects");
+    private static final Pattern SUMMONER_HASTE = Pattern.compile("gain " + N + " summoner spell haste");
 
     private static final Pattern HAS_DIGIT = Pattern.compile("\\d");
     private static final Pattern STARTS_LIKE_STAT =Pattern.compile("^(gain|increases?)\\b.*");
@@ -109,7 +110,8 @@ public final class ItemPassiveTextParser {
         Map<Pattern, StatType> patterns = Map.of(BASIC_HASTE, StatType.BASIC_ABILITY_HASTE,
                 ULTIMATE_HASTE, StatType.ULTIMATE_HASTE,
                 IMMOBILIZE_HASTE, StatType.IMMOBILIZE_ABILITY_HASTE,
-                IMMOBILIZE_HASTE_GAIN, StatType.IMMOBILIZE_ABILITY_HASTE);
+                IMMOBILIZE_HASTE_GAIN, StatType.IMMOBILIZE_ABILITY_HASTE,
+                SUMMONER_HASTE, StatType.SUMMONER_SPELL_HASTE);
         for (Map.Entry<Pattern, StatType> e : patterns.entrySet()) {
             Matcher m = e.getKey().matcher(s);
             if (m.matches()) {

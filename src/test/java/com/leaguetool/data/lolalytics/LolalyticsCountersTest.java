@@ -11,11 +11,13 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+/** Counters aus Sicht des Gegners: Die Eingabe sind Matchups des Champions, die Zeilen die Picks dagegen. */
 class LolalyticsCountersTest {
 
     private static final int GAMES = 1000;
     private static final double OWN_WIN_RATE = 0.5;
 
+    /** Delta 1 = Delta 2 ergibt mit 50 % eigener Winrate einen Tier-Durchschnitt von 50 %. */
     private static LolalyticsPairs.Stat stat(double winRate, double delta1, double delta2) {
         return new LolalyticsPairs.Stat(winRate, GAMES, delta1, delta2);
     }
@@ -28,44 +30,58 @@ class LolalyticsCountersTest {
         return lines.stream().map(LolalyticsCounters.Line::champion).toList();
     }
 
+    private static LolalyticsCounters.Line line(LolalyticsCounters counters, int champion) {
+        return counters.delta().stream().filter(l -> l.champion() == champion).findFirst().orElseThrow();
+    }
+
     @Test
-    void strongAndWeakFollowOnlyTheWinRateWhileDeltaFollowsTheRating() {
-        // Champion 1 hat die beste Winrate, aber die schlechtesten Deltas; 3 ist umgekehrt.
+    void bestAndWorstPicksFollowOnlyTheMirroredWinRateWhileDeltaFollowsTheRating() {
+        // Gegen 3 verliert der Champion am häufigsten: 3 ist der beste Pick. Die Deltas zeigen bewusst in die andere Richtung.
         LolalyticsCounters counters = LolalyticsCounters.of(top(Map.of(
                 1, stat(0.56, -0.03, -0.03),
                 2, stat(0.50, 0.00, 0.00),
                 3, stat(0.44, 0.03, 0.03),
                 4, stat(0.47, 0.01, 0.01))), "top", 100, OWN_WIN_RATE);
 
-        assertEquals(List.of(1, 2), champions(counters.strong()));
-        assertEquals(List.of(3, 4), champions(counters.weak()));
-        assertEquals(List.of(3, 4, 2, 1), champions(counters.delta()));
+        assertEquals(List.of(3, 4), champions(counters.best()));
+        assertEquals(List.of(1, 2), champions(counters.worst()));
+        assertEquals(0.56, counters.best().get(0).winRate(), 1e-12, "Winrate des Picks = 1 − Matchup-Winrate bei 50 % Durchschnitt");
+        assertEquals(List.of(1, 2, 4, 3), champions(counters.delta()), "stärkster Counter laut Bewertung zuerst");
     }
 
     @Test
-    void ratingUsesOnlyDeltaTwoAndDampsSmallSamples() {
+    void valuesAreMirroredToThePicksView() {
+        // Durchschnitt = 1 + 0,04 + 0,02 − 0,51 = 0,55; Winrate des Picks = 1,10 − 0,48 = 0,62.
+        LolalyticsCounters.Line l = LolalyticsCounters.of(top(Map.of(
+                1, new LolalyticsPairs.Stat(0.48, 700, 0.04, -0.02))), "top", 100, 0.51).delta().get(0);
+        assertEquals(0.62, l.winRate(), 1e-12);
+        assertEquals(0.62 - 0.49, l.delta1(), 1e-12, "Winrate des Picks minus (1 − Winrate des Champions)");
+        assertEquals(0.02, l.delta2(), 1e-12, "Matchup-Effekt mit umgekehrtem Vorzeichen");
+        assertEquals(0.01, l.rating(), 1e-12, "bei 700 Spielen zählt die Hälfte von Delta 2");
+        // Gedämpfte Matchup-WR = 0,48 + 0,02 × 0,5 = 0,49; Pick = 1,10 − 0,49.
+        assertEquals(0.61, l.pick(), 1e-12);
+    }
+
+    @Test
+    void theTierAverageIsSharedByAllPicks() {
+        // Ohne Deltas fehlt der Durchschnitt dieser Zeile; er gilt aber je Champion und kommt aus den anderen Zeilen.
         LolalyticsCounters counters = LolalyticsCounters.of(top(Map.of(
-                1, new LolalyticsPairs.Stat(0.5, 700, 0.09, 0.04))), "top", 100, OWN_WIN_RATE);
-        assertEquals(0.02, counters.delta().get(0).rating(), 1e-12, "bei 700 Spielen zählt die Hälfte von Delta 2");
+                1, new LolalyticsPairs.Stat(0.48, GAMES, 0.04, -0.02),
+                2, new LolalyticsPairs.Stat(0.50, GAMES, null, null))), "top", 100, 0.51);
+        assertEquals(0.60, line(counters, 2).winRate(), 1e-12);
+        assertNull(line(counters, 2).delta1());
+        assertEquals(0.5, LolalyticsCounters.tierAverage(List.of(), 0.51), 1e-12, "ohne Deltas: 50 %");
     }
 
     @Test
     void ratingNeedsOnlyDeltaTwo() {
         LolalyticsCounters.Line onlyDeltaTwo = LolalyticsCounters.of(top(Map.of(
                 1, new LolalyticsPairs.Stat(0.5, 700, null, 0.04))), "top", 100, OWN_WIN_RATE).delta().get(0);
-        assertEquals(0.02, onlyDeltaTwo.rating(), 1e-12);
+        assertEquals(-0.02, onlyDeltaTwo.rating(), 1e-12);
 
         LolalyticsCounters.Line noDeltaTwo = LolalyticsCounters.of(top(Map.of(
                 1, new LolalyticsPairs.Stat(0.5, 700, 0.04, null))), "top", 100, OWN_WIN_RATE).delta().get(0);
         assertNull(noDeltaTwo.rating());
-    }
-
-    @Test
-    void pickMirrorsTheDampedWinRateAroundTheTierAverage() {
-        LolalyticsCounters.Line line = LolalyticsCounters.of(top(Map.of(
-                1, new LolalyticsPairs.Stat(0.48, 700, 0.04, -0.02))), "top", 100, 0.51).delta().get(0);
-        // Durchschnitt = 1 + 0,04 + 0,02 − 0,51 = 0,55; gedämpfte WR = 0,48 + 0,02 × 0,5 = 0,49; Pick = 1,10 − 0,49
-        assertEquals(0.61, line.pick(), 1e-12);
     }
 
     @Test
@@ -75,10 +91,8 @@ class LolalyticsCountersTest {
                 1, new LolalyticsPairs.Stat(0.47, 1_000_000, 0.0, 0.0),
                 2, new LolalyticsPairs.Stat(0.48, 1_000_000, -0.03, -0.03))), "top", 100, OWN_WIN_RATE);
 
-        LolalyticsCounters.Line strong = counters.delta().stream().filter(l -> l.champion() == 1).findFirst().orElseThrow();
-        LolalyticsCounters.Line counter = counters.delta().stream().filter(l -> l.champion() == 2).findFirst().orElseThrow();
-        assertTrue(strong.pick() > counter.pick(), "mit dem allgemein starken Champion gewinnt man häufiger");
-        assertTrue(counter.rating() < strong.rating(), "die Bewertung sieht den echten Counter");
+        assertTrue(line(counters, 1).pick() > line(counters, 2).pick(), "mit dem allgemein starken Champion gewinnt man häufiger");
+        assertTrue(line(counters, 2).rating() > line(counters, 1).rating(), "die Bewertung sieht den echten Counter");
     }
 
     @Test
@@ -95,20 +109,20 @@ class LolalyticsCountersTest {
         IntStream.range(1, 31).forEach(i -> rows.put(i, stat(0.4 + i / 200.0, 0, 0)));
         LolalyticsCounters counters = LolalyticsCounters.of(top(rows), "top", 100, OWN_WIN_RATE);
 
-        assertEquals(LolalyticsCounters.MAX_LISTED, counters.strong().size());
-        assertEquals(LolalyticsCounters.MAX_LISTED, counters.weak().size());
+        assertEquals(LolalyticsCounters.MAX_LISTED, counters.best().size());
+        assertEquals(LolalyticsCounters.MAX_LISTED, counters.worst().size());
         assertEquals(30, counters.delta().size());
-        assertEquals(30, counters.strong().get(0).champion());
-        assertEquals(1, counters.weak().get(0).champion());
+        assertEquals(1, counters.best().get(0).champion(), "gegen 1 hat der Champion die niedrigste Winrate");
+        assertEquals(30, counters.worst().get(0).champion());
     }
 
     @Test
-    void fewOpponentsAreNeverStrongAndWeakAtOnce() {
+    void fewPicksAreNeverBestAndWorstAtOnce() {
         LolalyticsCounters counters = LolalyticsCounters.of(top(Map.of(
                 1, stat(0.55, 0, 0), 2, stat(0.5, 0, 0), 3, stat(0.45, 0, 0))), "top", 100, OWN_WIN_RATE);
 
-        assertEquals(List.of(1, 2), champions(counters.strong()));
-        assertEquals(List.of(3), champions(counters.weak()));
+        assertEquals(List.of(3, 2), champions(counters.best()));
+        assertEquals(List.of(1), champions(counters.worst()));
     }
 
     @Test
@@ -132,11 +146,11 @@ class LolalyticsCountersTest {
     @Test
     void missingDeltasLeaveTheRatingEmptyAndSortLast() {
         LolalyticsCounters counters = LolalyticsCounters.of(top(Map.of(
-                1, new LolalyticsPairs.Stat(0.6, GAMES, null, null),
+                1, new LolalyticsPairs.Stat(0.4, GAMES, null, null),
                 2, new LolalyticsPairs.Stat(0.5, GAMES, 0.01, null),
-                3, stat(0.4, -0.05, -0.05))), "top", 100, OWN_WIN_RATE);
+                3, stat(0.6, 0.05, 0.05))), "top", 100, OWN_WIN_RATE);
 
-        assertEquals(1, counters.strong().get(0).champion(), "Strong kommt ohne Deltas aus");
+        assertEquals(1, counters.best().get(0).champion(), "die Listen kommen ohne Deltas aus");
         assertEquals(3, counters.delta().get(0).champion());
         assertNull(counters.delta().get(1).rating());
         assertNull(counters.delta().get(2).rating());

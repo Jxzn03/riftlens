@@ -3,7 +3,7 @@ package com.leaguetool.calc;
 import com.leaguetool.util.Text;
 
 /**
- * Bonus-Werte, wie sie Items (und später Runen) gewähren. Die Enum-Reihenfolge ist zugleich die
+ * Bonus-Werte, wie sie Items und Runen ({@link RuneEffects}) gewähren. Die Enum-Reihenfolge ist zugleich die
  * Anzeigereihenfolge (siehe {@link StatBlock#entries()}).
  *
  * <p>Bei {@link #percent()} {@code == true} ist der Wert eine Prozentzahl (25 = 25 %), sonst ein
@@ -85,7 +85,18 @@ public enum StatType {
     /** Fähigkeitstempo nur für die Ultimate. */
     ULTIMATE_HASTE("Fähigkeitstempo für die Ultimate", false),
     /** Fähigkeitstempo nur für Fähigkeiten mit Immobilisierung. */
-    IMMOBILIZE_ABILITY_HASTE("Fähigkeitstempo für Immobilisierungen", false);
+    IMMOBILIZE_ABILITY_HASTE("Fähigkeitstempo für Immobilisierungen", false),
+    /** Tempo für Beschwörerzauber (Summoner Spell Haste), z. B. Ionian Boots of Lucidity. */
+    SUMMONER_SPELL_HASTE("Beschwörerzauber-Tempo", false),
+    /** Leben aus Runen und Shards; anders als {@link #HEALTH} nicht von Warmog's verstärkt. */
+    RUNE_HEALTH("Leben aus Runen", false),
+    /** Prozent des maximalen Lebens (Overgrowth). */
+    MAX_HEALTH_PERCENT("Maximales Leben", true),
+    /** Prozent auf Rüstung und Magieresistenz (Conditioning). */
+    RESIST_PERCENT("Rüstung und Magieresistenz", true),
+    /** Lauftempo-Boni wirken um so viel Prozent stärker (Celerity). */
+    MOVE_BONUS_AMP("Wirkung von Lauftempo-Boni", true),
+    SLOW_RESIST("Verlangsamungsresistenz", true);
 
     private final String label;
     private final boolean percent;

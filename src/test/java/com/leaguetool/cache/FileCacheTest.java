@@ -30,6 +30,28 @@ class FileCacheTest {
     }
 
     @Test
+    void entriesFromBeforeAPatchChangeAreStaleButRemainFallback() throws IOException {
+        FileCache cache = new FileCache(tmp);
+        cache.writeText(FileCache.GLOBAL, "wiki/x.json", "alt");
+        Files.setLastModifiedTime(cache.pathFor(FileCache.GLOBAL, "wiki/x.json"),
+                java.nio.file.attribute.FileTime.from(java.time.Instant.now().minusSeconds(3600)));
+        java.time.Instant patchChange = java.time.Instant.now().minusSeconds(60);
+
+        assertTrue(cache.isFresh(FileCache.GLOBAL, "wiki/x.json", Duration.ofDays(3)));
+        assertFalse(cache.isFresh(FileCache.GLOBAL, "wiki/x.json", Duration.ofDays(3), patchChange));
+
+        FileCache.CacheResult offline = cache.getFreshOrStale(FileCache.GLOBAL, "wiki/x.json", Duration.ofDays(3), patchChange,
+                () -> { throw new ConnectException("offline"); });
+        assertEquals("alt", offline.content());
+        assertTrue(offline.stale(), "ohne Netz bleibt der alte Eintrag nutzbar");
+
+        FileCache.CacheResult online = cache.getFreshOrStale(FileCache.GLOBAL, "wiki/x.json", Duration.ofDays(3), patchChange,
+                () -> "neu");
+        assertEquals("neu", online.content());
+        assertTrue(cache.isFresh(FileCache.GLOBAL, "wiki/x.json", Duration.ofDays(3), patchChange));
+    }
+
+    @Test
     void getOrFetchCallsFetcherOnlyOnce() throws IOException {
         FileCache cache = new FileCache(tmp);
         int[] calls = {0};
