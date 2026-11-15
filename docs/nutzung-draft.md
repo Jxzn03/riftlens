@@ -23,8 +23,8 @@ Tool gesperrte Picks, Bans und eure zugewiesenen Rollen automatisch, wie DraftGa
 als Hinweis. „Nur spielbare Champions“ zeigt nur Vorschläge, die dein Account in dieser Auswahl spielen darf.
 Der Abgleich liest nur, und zwar ausschließlich die Champion-Auswahl. Er klickt nichts im Client, übernimmt keine
 Spielernamen und liest nichts im laufenden Spiel. Den League-Ordner findet das Tool über Riots eigene Dateien, auch auf
-anderen Laufwerken; liegt League ungewöhnlich, lässt er sich in den Optionen eintragen. Details und Bewertung des
-Ban-Risikos: `docs/client-sync.md`.
+anderen Laufwerken; liegt League ungewöhnlich, lässt er sich in den Optionen eintragen. Riot unterstützt die
+Schnittstelle des League-Clients nicht offiziell für Drittanbieter-Apps; die Nutzung erfolgt auf eigenes Risiko.
 
 **Rechenmodell**
 
