@@ -673,7 +673,8 @@ table.data.compact td { padding: 3px 10px 3px 0; font-size: 12.5px; }
 .draft-row { cursor: pointer; }
 .draft-row:hover { background: var(--row-hover); }
 .draft-cell-champion { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
-.draft-pair { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.draft-pair { display: inline-flex; align-items: center; gap: 8px; flex-wrap: nowrap; white-space: nowrap; }
+.draft-pairs td, .draft-pairs th { white-space: nowrap; }
 .draft-key-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px 12px; }
 .draft-key-verdict { font-size: 15px; font-weight: 650; }
 .draft-key-winrate { font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; }

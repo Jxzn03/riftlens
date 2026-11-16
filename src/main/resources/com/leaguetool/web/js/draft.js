@@ -939,7 +939,7 @@ function MatchupCard({ rows, data }) {
           <${Icon} name="chevron" size=${16} />${pickCell(g.pick)}<span class="muted small">${g.rows.length} Matchups</span>
         </button>
       </td>
-      <td class=${toneOf(impact(total))}><strong>${impactText(total)}</strong></td><td></td>
+      <td></td><td></td>
     </tr>`, ...visible.map((r) => row(r, g.key))];
   };
 
