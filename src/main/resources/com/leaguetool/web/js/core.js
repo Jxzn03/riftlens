@@ -543,7 +543,7 @@ export function startRouter() {
 
 // ------------------------------------------------------------------ Zustand speichern
 
-const PERSISTED = ['theme', 'filter', 'dataSource', 'build', 'runePage', 'split', 'prefs', 'summonerRecent', 'favorites', 'window'];
+const PERSISTED = ['theme', 'filter', 'dataSource', 'build', 'runePage', 'split', 'prefs', 'summonerRecent', 'favorites', 'window', 'draftDetailsOpen'];
 let saveTimer = null;
 let lastSaved = null;
 
