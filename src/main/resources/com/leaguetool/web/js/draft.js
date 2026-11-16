@@ -872,8 +872,8 @@ const MATCHUP_COLUMNS = [
  * 1 − WR, Wert mit umgekehrtem Vorzeichen.
  */
 const MATCHUP_SIDES = {
-  first: { other: 'second', team: 'ally', label: 'Dein Team', aside: 'Aus Sicht deines Teams', delta: DELTA_TITLE, sign: 1 },
-  second: { other: 'first', team: 'enemy', label: 'Gegner', aside: 'Aus Sicht des Gegners', delta: 'Δ Gegner-WR', sign: -1 },
+  first: { other: 'second', team: 'ally', label: 'Dein Team', delta: DELTA_TITLE, sign: 1 },
+  second: { other: 'first', team: 'enemy', label: 'Gegner', delta: 'Δ Gegner-WR', sign: -1 },
 };
 
 const matchupTip = (sign) => (sign > 0 ? deltaTip('matchup')
@@ -930,6 +930,7 @@ function MatchupCard({ rows, data }) {
   };
   const group = (g) => {
     const open = expanded.has(g.key);
+    // Die Summe aller Matchups des Picks nur aufgeklappt, eingeklappt stünde sie neben dem einzelnen Lane-Matchup.
     const total = g.rows.reduce((sum, r) => sum + r.rating, 0);
     // Eingeklappt bleibt das direkte Lane-Matchup sichtbar.
     const visible = open ? g.rows : g.rows.filter((r) => r.first.role === r.second.role);
@@ -939,11 +940,11 @@ function MatchupCard({ rows, data }) {
           <${Icon} name="chevron" size=${16} />${pickCell(g.pick)}<span class="muted small">${g.rows.length} Matchups</span>
         </button>
       </td>
-      <td class=${toneOf(impact(total))}><strong>${impactText(total)}</strong></td><td></td>
+      ${open ? html`<td class=${toneOf(impact(total))}><strong>${impactText(total)}</strong></td>` : html`<td></td>`}<td></td>
     </tr>`, ...visible.map((r) => row(r, g.key))];
   };
 
-  return html`<${Card} title="Matchups" aside=${s.aside}>
+  return html`<${Card} title="Matchups">
     ${rows.length === 0 ? html`<p class="muted small">Noch keine Paarungen.</p>` : html`
       <div class="draft-matchup-tools">
         <${Segmented} label="Matchups von" value=${sideKey} onChange=${(side) => setView({ side })}
