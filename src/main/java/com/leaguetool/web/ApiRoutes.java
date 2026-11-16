@@ -60,12 +60,14 @@ final class ApiRoutes {
     private final ObjectMapper json;
     private final DraftEndpoint draft;
     private final DraftArchiveEndpoint archive;
+    private final FearlessEndpoint fearless;
 
     ApiRoutes(WebContext ctx, ObjectMapper json) {
         this.ctx = ctx;
         this.json = json;
         this.draft = new DraftEndpoint(ctx);
         this.archive = new DraftArchiveEndpoint(ctx);
+        this.fearless = new FearlessEndpoint(ctx);
     }
 
     /** Antwort eines Endpunkts: ein zu serialisierendes Objekt oder fertige JSON-Bytes. */
@@ -90,6 +92,8 @@ final class ApiRoutes {
             case "GET draft-archive" -> archive.list();
             case "POST draft-archive" -> archive.record(parse(body));
             case "DELETE draft-archive" -> archive.delete(path);
+            case "GET fearless", "DELETE fearless" -> fearless.handle(method, path, json.createObjectNode());
+            case "POST fearless", "PUT fearless" -> fearless.handle(method, path, body.length == 0 ? json.createObjectNode() : parse(body));
             case "GET lcu" -> ClientSyncEndpoint.get(ctx);
             case "POST lcu" -> ClientSyncEndpoint.set(ctx, parse(body));
             default -> throw new ApiException(404, "Unbekannter Endpunkt");

@@ -497,6 +497,64 @@ class WebServerTest {
     }
 
     @Test
+    void fearlessSeriesStartsRenamesAndEndsLocally() throws Exception {
+        JsonNode empty = json.readTree(get("/api/fearless", true).body());
+        assertTrue(empty.path("active").isNull());
+        assertEquals(0, empty.path("locked").size());
+        assertEquals(60, empty.path("maxLabelLength").asInt());
+
+        assertEquals(400, send("POST", "/api/fearless", "{\"format\":\"BO7\"}").statusCode());
+        assertEquals(400, send("POST", "/api/fearless", "{\"format\":\"BO3\",\"label\":\"" + "x".repeat(61) + "\"}").statusCode());
+        HttpResponse<String> started = send("POST", "/api/fearless", "{\"format\":\"BO3\",\"label\":\" Scrim Dienstag \"}");
+        assertEquals(200, started.statusCode());
+        JsonNode active = json.readTree(started.body()).path("active");
+        assertEquals("Scrim Dienstag", active.path("label").asText());
+        assertEquals(1, active.path("nextGame").asInt());
+        assertEquals(409, send("POST", "/api/fearless", "{\"format\":\"BO5\"}").statusCode(), "Nur eine Serie gleichzeitig");
+
+        assertEquals(400, send("POST", "/api/fearless/game", "{\"ally\":[{\"champion\":103}],\"enemy\":[]}").statusCode(),
+                "Nur vollständige Drafts");
+        String id = active.path("id").asText();
+        assertEquals(200, send("PUT", "/api/fearless/" + id, "{\"label\":\"Pro-Serie\"}").statusCode());
+        assertEquals("Pro-Serie", json.readTree(get("/api/fearless", true).body()).path("active").path("label").asText());
+        assertEquals(404, send("PUT", "/api/fearless/" + ARCHIVE_ID, "{\"label\":\"x\"}").statusCode());
+        assertEquals(404, send("DELETE", "/api/fearless/../settings", null).statusCode());
+
+        JsonNode ended = json.readTree(send("POST", "/api/fearless/end", null).body());
+        assertTrue(ended.path("active").isNull());
+        assertEquals(0, ended.path("finished").size(), "Ohne Spiel wird die Serie verworfen");
+    }
+
+    @Test
+    void fearlessLocksAccumulateAndLastGameCanBeUndone() throws Exception {
+        java.nio.file.Files.writeString(home.resolve("fearless-series.json"), """
+                {"version":1,"active":{"id":"%s","label":"Scrim","format":"BO5","startedAt":"2026-11-16T18:00:00Z",
+                 "endedAt":null,"games":[{"number":1,"playedAt":"2026-11-16T18:40:00Z","patch":"16.22.1","result":"WIN",
+                 "ally":[{"champion":1,"role":"TOP"},{"champion":2},{"champion":3},{"champion":4},{"champion":5}],
+                 "enemy":[{"champion":6},{"champion":7},{"champion":8},{"champion":9},{"champion":10}],"bans":[11]}]},
+                 "finished":[]}""".formatted(ARCHIVE_ID));
+
+        JsonNode state = json.readTree(get("/api/fearless", true).body());
+        assertEquals(10, state.path("locked").size(), "Picks beider Teams, keine Bans");
+        assertEquals(1, state.path("locked").get(0).path("game").asInt());
+        assertEquals(1, state.path("active").path("wins").asInt());
+        assertEquals(2, state.path("active").path("nextGame").asInt());
+
+        JsonNode undone = json.readTree(send("DELETE", "/api/fearless/game", null).body());
+        assertEquals("TOP", undone.path("undone").path("ally").get(0).path("role").asText(), "Der Draft geht zurück aufs Brett");
+        assertEquals(0, undone.path("locked").size());
+        assertEquals(409, send("DELETE", "/api/fearless/game", null).statusCode(), "Kein Spiel mehr übrig");
+    }
+
+    @Test
+    void draftRejectsUnknownFearlessLocksBeforeAnyRequest() throws Exception {
+        settings.setLolalyticsEnabled(true);
+        int before = fake.requests().size();
+        assertEquals(400, postDraft("{\"locked\":[999999]}").statusCode());
+        assertEquals(before, fake.requests().size());
+    }
+
+    @Test
     void clientSyncIsOffByDefault() throws Exception {
         HttpResponse<String> state = get("/api/lcu", true);
         assertEquals(200, state.statusCode());

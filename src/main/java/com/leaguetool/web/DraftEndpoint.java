@@ -38,6 +38,8 @@ final class DraftEndpoint {
 
     private static final int TEAM_SIZE = 5;
     private static final int MAX_BANS = 10;
+    /** Sperren einer Fearless-Serie: höchstens zehn Picks je Spiel und {@code FearlessSeries.MAX_GAMES} Spiele. */
+    private static final int MAX_LOCKED = 10 * com.leaguetool.draft.FearlessSeries.MAX_GAMES;
     private static final int MAX_MIN_GAMES = 100_000;
     private static final double MAX_MIN_PICK_RATE = 0.2;
     private static final int MAX_CLIENT_ID_LENGTH = 64;
@@ -57,6 +59,10 @@ final class DraftEndpoint {
         List<Slot> enemy = slots(body.path("enemy"), data);
         Set<Integer> bans = bans(body.path("bans"), data);
         requireDistinct(ally, enemy);
+        // Fearless: in früheren Spielen der Serie gespielte Champions fehlen in den Vorschlägen wie Bans.
+        Set<Integer> locked = locked(body.path("locked"), data);
+        Set<Integer> excluded = new HashSet<>(bans);
+        excluded.addAll(locked);
         DraftAnalyzer.Risk risk = risk(body.path("risk").asText(""));
         int requestId = body.path("requestId").asInt();
         boolean forEnemy = "enemy".equals(body.path("side").asText());
@@ -95,8 +101,8 @@ final class DraftEndpoint {
         DraftAnalyzer analyzer = new DraftAnalyzer(loaded.dataset(), config);
         Map<Role, Integer> suggestedTeam = forEnemy ? enemyTeam : allyTeam;
         List<Suggestion> suggestions = forEnemy
-                ? analyzer.suggestions(enemyTeam, allyTeam, bans)
-                : analyzer.suggestions(allyTeam, enemyTeam, bans);
+                ? analyzer.suggestions(enemyTeam, allyTeam, excluded)
+                : analyzer.suggestions(allyTeam, enemyTeam, excluded);
 
         return Dto.obj(
                 "patch", loaded.patch(),
@@ -114,7 +120,7 @@ final class DraftEndpoint {
                         "enemy", profile(enemyTeam, loaded, config)),
                 "openRoles", Arrays.stream(Role.values()).filter(r -> !suggestedTeam.containsKey(r)).map(Role::name).toList(),
                 "suggestions", suggestions.stream().map(s -> suggestion(s, loaded.dataset())).toList(),
-                "warnings", loaded.warnings());
+                "warnings", warnings(loaded.warnings(), ally, enemy, locked, data));
     }
 
     // ------------------------------------------------------------------ Anfrage
@@ -147,6 +153,30 @@ final class DraftEndpoint {
         Set<Integer> bans = new HashSet<>();
         list.forEach(node -> bans.add(championKey(node, data)));
         return bans;
+    }
+
+    private static Set<Integer> locked(JsonNode list, GameData data) {
+        if (list.size() > MAX_LOCKED) {
+            throw new ApiException(400, "Höchstens " + MAX_LOCKED + " gesperrte Champions.");
+        }
+        Set<Integer> locked = new HashSet<>();
+        list.forEach(node -> locked.add(championKey(node, data)));
+        return locked;
+    }
+
+    /** Hinweise des Ladens plus ein Hinweis je Pick, der in der Fearless-Serie schon gespielt wurde. */
+    private static List<String> warnings(List<String> loading, List<Slot> ally, List<Slot> enemy, Set<Integer> locked,
+            GameData data) {
+        List<String> warnings = new ArrayList<>(loading);
+        for (List<Slot> team : List.of(ally, enemy)) {
+            for (Slot slot : team) {
+                if (locked.contains(slot.champion())) {
+                    String name = data.championByKey(slot.champion()).map(Champion::name).orElse("Champion " + slot.champion());
+                    warnings.add(name + " wurde in dieser Fearless-Serie schon gespielt und ist eigentlich gesperrt.");
+                }
+            }
+        }
+        return warnings;
     }
 
     static int championKey(JsonNode node, GameData data) {

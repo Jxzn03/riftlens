@@ -190,7 +190,7 @@ public final class DraftArchive {
         entries = List.copyOf(updated);
     }
 
-    private static void writeSlots(ArrayNode target, List<Slot> slots) {
+    static void writeSlots(ArrayNode target, List<Slot> slots) {
         for (Slot slot : slots) {
             ObjectNode node = target.addObject();
             node.put("champion", slot.champion());
@@ -220,7 +220,7 @@ public final class DraftArchive {
         }
     }
 
-    private static List<Slot> slots(JsonNode list) {
+    static List<Slot> slots(JsonNode list) {
         List<Slot> slots = new ArrayList<>();
         for (JsonNode node : list) {
             int champion = node.path("champion").asInt(0);
