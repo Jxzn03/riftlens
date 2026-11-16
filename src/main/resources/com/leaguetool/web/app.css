@@ -32,6 +32,7 @@
   --dmg-magic: #4f8dff;
   --dmg-true: #9aa3b2;
   --team-ally: #1fe0f0;
+  --locked: #a99cff;
   --team-ally-soft: rgba(31, 224, 240, .07);
   --team-enemy: #ff9a1f;
   --team-enemy-soft: rgba(255, 154, 31, .07);
@@ -64,6 +65,7 @@
   --dmg-magic: #2f6fe0;
   --dmg-true: #8a93a3;
   --team-ally: #0598b0;
+  --locked: #6a59d1;
   --team-ally-soft: rgba(5, 152, 176, .07);
   --team-enemy: #e07800;
   --team-enemy-soft: rgba(224, 120, 0, .08);
@@ -798,3 +800,24 @@ table.data.compact td { padding: 3px 10px 3px 0; font-size: 12.5px; }
   .draft-archive-entry { grid-template-columns: 1fr auto; }
   .draft-archive-teams, .draft-archive-bans { grid-column: 1 / -1; }
 }
+
+/* Fearless-Serie: gesperrt = eigener gedämpfter Ton (--locked), weder Gold noch Team-Farbe */
+.draft-fearless { display: flex; flex-direction: column; gap: 8px; }
+.draft-fearless-form, .draft-fearless-bar { display: flex; flex-direction: column; gap: 8px; padding: 10px; border-radius: var(--radius); background: var(--surface); border: 1px solid var(--line); }
+.draft-fearless-bar { border-color: color-mix(in srgb, var(--locked) 55%, var(--line)); box-shadow: inset 3px 0 0 var(--locked); }
+.draft-fearless-head { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.draft-fearless-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.draft-fearless-rename { display: flex; align-items: center; gap: 4px; }
+.draft-fearless-actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.draft-fearless-context { display: flex; align-items: center; gap: 6px; padding: 4px 4px 4px 10px; border-radius: var(--radius-s); background: color-mix(in srgb, var(--locked) 12%, transparent); color: var(--locked); }
+.draft-fearless-context span { flex: 1; min-width: 0; }
+.draft-locks { display: flex; flex-direction: column; gap: 5px; padding: 6px 10px; border-radius: var(--radius); background: var(--surface); border: 1px solid var(--line); }
+.draft-locks-head { display: flex; align-items: center; gap: 6px; color: var(--locked); font-weight: 600; font-size: 12.5px; text-align: left; }
+.draft-locks-chevron { margin-left: auto; color: var(--text-3); transform: rotate(-90deg); transition: transform var(--ease); }
+.draft-locks-chevron.open { transform: none; }
+.draft-locks-game { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; }
+.draft-locks-game > .muted { min-width: 48px; }
+.draft-lock-icon .img { border-radius: 5px; filter: grayscale(1); opacity: .6; box-shadow: 0 0 0 1px var(--locked); }
+.draft-picker-grid button.locked { opacity: .35; cursor: not-allowed; }
+.draft-picker-grid .draft-lock-mark { position: absolute; top: 4px; left: 5px; display: grid; place-items: center; padding: 2px; border-radius: 4px; background: var(--locked); color: var(--surface); }
+.draft-fearless-actions > span.small:first-child { flex-basis: 100%; }

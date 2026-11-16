@@ -17,6 +17,16 @@ Brett; ein Klick auf einen Champion lädt ihn ohne diesen Pick und zeigt, was an
 Weicht ein vollständiger Draft in weniger als 3 Champions von einem gespeicherten ab, gilt er als Variante und
 verdrängt keine älteren Einträge.
 
+**Fearless-Serie** (Schalter im Draft-Tab, Standard aus; für Scrims oder nachgestellte Profispiele): Es gilt Hard
+Fearless. Champions, die ein Team in einem früheren Spiel der Serie gepickt hat, sind danach für **beide** Teams
+gesperrt. Bans werden nicht übertragen. Beim Einschalten wählst du das Format (Bo3, Bo5 oder Offen) und optional eine
+Bezeichnung wie „Scrim Dienstag“; der aktuelle Draft ist Spiel 1. Ein Spiel zählt erst nach „Spiel abschließen“ (alle
+zehn Champions nötig, Ergebnis optional). Danach ist das Brett leer, die gesperrten Champions stehen unter den Bans,
+sind in der Auswahl ausgegraut und fehlen in den Vorschlägen. Das letzte Spiel lässt sich zurücknehmen. Eine Bo3 oder
+Bo5 endet von selbst, sobald sie entschieden ist; Ausschalten beendet die Serie. Während einer Serie nimmt das Archiv
+keine Drafts auf. Gespeichert wird nur lokal in `fearless-series.json`, wie im Archiv nur Champions, Rollen, Bans und
+die Bezeichnung. Der League-Client wird dafür nicht zusätzlich abgefragt.
+
 **Abgleich mit dem League-Client** (Schalter im Draft-Tab, Standard aus, sein Stand bleibt über Neustarts erhalten;
 ausgeschaltet wird der Client nie abgefragt): Während der Champion-Auswahl übernimmt das
 Tool gesperrte Picks, Bans und eure zugewiesenen Rollen automatisch, wie DraftGap. Ansagen von Mitspielern erscheinen

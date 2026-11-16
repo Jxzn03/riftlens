@@ -51,6 +51,8 @@ const DEFAULTS = {
   ally: Array(TEAM_SIZE).fill(null), enemy: Array(TEAM_SIZE).fill(null), bans: [],
   side: 'ally', role: '', risk: 'MEDIUM', minGames: AUTO_MIN_GAMES, minPickRate: AUTO_MIN_GAMES, ignoreChampionWinRates: false, rarePicks: false,
   tab: 'picks', picker: null,
+  // Sperren eines aus dem Archiv geladenen Serienspiels ({ seriesId, label, game, locked }); null = keine.
+  fearlessContext: null, archiveMode: 'drafts',
 };
 
 /** Winrate-Anteil eines Rating-Werts in Prozentpunkten. */
@@ -99,7 +101,10 @@ function completeDraftKey(view) {
 let archiveKey = null;
 let archiveTimer = null;
 store.subscribe(() => {
-  const key = completeDraftKey(store.get().views.draft);
+  // Während einer Fearless-Serie gehören vollständige Drafts in die Serie, nicht ins Archiv; ein geladenes Serienspiel
+  // ebenso wenig.
+  const view = store.get().views.draft;
+  const key = store.get().fearless?.active || view?.fearlessContext ? null : completeDraftKey(view);
   if (key === archiveKey) {
     return;
   }
@@ -110,7 +115,7 @@ store.subscribe(() => {
 
 function archiveDraft(key) {
   const view = store.get().views.draft;
-  if (completeDraftKey(view) !== key) {
+  if (completeDraftKey(view) !== key || store.get().fearless?.active || view.fearlessContext) {
     return;
   }
   api.post('/api/draft-archive', { ally: view.ally.filter(Boolean), enemy: view.enemy.filter(Boolean), bans: view.bans || [] })
@@ -123,11 +128,13 @@ function archiveDraft(key) {
     .catch(() => {});
 }
 
-function useDraftResult(view, dataSource) {
+function useDraftResult(view, dataSource, locked) {
   const [state, setState] = useState({ result: null, error: null, loading: true, completing: false });
   const sequence = useRef(0);
   const body = JSON.stringify({
     ally: view.ally.filter(Boolean), enemy: view.enemy.filter(Boolean), bans: view.bans, side: view.side,
+    // Fearless: in früheren Spielen der Serie gespielte Champions fehlen in den Vorschlägen.
+    locked: [...locked.keys()],
     // Spielzahlen gelten nur für seltene Picks, sonst die Pickrate auf der Rolle.
     risk: view.risk, rarePicks: Boolean(view.rarePicks),
     minGames: !view.rarePicks || view.minGames === AUTO_MIN_GAMES ? null : Number(view.minGames),
@@ -212,6 +219,8 @@ function useClientSync(view, setView, data) {
     setView({
       ally: toSlots(champSelect.ally, view.ally), enemy: toSlots(champSelect.enemy, view.enemy),
       bans: champSelect.bans.filter(known).slice(0, MAX_BANS), picker: null,
+      // Eine neue Champion-Auswahl ersetzt ein aus dem Archiv geladenes Serienspiel samt dessen Sperren.
+      ...(sameGame ? {} : { fearlessContext: null }),
     });
   }, [signature, data]);
   const toggle = (enabled) => api.post('/api/lcu', { enabled }).then((state) => store.set({ lcu: state }))
@@ -237,12 +246,219 @@ function ClientSync({ lcu, onToggle }) {
   </div>`;
 }
 
+// ------------------------------------------------------------------ Fearless-Serie
+
+const FEARLESS_FORMATS = [{ value: 'BO3', label: 'Bo3' }, { value: 'BO5', label: 'Bo5' }, { value: 'OPEN', label: 'Offen' }];
+const formatLabel = (format) => FEARLESS_FORMATS.find((f) => f.value === format)?.label || format;
+const NO_LOCKS = [];
+
+/**
+ * Stand der Fearless-Serien, einmal beim Start geladen: Auch die Archiv-Aufzeichnung muss wissen, ob eine Serie läuft.
+ * Alles bleibt lokal (`/api/fearless`), es gibt dafür keine Abfrage beim League-Client.
+ */
+api.get('/api/fearless').then((state) => store.set({ fearless: state })).catch(() => {});
+
+/** Plätze eines gespeicherten Drafts fürs Brett; unbekannte Champions fallen weg, `skip` wird zum freien Platz. */
+function boardSlots(team, data, skip = null) {
+  return [...team.filter((s) => data.championByKey.has(s.champion))
+    .map((s) => (s.champion === skip ? null : { champion: s.champion, role: s.role || null })), ...Array(TEAM_SIZE).fill(null)]
+    .slice(0, TEAM_SIZE);
+}
+
+/** Aktionen auf die Serien; jede Antwort ist der neue Gesamtstand und landet im Store. */
+function useFearless() {
+  const state = useStore((s) => s.fearless);
+  const [error, setError] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const call = (promise) => {
+    setBusy(true);
+    return promise
+      .then((next) => {
+        store.set({ fearless: next });
+        setError(null);
+        return next;
+      })
+      .catch((e) => {
+        setError(e);
+        return null;
+      })
+      .finally(() => setBusy(false));
+  };
+  return {
+    state, error, busy,
+    start: (format, label) => call(api.post('/api/fearless', { format, label })),
+    finish: (draft, result) => call(api.post('/api/fearless/game', { ...draft, result })),
+    undo: () => call(api.del('/api/fearless/game')),
+    end: () => call(api.post('/api/fearless/end')),
+    rename: (id, label) => call(api.put(`/api/fearless/${id}`, { label })),
+    remove: (id) => call(api.del(`/api/fearless/${id}`)),
+  };
+}
+
+/** „Spiel 3/5 · 2:0“; ohne eingetragene Ergebnisse ohne Stand. */
+function seriesProgress(series) {
+  const game = series.format === 'OPEN' ? `Spiel ${series.nextGame}` : `Spiel ${series.nextGame}/${series.maxGames}`;
+  return series.wins + series.losses > 0 ? `${game} · ${series.wins}:${series.losses}` : game;
+}
+
+/** Bezeichnung ändern: Eingabe mit Enter/Escape, leer entfernt die Bezeichnung. */
+function LabelEditor({ value, maxLength, onSave, onCancel }) {
+  const [text, setText] = useState(value || '');
+  const input = useRef();
+  useEffect(() => input.current.focus(), []);
+  return html`<div class="draft-fearless-rename">
+    <input ref=${input} class="input" type="text" maxlength=${maxLength} spellcheck="false" value=${text} aria-label="Bezeichnung"
+      placeholder="Bezeichnung (optional)" onInput=${(e) => setText(e.currentTarget.value)}
+      onKeyDown=${(e) => (e.key === 'Enter' ? onSave(text) : e.key === 'Escape' ? onCancel() : null)} />
+    <${Button} icon="ok" kind="icon" title="Bezeichnung speichern" onClick=${() => onSave(text)} />
+    <${Button} icon="x" kind="icon" title="Abbrechen" onClick=${onCancel} />
+  </div>`;
+}
+
+/**
+ * Schalter und Stand der Fearless-Serie (Hard Fearless): Picks beider Teams aus abgeschlossenen Spielen sind in den
+ * folgenden Spielen gesperrt, Bans nicht. Ein Spiel zählt erst nach „Spiel abschließen“, nie automatisch.
+ */
+function FearlessPanel({ fearless, view, setView, data, boardComplete }) {
+  const advancedTips = useStore((s) => Boolean(s.prefs.advancedTips));
+  const { state, busy } = fearless;
+  const active = state?.active || null;
+  const context = view.fearlessContext || null;
+  const maxLength = state?.maxLabelLength || 60;
+  const [form, setForm] = useState(null);
+  const [finishing, setFinishing] = useState(false);
+  const [renaming, setRenaming] = useState(false);
+  useEffect(() => setFinishing(false), [boardComplete, active?.nextGame]);
+
+  const toggle = (on) => {
+    if (on) {
+      setForm({ format: 'BO3', label: '' });
+    } else if (form) {
+      setForm(null);
+    } else if (active) {
+      const games = active.games.length;
+      if (games > 0 && !window.confirm(`Fearless-Serie beenden? ${games === 1 ? 'Das gespielte Spiel bleibt' : `Die ${games} gespielten Spiele bleiben`} unter Archiv › Serien erhalten.`)) {
+        return;
+      }
+      fearless.end().then((next) => next && toast(games > 0 ? 'Fearless-Serie beendet' : 'Fearless-Serie verworfen'));
+    }
+  };
+  const start = () => fearless.start(form.format, form.label).then((next) => {
+    if (next) {
+      setForm(null);
+      setView({ fearlessContext: null });
+      toast('Fearless-Serie gestartet: Der aktuelle Draft ist Spiel 1');
+    }
+  });
+  const finish = (result) => {
+    const draft = { ally: view.ally.filter(Boolean), enemy: view.enemy.filter(Boolean), bans: view.bans };
+    fearless.finish(draft, result).then((next) => {
+      if (!next) {
+        return;
+      }
+      setView({ ally: DEFAULTS.ally, enemy: DEFAULTS.enemy, bans: [], picker: null });
+      const series = next.series;
+      toast(next.ended ? `Serie beendet nach Spiel ${next.game}${series.wins + series.losses > 0 ? ` (${series.wins}:${series.losses})` : ''}`
+        : `Spiel ${next.game} abgeschlossen, ${next.locked.length} Champions gesperrt`);
+    });
+  };
+  const undo = () => {
+    const board = view.ally.some(Boolean) || view.enemy.some(Boolean) || view.bans.length > 0;
+    if (board && !window.confirm('Letztes Spiel zurücknehmen? Sein Draft ersetzt das aktuelle Brett.')) {
+      return;
+    }
+    fearless.undo().then((next) => {
+      if (next && next.undone) {
+        const game = next.undone;
+        setView({ ally: boardSlots(game.ally, data), enemy: boardSlots(game.enemy, data),
+          bans: game.bans.filter((key) => data.championByKey.has(key)).slice(0, MAX_BANS), picker: null, fearlessContext: null });
+        toast(`Spiel ${game.number} zurückgenommen`);
+      }
+    });
+  };
+  const rename = (label) => fearless.rename(active.id, label).then((next) => next && setRenaming(false));
+
+  return html`<div class="draft-fearless">
+    <${Switch} checked=${Boolean(active || form)} onChange=${toggle}
+      tip=${advancedTips ? 'Hard Fearless für Bo3, Bo5 oder offene Scrim-Blöcke: Champions, die ein Team in einem früheren Spiel der Serie gepickt hat, sind danach für beide Teams gesperrt. Bans werden nicht übertragen. Nur lokal, ohne Abfrage beim League-Client.' : undefined}>Fearless-Serie<//>
+    ${form ? html`<div class="draft-fearless-form">
+      <${Segmented} label="Format" value=${form.format} options=${FEARLESS_FORMATS} onChange=${(format) => setForm({ ...form, format })} />
+      <input class="input" type="text" maxlength=${maxLength} spellcheck="false" value=${form.label} aria-label="Bezeichnung"
+        placeholder="Bezeichnung (optional), z. B. Scrim Dienstag" onInput=${(e) => setForm({ ...form, label: e.currentTarget.value })}
+        onKeyDown=${(e) => e.key === 'Enter' && start()} />
+      <div class="draft-fearless-actions">
+        <${Button} kind="primary" icon="ok" onClick=${start} disabled=${busy}>Serie starten<//>
+        <${Button} kind="ghost" onClick=${() => setForm(null)}>Abbrechen<//>
+      </div>
+    </div>` : null}
+    ${active ? html`<div class="draft-fearless-bar">
+      ${renaming ? html`<${LabelEditor} value=${active.label} maxLength=${maxLength} onSave=${rename} onCancel=${() => setRenaming(false)} />`
+        : html`<div class="draft-fearless-head">
+          <strong class="draft-fearless-title">${active.label || 'Fearless-Serie'}</strong>
+          <${Button} icon="edit" kind="ghost" title="Bezeichnung ändern" onClick=${() => setRenaming(true)}
+            tip=${advancedTips ? 'Freie Bezeichnung, nur lokal gespeichert' : undefined} />
+        </div>`}
+      <span class="muted small">${formatLabel(active.format)} · ${seriesProgress(active)} · ${state.locked.length} gesperrt</span>
+      <div class="draft-fearless-actions">
+        ${finishing ? html`
+          <span class="small">Ergebnis für dein Team:</span>
+          <${Button} kind="primary" onClick=${() => finish('WIN')} disabled=${busy}>Gewonnen<//>
+          <${Button} onClick=${() => finish('LOSS')} disabled=${busy}>Verloren<//>
+          <${Button} kind="ghost" onClick=${() => finish(null)} disabled=${busy}>Ohne Ergebnis<//>
+          <${Button} icon="x" kind="icon" title="Abbrechen" onClick=${() => setFinishing(false)} />`
+        : html`
+          <${Button} icon="lock" onClick=${() => setFinishing(true)} disabled=${!boardComplete || busy || Boolean(context)}
+            tip=${context ? 'Erst das geladene Serienspiel schließen' : !boardComplete ? 'Erst alle zehn Champions eintragen' : advancedTips ? 'Sperrt die zehn Picks für die folgenden Spiele und leert das Brett' : undefined}>Spiel ${active.nextGame} abschließen<//>
+          <${Button} icon="undo" kind="icon" title="Letztes Spiel zurücknehmen" onClick=${undo} disabled=${busy || active.games.length === 0}
+            tip=${active.games.length ? `Spiel ${active.games.length} zurücknehmen` : undefined} />`}
+      </div>
+    </div>` : null}
+    ${context ? html`<div class="draft-fearless-context small">
+      <${Icon} name="lock" size=${14} />
+      <span>Sperren aus ${context.label || 'Serie'}, Spiel ${context.game}</span>
+      <${Button} icon="x" kind="icon" title="Sperren des Serienspiels aufheben" onClick=${() => setView({ fearlessContext: null })} />
+    </div>` : null}
+    ${fearless.error ? html`<${ErrorNote} prefix="Fearless" error=${fearless.error} />` : null}
+  </div>`;
+}
+
+/** Gesperrte Champions nach Spiel, unter den Bans; einklappbar, der Stand wird gespeichert. */
+function FearlessLocks({ locked, data }) {
+  const open = useStore((s) => s.draftFearlessLocksOpen !== false);
+  if (locked.size === 0) {
+    return null;
+  }
+  const games = new Map();
+  locked.forEach((game, champion) => games.set(game, [...(games.get(game) || []), champion]));
+  return html`<div class="draft-locks" aria-label="Fearless-Sperren">
+    <button type="button" class="draft-locks-head" aria-expanded=${open} onClick=${() => store.set({ draftFearlessLocksOpen: !open })}>
+      <${Icon} name="lock" size=${14} /><span>Fearless-Sperren</span><span class="muted small">${locked.size}</span>
+      <span class=${`draft-locks-chevron ${open ? 'open' : ''}`}><${Icon} name="chevron" size=${14} /></span>
+    </button>
+    ${open ? [...games].map(([game, champions]) => html`<div class="draft-locks-game" key=${game}>
+      <span class="muted small">Spiel ${game}</span>
+      ${champions.map((key) => {
+        const champion = data.championByKey.get(key);
+        return champion ? html`<span key=${key} class="draft-lock-icon" data-tip=${`${champion.name}: in Spiel ${game} gespielt`}>
+          <${Img} src=${champion.icon} size=${24} alt=${champion.name} />
+        </span>` : null;
+      })}
+    </div>`) : null}
+  </div>`;
+}
+
 export function DraftView() {
   const data = useStore((s) => s.data);
   const advancedTips = useStore((s) => Boolean(s.prefs.advancedTips));
   const dataSource = useStore((s) => s.dataSource);
   const [view, setView] = useViewState('draft', DEFAULTS);
-  const { result, error, loading, completing, requestId } = useDraftResult(view, dataSource);
+  const fearless = useFearless();
+  const fearlessActive = fearless.state?.active || null;
+  const fearlessContext = view.fearlessContext || null;
+  // Champion-Key → Spiel, in dem er gespielt wurde. Ein geladenes Serienspiel bringt seine eigenen Sperren mit.
+  const lockedList = fearlessContext ? fearlessContext.locked : fearlessActive ? fearless.state.locked : NO_LOCKS;
+  const locked = useMemo(() => new Map(lockedList.map((l) => [l.champion, l.game])), [lockedList]);
+  const { result, error, loading, completing, requestId } = useDraftResult(view, dataSource, locked);
   const sourceLabel = useSourceLabel();
   const client = useClientSync(view, setView, data);
   const owned = useMemo(() => new Set(client.champSelect ? client.lcu.pickable : []), [client.champSelect, client.lcu]);
@@ -294,7 +510,7 @@ export function DraftView() {
     // Während des Ladens gehören die angezeigten Vorschläge noch zum vorherigen Draft.
     const team = view.side;
     const roleTaken = view[team].some((slot) => slot && slot.role === suggestion.role);
-    if (loading || !result || result.side !== team || used.has(suggestion.champion) || roleTaken) {
+    if (loading || !result || result.side !== team || used.has(suggestion.champion) || locked.has(suggestion.champion) || roleTaken) {
       return;
     }
     const index = view[team].findIndex((slot) => !slot);
@@ -303,7 +519,7 @@ export function DraftView() {
     }
   };
 
-  const reset = () => setView({ ally: DEFAULTS.ally, enemy: DEFAULTS.enemy, bans: [] });
+  const reset = () => setView({ ally: DEFAULTS.ally, enemy: DEFAULTS.enemy, bans: [], fearlessContext: null });
   const picks = view.ally.filter(Boolean).length + view.enemy.filter(Boolean).length;
 
   return html`<div class="page draft">
@@ -314,11 +530,13 @@ export function DraftView() {
         <${WinPanel} analysis=${result?.analysis} picks=${picks} loading=${loading} completing=${completing} />
         <${BanRow} bans=${view.bans} data=${data} onAdd=${() => setView({ picker: { team: 'bans' } })}
           onRemove=${(key) => setView({ bans: view.bans.filter((b) => b !== key) })} />
+        <${FearlessLocks} locked=${locked} data=${data} />
         <div class="draft-actions">
-          <${Button} icon="trash" onClick=${reset} disabled=${picks === 0 && view.bans.length === 0}>Draft leeren<//>
+          <${Button} icon="trash" onClick=${reset} disabled=${picks === 0 && view.bans.length === 0 && !fearlessContext}>Draft leeren<//>
           <span class="muted small">${sourceLabel}</span>
         </div>
         <${ClientSync} lcu=${client.lcu} onToggle=${client.toggle} />
+        <${FearlessPanel} fearless=${fearless} view=${view} setView=${setView} data=${data} boardComplete=${picks === 2 * TEAM_SIZE} />
       </div>
       <${TeamColumn} title="Gegner" team="enemy" slots=${view.enemy} result=${result} data=${data} pending=${pendingRole} hints=${hints.enemy}
         onPick=${(index) => setView({ picker: { team: 'enemy', index } })} onRole=${setSlotRole} onClear=${clearSlot} />
@@ -360,7 +578,7 @@ export function DraftView() {
         ? html`<${Suggestions} result=${result} data=${data} view=${view} setView=${setView} onTake=${takeSuggestion} busy=${loading} owned=${owned} />`
         : html`<${Analysis} result=${result} data=${data} picks=${picks} />`}
 
-    ${view.picker ? html`<${ChampionPicker} data=${data} used=${used}
+    ${view.picker ? html`<${ChampionPicker} data=${data} used=${used} locked=${locked}
       title=${view.picker.team === 'bans' ? 'Champion bannen' : view.picker.team === 'ally' ? 'Pick für dein Team' : 'Pick des Gegners'}
       onChoose=${(champion) => assign(view.picker, champion)} onClose=${() => setView({ picker: null })} />` : null}
   </div>`;
@@ -498,7 +716,7 @@ function BanRow({ bans, data, onAdd, onRemove }) {
   </div>`;
 }
 
-function ChampionPicker({ data, used, title, onChoose, onClose }) {
+function ChampionPicker({ data, used, locked, title, onChoose, onClose }) {
   const [query, setQuery] = useState('');
   const favorites = useFavorites();
   const input = useRef();
@@ -513,7 +731,7 @@ function ChampionPicker({ data, used, title, onChoose, onClose }) {
     if (e.key === 'Escape') {
       onClose();
     } else if (e.key === 'Enter') {
-      const first = matches.find((c) => !used.has(c.key));
+      const first = matches.find((c) => !used.has(c.key) && !locked.has(c.key));
       if (first) {
         onChoose(first.key);
       }
@@ -528,11 +746,17 @@ function ChampionPicker({ data, used, title, onChoose, onClose }) {
           onInput=${(e) => setQuery(e.currentTarget.value)} />
       </label>
       <div class="draft-picker-grid">
-        ${matches.map((c) => html`<button type="button" key=${c.key} disabled=${used.has(c.key)} onClick=${() => onChoose(c.key)}
-          class=${favorites.has(c.key) ? 'favorite' : ''}>
-          <${Img} src=${c.icon} size=${48} /><span>${c.name}</span>
-          ${favorites.has(c.key) ? html`<${FavoriteMark} size=${13} />` : null}
-        </button>`)}
+        ${matches.map((c) => {
+          // Fearless-Sperre: nicht wählbar, aber mit Tooltip (deaktivierte Buttons zeigen keinen).
+          const game = locked.get(c.key);
+          return html`<button type="button" key=${c.key} disabled=${used.has(c.key)} aria-disabled=${game ? 'true' : undefined}
+            onClick=${() => !game && onChoose(c.key)} class=${`${favorites.has(c.key) ? 'favorite' : ''} ${game ? 'locked' : ''}`}
+            data-tip=${game ? `${c.name}: in Spiel ${game} gespielt (Fearless)` : undefined}>
+            <${Img} src=${c.icon} size=${48} /><span>${c.name}</span>
+            ${favorites.has(c.key) ? html`<${FavoriteMark} size=${13} />` : null}
+            ${game ? html`<span class="draft-lock-mark"><${Icon} name="lock" size=${12} /></span>` : null}
+          </button>`;
+        })}
       </div>
     </div>
   </div>`;
@@ -1121,7 +1345,7 @@ function Archive({ data, view, setView }) {
     const skip = (team) => (without && without.team === team ? without.champion : null);
     const patch = {
       ally: toSlots(entry.ally, skip('ally')), enemy: toSlots(entry.enemy, skip('enemy')),
-      bans: entry.bans.filter(known).slice(0, MAX_BANS), picker: null,
+      bans: entry.bans.filter(known).slice(0, MAX_BANS), picker: null, fearlessContext: null,
       // Ganzer Draft: die Analyse. Ohne einen Pick: die besten Picks für diese Seite und, wenn bekannt, seine Rolle.
       tab: without ? 'picks' : 'analysis',
     };
