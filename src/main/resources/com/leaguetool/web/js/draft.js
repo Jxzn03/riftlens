@@ -797,7 +797,7 @@ function minuteLabel(starts, i) {
 /**
  * Klappbarer Abschnitt der Analyse mit beschrifteter Trennlinie. Startet nach `defaultOpen`; der Stand liegt in
  * `store[storeKey]` und gilt auch beim Wechsel zwischen Tabs. Steht der Schlüssel in PERSISTED (`core.js`), bleibt er
- * über Neustarts erhalten (so `draftDetailsOpen`).
+ * über Neustarts erhalten (so `draftDetailsOpen` und `draftOverviewOpen`).
  */
 function Section({ title, storeKey, defaultOpen = false, children }) {
   const open = useStore((s) => s[storeKey] ?? defaultOpen);
