@@ -1147,13 +1147,13 @@ function Archive({ data, view, setView }) {
     return error ? html`<${ErrorNote} prefix="Archiv nicht verfügbar" error=${error} />` : html`<${Loading} />`;
   }
   return html`<div class="draft-archive">
-    <p class="muted small draft-archive-note">
+    ${advancedTips ? html`<p class="muted small draft-archive-note">
       Die letzten ${list.limit} vollständigen Drafts, nur lokal auf diesem Gerät gespeichert (Anzahl in den Einstellungen).
       Ein Draft kommt hinzu, sobald alle zehn Champions feststehen und ${ARCHIVE_DELAY_MS / 1000} Sekunden unverändert bleiben.
       Weicht er von einem gespeicherten in weniger als ${list.minChanges} Champions ab, gilt er als Variante und wird nicht
       gespeichert. Klick auf einen Champion lädt den Draft ohne ihn: „Beste Picks“ zeigt dann, was an seiner Stelle am
       stärksten gewesen wäre.
-    </p>
+    </p>` : null}
     ${error ? html`<${ErrorNote} prefix="Aktion fehlgeschlagen" error=${error} />` : null}
     ${list.entries.length === 0
       ? html`<${Empty} title="Noch keine Drafts im Archiv">Vollständige Drafts erscheinen hier automatisch.<//>`
