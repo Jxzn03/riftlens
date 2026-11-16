@@ -30,6 +30,10 @@ Mit dem Client-Abgleich fragt der Tab nach dem Ende einer Champion-Auswahl mit v
 Spiel zählen soll; automatisch übernommen wird nichts (in der Finalisierung kann noch jemand dodgen). Wird im Client ein
 gesperrter Champion gepickt, etwa im Ranked bei vergessener Serie, erscheint ein Hinweis mit „Serie beenden“. Läuft eine
 Serie seit über 12 Stunden ohne neues Spiel, fragt der Tab einmal je Sitzung, ob sie noch aktuell ist.
+Unter „Archiv › Fearless-Serien“ stehen laufende und beendete Serien mit ihren Spielen (beendete: so viele wie
+Archiv-Einträge eingestellt sind). „Laden“ und der Klick auf einen Champion funktionieren wie im Archiv, dazu gelten die
+Sperren, die in diesem Spiel galten. Die zuletzt beendete Serie lässt sich wieder öffnen, etwa nach einem falsch
+eingetragenen Ergebnis; Bezeichnungen lassen sich jederzeit ändern.
 
 **Abgleich mit dem League-Client** (Schalter im Draft-Tab, Standard aus, sein Stand bleibt über Neustarts erhalten;
 ausgeschaltet wird der Client nie abgefragt): Während der Champion-Auswahl übernimmt das

@@ -1387,26 +1387,9 @@ function Archive({ data, view, setView }) {
 
   const board = { ally: view.ally.filter(Boolean), enemy: view.enemy.filter(Boolean) };
   const boardComplete = board.ally.length === TEAM_SIZE && board.enemy.length === TEAM_SIZE;
-  const known = (key) => data.championByKey.has(key);
-  // Die Plätze behalten ihre Reihenfolge; der ausgelassene Pick wird zum freien Platz.
-  const toSlots = (team, skip) => [...team.filter((s) => known(s.champion))
-    .map((s) => (s.champion === skip ? null : { champion: s.champion, role: s.role || null })), ...Array(TEAM_SIZE).fill(null)]
-    .slice(0, TEAM_SIZE);
 
   const load = (entry, without) => {
-    const skip = (team) => (without && without.team === team ? without.champion : null);
-    const patch = {
-      ally: toSlots(entry.ally, skip('ally')), enemy: toSlots(entry.enemy, skip('enemy')),
-      bans: entry.bans.filter(known).slice(0, MAX_BANS), picker: null, fearlessContext: null,
-      // Ganzer Draft: die Analyse. Ohne einen Pick: die besten Picks für diese Seite und, wenn bekannt, seine Rolle.
-      tab: without ? 'picks' : 'analysis',
-    };
-    if (without) {
-      const removed = entry[without.team].find((s) => s.champion === without.champion);
-      patch.side = without.team;
-      patch.role = removed && removed.role ? removed.role : '';
-    }
-    setView(patch);
+    setView(boardPatch(entry, data, without));
     toast(without ? `Draft ohne ${data.championByKey.get(without.champion).name} geladen` : 'Draft aus dem Archiv geladen');
   };
 
@@ -1418,11 +1401,18 @@ function Archive({ data, view, setView }) {
       .catch((error) => setState((previous) => ({ ...previous, error })));
   };
 
+  const mode = view.archiveMode === 'series' ? 'series' : 'drafts';
+  const switcher = html`<${Segmented} label="Archiv" value=${mode} onChange=${(archiveMode) => setView({ archiveMode })}
+    options=${[{ value: 'drafts', label: 'Drafts' }, { value: 'series', label: 'Fearless-Serien' }]} />`;
+  if (mode === 'series') {
+    return html`<div class="draft-archive">${switcher}<${SeriesList} data=${data} view=${view} setView=${setView} /></div>`;
+  }
   const { list, error } = state;
   if (!list) {
     return error ? html`<${ErrorNote} prefix="Archiv nicht verfügbar" error=${error} />` : html`<${Loading} />`;
   }
   return html`<div class="draft-archive">
+    ${switcher}
     ${advancedTips ? html`<p class="muted small draft-archive-note">
       Die letzten ${list.limit} vollständigen Drafts, nur lokal auf diesem Gerät gespeichert (Anzahl in den Einstellungen).
       Ein Draft kommt hinzu, sobald alle zehn Champions feststehen und ${ARCHIVE_DELAY_MS / 1000} Sekunden unverändert bleiben.
@@ -1440,7 +1430,109 @@ function Archive({ data, view, setView }) {
   </div>`;
 }
 
-function ArchiveEntry({ entry, data, advancedTips, current, onLoad, onRemove }) {
+/** Brett-Stand eines gespeicherten Drafts; `without` lädt ihn ohne einen Pick („Beste Picks“ für dessen Platz). */
+function boardPatch(entry, data, without = null) {
+  const skip = (team) => (without && without.team === team ? without.champion : null);
+  const patch = {
+    ally: boardSlots(entry.ally, data, skip('ally')), enemy: boardSlots(entry.enemy, data, skip('enemy')),
+    bans: entry.bans.filter((key) => data.championByKey.has(key)).slice(0, MAX_BANS), picker: null, fearlessContext: null,
+    // Ganzer Draft: die Analyse. Ohne einen Pick: die besten Picks für diese Seite und, wenn bekannt, seine Rolle.
+    tab: without ? 'picks' : 'analysis',
+  };
+  if (without) {
+    const removed = entry[without.team].find((s) => s.champion === without.champion);
+    patch.side = without.team;
+    patch.role = removed && removed.role ? removed.role : '';
+  }
+  return patch;
+}
+
+const RESULT_LABELS = { WIN: 'Sieg', LOSS: 'Niederlage' };
+
+/**
+ * Laufende und beendete Fearless-Serien mit ihren Spielen. Laden und der Klick auf einen Champion wirken wie im Archiv,
+ * zusätzlich gelten die Sperren, die in diesem Spiel galten (Picks der Spiele davor).
+ */
+function SeriesList({ data, view, setView }) {
+  const fearless = useFearless();
+  const advancedTips = useStore((s) => Boolean(s.prefs.advancedTips));
+  const [renaming, setRenaming] = useState(null);
+  const { state } = fearless;
+  if (!state) {
+    return html`<${Loading} />`;
+  }
+  const list = [...(state.active ? [state.active] : []), ...state.finished];
+  if (list.length === 0) {
+    return html`<${Empty} title="Noch keine Fearless-Serien">Eine Serie erscheint hier, sobald ihr erstes Spiel abgeschlossen ist.<//>`;
+  }
+  const board = { ally: view.ally.filter(Boolean), enemy: view.enemy.filter(Boolean) };
+  const boardComplete = board.ally.length === TEAM_SIZE && board.enemy.length === TEAM_SIZE;
+  const context = view.fearlessContext;
+
+  const loadGame = (series, game, without) => {
+    const locked = series.games.filter((g) => g.number < game.number)
+      .flatMap((g) => [...g.ally, ...g.enemy].map((s) => ({ champion: s.champion, game: g.number })));
+    setView({ ...boardPatch(game, data, without), fearlessContext: { seriesId: series.id, label: series.label, game: game.number, locked } });
+    toast(without ? `Spiel ${game.number} ohne ${data.championByKey.get(without.champion).name} geladen, mit ${locked.length} Sperren`
+      : `Spiel ${game.number} geladen, mit ${locked.length} Sperren`);
+  };
+  const rename = (series, label) => fearless.rename(series.id, label).then((next) => next && setRenaming(null));
+  const remove = (series) => {
+    if (window.confirm('Diese Serie mit allen Spielen löschen?')) {
+      fearless.remove(series.id);
+    }
+  };
+  const reopen = () => {
+    const filled = view.ally.some(Boolean) || view.enemy.some(Boolean) || view.bans.length > 0;
+    if (!window.confirm(`Serie wieder öffnen und ihr letztes Spiel zurücknehmen?${filled ? ' Sein Draft ersetzt das aktuelle Brett.' : ''}`)) {
+      return;
+    }
+    fearless.undo().then((next) => {
+      if (next && next.undone) {
+        setView({ ...boardPatch(next.undone, data), tab: 'picks' });
+        toast(`Serie läuft wieder, Spiel ${next.undone.number} ist zurück auf dem Brett`);
+      }
+    });
+  };
+
+  return html`<div class="draft-series-list">
+    ${fearless.error ? html`<${ErrorNote} prefix="Aktion fehlgeschlagen" error=${fearless.error} />` : null}
+    ${list.map((series, index) => {
+      const running = !series.endedAt;
+      const date = new Date(series.startedAt).toLocaleString('de-DE', ARCHIVE_DATE);
+      const score = series.wins + series.losses > 0 ? ` · ${series.wins}:${series.losses}` : '';
+      // Nur die zuletzt beendete Serie lässt sich wieder öffnen, und nur, wenn gerade keine läuft.
+      const reopenable = !state.active && index === 0 && !running;
+      return html`<section key=${series.id} class=${`draft-series ${running ? 'running' : ''}`}>
+        <header class="draft-series-head">
+          ${renaming === series.id
+            ? html`<${LabelEditor} value=${series.label} maxLength=${state.maxLabelLength || 60}
+              onSave=${(label) => rename(series, label)} onCancel=${() => setRenaming(null)} />`
+            : html`<div class="draft-fearless-head">
+              <strong class="draft-fearless-title">${series.label || `Serie vom ${date}`}</strong>
+              <${Button} icon="edit" kind="ghost" title="Bezeichnung ändern" onClick=${() => setRenaming(series.id)} />
+            </div>`}
+          <span class="muted small">${formatLabel(series.format)} · ${series.games.length} ${series.games.length === 1 ? 'Spiel' : 'Spiele'}${score}${series.label ? ` · ${date}` : ''}</span>
+          ${running ? html`<${Tag}>Läuft<//>` : null}
+          <div class="draft-archive-actions">
+            ${reopenable ? html`<${Button} icon="undo" kind="icon" title="Wieder öffnen, letztes Spiel zurücknehmen" onClick=${reopen}
+              tip=${advancedTips ? 'Für ein falsch eingetragenes letztes Spiel oder Ergebnis' : undefined} />` : null}
+            ${running ? null : html`<${Button} icon="trash" kind="icon" title="Serie löschen" onClick=${() => remove(series)} />`}
+          </div>
+        </header>
+        ${series.games.length === 0 ? html`<p class="muted small">Noch kein Spiel abgeschlossen.</p>` : html`<ul class="draft-archive-list">
+          ${series.games.map((game) => html`<${ArchiveEntry} key=${game.number} data=${data} advancedTips=${advancedTips}
+            entry=${{ ...game, savedAt: game.playedAt }} heading=${`Spiel ${game.number}`}
+            badge=${game.result ? html`<${Tag} kind=${game.result === 'WIN' ? '' : 'soft'}>${RESULT_LABELS[game.result]}<//>` : null}
+            current=${boardComplete && Boolean(context) && context.seriesId === series.id && context.game === game.number && draftChanges(game, board) === 0}
+            onLoad=${(entry, without) => loadGame(series, game, without)} />`)}
+        </ul>`}
+      </section>`;
+    })}
+  </div>`;
+}
+
+function ArchiveEntry({ entry, data, advancedTips, current, onLoad, onRemove, heading = null, badge = null }) {
   const pick = (slot, team) => {
     const champion = data.championByKey.get(slot.champion);
     if (!champion) {
@@ -1455,8 +1547,9 @@ function ArchiveEntry({ entry, data, advancedTips, current, onLoad, onRemove }) 
   const bans = entry.bans.map((key) => data.championByKey.get(key)).filter(Boolean);
   return html`<li class=${`draft-archive-entry ${current ? 'current' : ''}`}>
     <div class="draft-archive-meta">
-      <strong>${new Date(entry.savedAt).toLocaleString('de-DE', ARCHIVE_DATE)}</strong>
+      <strong>${heading || new Date(entry.savedAt).toLocaleString('de-DE', ARCHIVE_DATE)}</strong>
       <span class="muted small">${patchLabel(entry.patch)}</span>
+      ${badge}
       ${current ? html`<${Tag}>Auf dem Brett<//>` : null}
     </div>
     <div class="draft-archive-teams">
@@ -1469,8 +1562,8 @@ function ArchiveEntry({ entry, data, advancedTips, current, onLoad, onRemove }) 
     </div>
     <div class="draft-archive-actions">
       <${Button} icon="download" onClick=${() => onLoad(entry)} tip=${advancedTips ? 'Ganzen Draft aufs Brett laden' : undefined}>Laden<//>
-      <${Button} icon="trash" title="Aus dem Archiv löschen" onClick=${() => onRemove(entry)}
-        tip=${advancedTips ? 'Aus dem Archiv löschen' : undefined} />
+      ${onRemove ? html`<${Button} icon="trash" title="Aus dem Archiv löschen" onClick=${() => onRemove(entry)}
+        tip=${advancedTips ? 'Aus dem Archiv löschen' : undefined} />` : null}
     </div>
   </li>`;
 }
