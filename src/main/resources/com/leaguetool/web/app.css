@@ -821,3 +821,6 @@ table.data.compact td { padding: 3px 10px 3px 0; font-size: 12.5px; }
 .draft-picker-grid button.locked { opacity: .35; cursor: not-allowed; }
 .draft-picker-grid .draft-lock-mark { position: absolute; top: 4px; left: 5px; display: grid; place-items: center; padding: 2px; border-radius: 4px; background: var(--locked); color: var(--surface); }
 .draft-fearless-actions > span.small:first-child { flex-basis: 100%; }
+.draft-fearless-notice { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 8px; padding: 8px 10px; border-radius: var(--radius-s); background: var(--surface); border: 1px solid var(--warn); color: var(--warn); font-size: 12.5px; }
+.draft-fearless-notice > span { flex: 1; min-width: 180px; color: var(--text); }
+.draft-fearless-notice.offer { border-color: var(--locked); color: var(--locked); }

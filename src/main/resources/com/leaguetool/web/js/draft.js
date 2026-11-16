@@ -251,6 +251,9 @@ function ClientSync({ lcu, onToggle }) {
 const FEARLESS_FORMATS = [{ value: 'BO3', label: 'Bo3' }, { value: 'BO5', label: 'Bo5' }, { value: 'OPEN', label: 'Offen' }];
 const formatLabel = (format) => FEARLESS_FORMATS.find((f) => f.value === format)?.label || format;
 const NO_LOCKS = [];
+/** Ab so langer Pause ohne neues Spiel fragt der Tab, ob die Serie noch läuft. */
+const STALE_SERIES_MS = 12 * 60 * 60 * 1000;
+const SERIES_DATE = { dateStyle: 'medium', timeStyle: 'short' };
 
 /**
  * Stand der Fearless-Serien, einmal beim Start geladen: Auch die Archiv-Aufzeichnung muss wissen, ob eine Serie läuft.
@@ -319,8 +322,9 @@ function LabelEditor({ value, maxLength, onSave, onCancel }) {
  * Schalter und Stand der Fearless-Serie (Hard Fearless): Picks beider Teams aus abgeschlossenen Spielen sind in den
  * folgenden Spielen gesperrt, Bans nicht. Ein Spiel zählt erst nach „Spiel abschließen“, nie automatisch.
  */
-function FearlessPanel({ fearless, view, setView, data, boardComplete }) {
+function FearlessPanel({ fearless, view, setView, data, boardComplete, lcuStatus, conflicts }) {
   const advancedTips = useStore((s) => Boolean(s.prefs.advancedTips));
+  const staleAck = useStore((s) => s.fearlessStaleAck);
   const { state, busy } = fearless;
   const active = state?.active || null;
   const context = view.fearlessContext || null;
@@ -328,7 +332,29 @@ function FearlessPanel({ fearless, view, setView, data, boardComplete }) {
   const [form, setForm] = useState(null);
   const [finishing, setFinishing] = useState(false);
   const [renaming, setRenaming] = useState(false);
+  const [offer, setOffer] = useState(false);
   useEffect(() => setFinishing(false), [boardComplete, active?.nextGame]);
+
+  // Endet die Champion-Auswahl im Client mit vollem Brett, schlägt das Panel vor, das Spiel abzuschließen. Automatisch
+  // zählt es nie: In der Finalisierungsphase kann noch jemand dodgen. Gelesen wird dafür nichts Zusätzliches.
+  const previousStatus = useRef(lcuStatus);
+  useEffect(() => {
+    if (lcuStatus === 'CHAMP_SELECT') {
+      setOffer(false);
+    } else if (previousStatus.current === 'CHAMP_SELECT' && active && boardComplete && !context) {
+      setOffer(true);
+    }
+    previousStatus.current = lcuStatus;
+  }, [lcuStatus]);
+  useEffect(() => {
+    if (!active || !boardComplete) {
+      setOffer(false);
+    }
+  }, [active?.nextGame, boardComplete]);
+
+  // Eine vergessene Serie würde im Ranked Vorschläge wegnehmen: nach 12 h ohne neues Spiel einmal je Sitzung nachfragen.
+  const lastActivity = active ? Date.parse(active.games.length ? active.games[active.games.length - 1].playedAt : active.startedAt) : 0;
+  const stale = active && Date.now() - lastActivity > STALE_SERIES_MS && staleAck !== active.id;
 
   const toggle = (on) => {
     if (on) {
@@ -381,6 +407,28 @@ function FearlessPanel({ fearless, view, setView, data, boardComplete }) {
   return html`<div class="draft-fearless">
     <${Switch} checked=${Boolean(active || form)} onChange=${toggle}
       tip=${advancedTips ? 'Hard Fearless für Bo3, Bo5 oder offene Scrim-Blöcke: Champions, die ein Team in einem früheren Spiel der Serie gepickt hat, sind danach für beide Teams gesperrt. Bans werden nicht übertragen. Nur lokal, ohne Abfrage beim League-Client.' : undefined}>Fearless-Serie<//>
+    ${stale ? html`<div class="draft-fearless-notice">
+      <${Icon} name="alert" size=${15} />
+      <span>${active.label ? `„${active.label}“` : 'Die Fearless-Serie'} läuft seit ${new Date(active.startedAt).toLocaleString('de-DE', SERIES_DATE)}. Noch aktuell?</span>
+      <div class="draft-fearless-actions">
+        <${Button} kind="ghost" onClick=${() => store.set({ fearlessStaleAck: active.id })}>Fortsetzen<//>
+        <${Button} onClick=${() => toggle(false)} disabled=${busy}>Serie beenden<//>
+      </div>
+    </div>` : null}
+    ${active && conflicts.length ? html`<div class="draft-fearless-notice">
+      <${Icon} name="alert" size=${15} />
+      <span>Im League-Client gepickt, aber in der Serie gesperrt: ${conflicts.map((key) => data.championByKey.get(key)?.name).filter(Boolean).join(', ')}.
+        Läuft gerade kein Fearless-Spiel?</span>
+      <div class="draft-fearless-actions"><${Button} onClick=${() => toggle(false)} disabled=${busy}>Serie beenden<//></div>
+    </div>` : null}
+    ${offer && active && !finishing ? html`<div class="draft-fearless-notice offer">
+      <${Icon} name="lock" size=${15} />
+      <span>Champion-Auswahl beendet. Draft als Spiel ${active.nextGame} der Serie übernehmen?</span>
+      <div class="draft-fearless-actions">
+        <${Button} kind="primary" onClick=${() => { setOffer(false); setFinishing(true); }}>Übernehmen<//>
+        <${Button} kind="ghost" onClick=${() => setOffer(false)}>Nicht übernehmen<//>
+      </div>
+    </div>` : null}
     ${form ? html`<div class="draft-fearless-form">
       <${Segmented} label="Format" value=${form.format} options=${FEARLESS_FORMATS} onChange=${(format) => setForm({ ...form, format })} />
       <input class="input" type="text" maxlength=${maxLength} spellcheck="false" value=${form.label} aria-label="Bezeichnung"
@@ -469,6 +517,9 @@ export function DraftView() {
 
   const used = useMemo(() => new Set([...view.ally, ...view.enemy].filter(Boolean).map((s) => s.champion).concat(view.bans)),
     [view.ally, view.enemy, view.bans]);
+  // Gesperrte Champions auf dem Brett, z. B. aus dem Client-Abgleich in einer Ranked-Auswahl bei vergessener Serie.
+  const lockedOnBoard = useMemo(() => [...view.ally, ...view.enemy].filter((s) => s && locked.has(s.champion))
+    .map((s) => s.champion), [view.ally, view.enemy, locked]);
 
   const assign = (picker, champion) => {
     if (picker.team === 'bans') {
@@ -536,7 +587,8 @@ export function DraftView() {
           <span class="muted small">${sourceLabel}</span>
         </div>
         <${ClientSync} lcu=${client.lcu} onToggle=${client.toggle} />
-        <${FearlessPanel} fearless=${fearless} view=${view} setView=${setView} data=${data} boardComplete=${picks === 2 * TEAM_SIZE} />
+        <${FearlessPanel} fearless=${fearless} view=${view} setView=${setView} data=${data} boardComplete=${picks === 2 * TEAM_SIZE}
+          lcuStatus=${client.lcu?.status} conflicts=${client.champSelect ? lockedOnBoard : NO_LOCKS} />
       </div>
       <${TeamColumn} title="Gegner" team="enemy" slots=${view.enemy} result=${result} data=${data} pending=${pendingRole} hints=${hints.enemy}
         onPick=${(index) => setView({ picker: { team: 'enemy', index } })} onRole=${setSlotRole} onClear=${clearSlot} />

@@ -26,6 +26,10 @@ sind in der Auswahl ausgegraut und fehlen in den Vorschlägen. Das letzte Spiel 
 Bo5 endet von selbst, sobald sie entschieden ist; Ausschalten beendet die Serie. Während einer Serie nimmt das Archiv
 keine Drafts auf. Gespeichert wird nur lokal in `fearless-series.json`, wie im Archiv nur Champions, Rollen, Bans und
 die Bezeichnung. Der League-Client wird dafür nicht zusätzlich abgefragt.
+Mit dem Client-Abgleich fragt der Tab nach dem Ende einer Champion-Auswahl mit vollem Brett, ob der Draft als nächstes
+Spiel zählen soll; automatisch übernommen wird nichts (in der Finalisierung kann noch jemand dodgen). Wird im Client ein
+gesperrter Champion gepickt, etwa im Ranked bei vergessener Serie, erscheint ein Hinweis mit „Serie beenden“. Läuft eine
+Serie seit über 12 Stunden ohne neues Spiel, fragt der Tab einmal je Sitzung, ob sie noch aktuell ist.
 
 **Abgleich mit dem League-Client** (Schalter im Draft-Tab, Standard aus, sein Stand bleibt über Neustarts erhalten;
 ausgeschaltet wird der Client nie abgefragt): Während der Champion-Auswahl übernimmt das
