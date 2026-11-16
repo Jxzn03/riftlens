@@ -342,7 +342,7 @@ export function DraftView() {
             options=${[{ value: AUTO_MIN_GAMES, label: autoLabel(result, false) }, ...MIN_PICK_RATES]} />
         </label>`}
         <${Switch} checked=${view.ignoreChampionWinRates} onChange=${(ignoreChampionWinRates) => setView({ ignoreChampionWinRates })}
-          tip=${advancedTips ? 'Bewertet nur Duos und Matchups, nicht die allgemeine Stärke der Champions' : undefined}>Nur Synergien und Matchups<//>
+          tip=${advancedTips ? 'Bewertet nur Synergien und Matchups, nicht die allgemeine Stärke der Champions' : undefined}>Nur Synergien und Matchups<//>
         <${Switch} checked=${Boolean(view.rarePicks)} onChange=${(rarePicks) => setView({ rarePicks })}
           tip=${advancedTips ? 'Bisheriges Verhalten: auch Off-Role-Picks wie Tahm Kench ADC, Filter nur nach Spielzahl. Sonst braucht ein Vorschlag mindestens 10 % der Spiele seines Champions auf dieser Rolle und die gewählte Pickrate.' : undefined}>Seltene Picks zeigen<//>
       </div>
@@ -568,7 +568,7 @@ function WinPanel({ analysis, picks, loading, completing }) {
     </div>
     <div class="draft-win-parts">
       <${Part} label="Champions" rating=${analysis.championRating} tip="Allgemeine Stärke der Champions auf ihren Rollen" />
-      <${Part} label="Duos" rating=${analysis.duoRating} tip="Synergien im eigenen Team minus Synergien im Gegnerteam" />
+      <${Part} label="Synergien" rating=${analysis.duoRating} tip="Eigene Team-Synergien minus die des Gegners" />
       <${Part} label="Matchups" rating=${analysis.matchupRating} tip="Alle Paarungen eigener Champions gegen gegnerische" />
     </div>
   </div>`;
@@ -592,7 +592,7 @@ function suggestionColumns(data) {
     { key: 'winRate', title: 'Team-WR', tip: 'Winrate des Teams mit diesem Pick', value: (s) => s.winRate },
     { key: 'delta', title: 'Δ', tip: 'Änderung gegenüber dem Draft ohne diesen Pick', value: (s) => s.delta },
     { key: 'championRating', title: 'Champion', tip: 'Beitrag der Champion-Stärke', value: (s) => s.championRating },
-    { key: 'duoRating', title: 'Duos', tip: 'Beitrag der Synergien mit dem eigenen Team', value: (s) => s.duoRating },
+    { key: 'duoRating', title: 'Synergien', tip: 'Beitrag der Synergien mit dem eigenen Team', value: (s) => s.duoRating },
     { key: 'matchupRating', title: 'Matchups', tip: 'Beitrag der Matchups gegen den Gegner', value: (s) => s.matchupRating },
     { key: 'pickRate', title: 'Pickrate', tip: 'Pickrate auf dieser Rolle in den letzten 30 Tagen', value: (s) => s.pickRate },
     { key: 'games', title: 'Spiele', tip: 'Spiele auf dieser Rolle in den letzten 30 Tagen', value: (s) => s.games },
@@ -682,7 +682,7 @@ function TopCard({ rank, suggestion: s, data, onTake, baseText, favorite }) {
     <span class="draft-top-value">${percent(s.winRate)}<small class=${toneOf(s.delta * 100)}>${signed(s.delta * 100)}</small></span>
     <span class="draft-top-parts">
       <span>Champion <b class=${toneOf(impact(s.championRating))}>${impactText(s.championRating)}</b></span>
-      <span>Duos <b class=${toneOf(impact(s.duoRating))}>${impactText(s.duoRating)}</b></span>
+      <span>Synergien <b class=${toneOf(impact(s.duoRating))}>${impactText(s.duoRating)}</b></span>
       <span>Matchups <b class=${toneOf(impact(s.matchupRating))}>${impactText(s.matchupRating)}</b></span>
     </span>
     ${details.length ? html`<span class="draft-top-details">
@@ -702,12 +702,12 @@ function TopCard({ rank, suggestion: s, data, onTake, baseText, favorite }) {
 
 /**
  * Kompakte Gesamteinschätzung: Urteil, Winrate und Einfluss je Bereich in einer Leiste, darunter wer ab welcher
- * Minute vorne liegt. Matchups und Duos stehen in ihren eigenen Karten.
+ * Minute vorne liegt. Matchups und Synergien stehen in ihren eigenen Karten.
  */
 function Assessment({ result, picks }) {
   const { analysis, profiles } = result;
   const state = verdict(analysis.winRate);
-  const parts = [['Champions', analysis.championRating], ['Duos', analysis.duoRating], ['Matchups', analysis.matchupRating]]
+  const parts = [['Champions', analysis.championRating], ['Synergien', analysis.duoRating], ['Matchups', analysis.matchupRating]]
     .filter(([, rating]) => Math.abs(impact(rating)) >= 0.05)
     .sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]));
   const trend = Math.min(profiles.ally.champions, profiles.enemy.champions) >= MIN_PICKS_FOR_PROFILE ? lengthTrend(profiles) : null;
@@ -819,14 +819,14 @@ function Analysis({ result, data, picks }) {
         <//>
       </div>
     <//>
-    <${Section} title="Champions & Duos" storeKey="draftDetailsOpen">
+    <${Section} title="Champions & Synergien" storeKey="draftDetailsOpen">
       <div class="draft-analysis-grid three">
         <${Card} title="Champions">
           <${ChampionTable} label="Dein Team" rows=${analysis.allyChampions} data=${data} sign=${1} />
           <${ChampionTable} label="Gegner" rows=${analysis.enemyChampions} data=${data} sign=${-1} />
         <//>
-        <${PairCard} title="Duos deines Teams" hint=${`Beste ${MAX_DUOS} Synergien`} rows=${topDuos(analysis.allyDuos)} data=${data} separator="+" />
-        <${PairCard} title="Duos des Gegners" hint=${`Beste ${MAX_DUOS} Synergien`} rows=${topDuos(analysis.enemyDuos)} data=${data} separator="+" enemy />
+        <${PairCard} title="Synergien deines Teams" hint=${`Top ${MAX_DUOS}`} rows=${topDuos(analysis.allyDuos)} data=${data} separator="+" />
+        <${PairCard} title="Synergien des Gegners" hint=${`Top ${MAX_DUOS}`} rows=${topDuos(analysis.enemyDuos)} data=${data} separator="+" enemy />
       </div>
     <//>
   </div>`;
@@ -939,7 +939,7 @@ function MatchupCard({ rows, data }) {
           <${Icon} name="chevron" size=${16} />${pickCell(g.pick)}<span class="muted small">${g.rows.length} Matchups</span>
         </button>
       </td>
-      <td></td><td></td>
+      <td class=${toneOf(impact(total))}><strong>${impactText(total)}</strong></td><td></td>
     </tr>`, ...visible.map((r) => row(r, g.key))];
   };
 
@@ -970,7 +970,7 @@ const ENEMY_DUO_TIP = 'Synergie: wie viel besser die beiden Gegner-Champions zus
  */
 function PairCard({ title, hint, rows, data, separator, enemy = false }) {
   return html`<${Card} title=${title} aside=${hint}>
-    ${rows.length === 0 ? html`<p class="muted small">Noch keine Paarungen.</p>` : html`<div class="grid-scroll"><table class="data draft-table">
+    ${rows.length === 0 ? html`<p class="muted small">Noch keine Paarungen.</p>` : html`<div class="grid-scroll"><table class="data draft-table draft-pairs">
       <thead><tr><th>Paarung</th><th>WR</th><th data-tip=${enemy ? ENEMY_DUO_TIP : deltaTip('duo')}>${enemy ? 'Δ Gegner-WR' : DELTA_TITLE}</th><th>Spiele</th></tr></thead>
       <tbody>${rows.map((row) => html`<tr key=${`${row.first.champion}-${row.second.champion}`}>
         <td><span class="draft-pair"><${ChampionCell} data=${data} champion=${row.first.champion} /><span class="muted">${separator}</span><${ChampionCell} data=${data} champion=${row.second.champion} /></span></td>

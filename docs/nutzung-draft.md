@@ -7,7 +7,7 @@ Ergänzt die [README](../README.md) und [`nutzung.md`](nutzung.md).
 voraus. Für jede Situation stehen die **fünf besten Picks** hervorgehoben oben, wahlweise für dein Team oder den Gegner
 und je Rolle gefiltert. Ein Klick übernimmt den Pick.
 
-**Draft-Analyse:** erwartete Winrate, Gesamteinschätzung, alle Matchups und Duos, Schadensverteilung und Vorsprung
+**Draft-Analyse:** erwartete Winrate, Gesamteinschätzung, alle Matchups und Synergien, Schadensverteilung und Vorsprung
 nach Spieldauer.
 
 **Archiv:** Vollständige Drafts (alle zehn Champions, 10 Sekunden unverändert) landen automatisch im Bereich „Archiv“,
@@ -29,7 +29,7 @@ Schnittstelle des League-Clients nicht offiziell für Drittanbieter-Apps; die Nu
 **Rechenmodell**
 
 Es folgt [DraftGap](https://github.com/vigovlugt/draftgap) (MIT-Lizenz): Winrates werden zu Rating-Punkten, Champions,
-Duos und Matchups addieren sich. Kleine Stichproben werden zur Erwartung hin geglättet. Abweichungen:
+Synergien (Duos) und Matchups addieren sich. Kleine Stichproben werden zur Erwartung hin geglättet. Abweichungen:
 
 - Die Glättung richtet sich je Rollenpaar nach der gemessenen Streuung echter Effekte. Lane-Matchups und das
   Botlane-Duo zählen schon bei wenigen Spielen, Duos über die Map erst bei sehr vielen. Das **Risiko** vervielfacht

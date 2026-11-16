@@ -22,7 +22,7 @@ Trotzdem ausführen*.
 
 | Tab | Was er kann |
 |---|---|
-| **Draft** | Picks und Bans beider Teams eintragen, die fünf besten Picks je Situation, erwartete Winrate, Matchups, Duos, Schadensverteilung und ein lokales Archiv vergangener Drafts. Optional liest RiftLens die Champion-Auswahl aus dem League-Client mit (Schalter, standardmäßig aus). |
+| **Draft** | Picks und Bans beider Teams eintragen, die fünf besten Picks je Situation, erwartete Winrate, Matchups, Synergien, Schadensverteilung und ein lokales Archiv vergangener Drafts. Optional liest RiftLens die Champion-Auswahl aus dem League-Client mit (Schalter, standardmäßig aus). |
 | **Champions** | Sortierbare Tabelle mit Winrate, Pickrate und Stärke je Rolle und Rang-Bereich, dazu Builds, Runen, Skill-Reihenfolge und Counters je Champion. |
 | **Items, Runen, Abilities** | Build-Rechner: Werte nach Level mit Items und Runenseite, Cooldowns mit Ability Haste, Schadensvorschau der Fähigkeiten. |
 | **Summoner** | Ränge, meistgespielte Champions, häufige Mitspieler, Rollen und Match-Verlauf über die Riot-API (bis 1000 Spiele). |
