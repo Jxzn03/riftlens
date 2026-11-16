@@ -21,6 +21,12 @@ const DELTA_BASIS = {
   duo: 'Synergie: wie viel besser die beiden zusammen gewinnen, als ihre Einzelstärke erwarten lässt.',
   matchup: 'Wie dein Champion gegen diesen Gegner abschneidet, über die übliche Stärke beider hinaus.',
 };
+/** Die Frage hinter jedem der drei Bausteine der Siegchance; immer als Tooltip, damit die Namen klar bleiben. */
+const PART_QUESTIONS = {
+  champion: 'Wie gut ist der Pick vom Powerlevel her, ist er blind pickable?',
+  duo: 'Passt er zu den anderen Champions im Team?',
+  matchup: 'Wie gut ist der Champion gegen die Gegner?',
+};
 const deltaTip = (kind) => `${DELTA_BASIS[kind]} Angabe als Änderung der erwarteten Winrate deines Teams in Prozentpunkten: `
   + 'Grün hilft dir, Rot schadet dir. Werte des Gegners zählen mit umgekehrtem Vorzeichen.';
 const TEAM_SIZE = 5;
@@ -567,16 +573,17 @@ function WinPanel({ analysis, picks, loading, completing }) {
       <span class="enemy" style=${{ width: `${100 - allyShare}%` }}></span>
     </div>
     <div class="draft-win-parts">
-      <${Part} label="Champions" rating=${analysis.championRating} tip="Allgemeine Stärke der Champions auf ihren Rollen" />
-      <${Part} label="Synergien" rating=${analysis.duoRating} tip="Eigene Team-Synergien minus die des Gegners" />
-      <${Part} label="Matchups" rating=${analysis.matchupRating} tip="Alle Paarungen eigener Champions gegen gegnerische" />
+      <${Part} label="Champions" rating=${analysis.championRating} question=${PART_QUESTIONS.champion} tip="Allgemeine Stärke der Champions auf ihren Rollen" />
+      <${Part} label="Synergien" rating=${analysis.duoRating} question=${PART_QUESTIONS.duo} tip="Eigene Team-Synergien minus die des Gegners" />
+      <${Part} label="Matchups" rating=${analysis.matchupRating} question=${PART_QUESTIONS.matchup} tip="Alle Paarungen eigener Champions gegen gegnerische" />
     </div>
   </div>`;
 }
 
-function Part({ label, rating, tip }) {
+/** Die Frage steht immer im Tooltip, die genaue Berechnung nur mit „Show Advanced Tooltips“. */
+function Part({ label, rating, question, tip }) {
   const advancedTips = useStore((s) => Boolean(s.prefs.advancedTips));
-  return html`<div class="draft-part" data-tip=${advancedTips ? tip : undefined}>
+  return html`<div class="draft-part" data-tip=${advancedTips ? `${question} ${tip}.` : question}>
     <span class="muted small">${label}</span><strong class=${toneOf(impact(rating))}>${impactText(rating)}</strong>
   </div>`;
 }
@@ -591,9 +598,9 @@ function suggestionColumns(data) {
     { key: 'role', title: 'Rolle', firstDir: 1, value: (s) => ROLES.findIndex((r) => r.value === s.role) },
     { key: 'winRate', title: 'Team-WR', tip: 'Winrate des Teams mit diesem Pick', value: (s) => s.winRate },
     { key: 'delta', title: 'Δ', tip: 'Änderung gegenüber dem Draft ohne diesen Pick', value: (s) => s.delta },
-    { key: 'championRating', title: 'Champion', tip: 'Beitrag der Champion-Stärke', value: (s) => s.championRating },
-    { key: 'duoRating', title: 'Synergien', tip: 'Beitrag der Synergien mit dem eigenen Team', value: (s) => s.duoRating },
-    { key: 'matchupRating', title: 'Matchups', tip: 'Beitrag der Matchups gegen den Gegner', value: (s) => s.matchupRating },
+    { key: 'championRating', title: 'Champion', tip: `${PART_QUESTIONS.champion} Beitrag der Champion-Stärke.`, value: (s) => s.championRating },
+    { key: 'duoRating', title: 'Synergien', tip: `${PART_QUESTIONS.duo} Beitrag der Synergien mit dem eigenen Team.`, value: (s) => s.duoRating },
+    { key: 'matchupRating', title: 'Matchups', tip: `${PART_QUESTIONS.matchup} Beitrag der Matchups gegen den Gegner.`, value: (s) => s.matchupRating },
     { key: 'pickRate', title: 'Pickrate', tip: 'Pickrate auf dieser Rolle in den letzten 30 Tagen', value: (s) => s.pickRate },
     { key: 'games', title: 'Spiele', tip: 'Spiele auf dieser Rolle in den letzten 30 Tagen', value: (s) => s.games },
   ];
@@ -681,9 +688,9 @@ function TopCard({ rank, suggestion: s, data, onTake, baseText, favorite }) {
     </span>
     <span class="draft-top-value">${percent(s.winRate)}<small class=${toneOf(s.delta * 100)}>${signed(s.delta * 100)}</small></span>
     <span class="draft-top-parts">
-      <span>Champion <b class=${toneOf(impact(s.championRating))}>${impactText(s.championRating)}</b></span>
-      <span>Synergien <b class=${toneOf(impact(s.duoRating))}>${impactText(s.duoRating)}</b></span>
-      <span>Matchups <b class=${toneOf(impact(s.matchupRating))}>${impactText(s.matchupRating)}</b></span>
+      <span data-tip=${PART_QUESTIONS.champion}>Champion <b class=${toneOf(impact(s.championRating))}>${impactText(s.championRating)}</b></span>
+      <span data-tip=${PART_QUESTIONS.duo}>Synergien <b class=${toneOf(impact(s.duoRating))}>${impactText(s.duoRating)}</b></span>
+      <span data-tip=${PART_QUESTIONS.matchup}>Matchups <b class=${toneOf(impact(s.matchupRating))}>${impactText(s.matchupRating)}</b></span>
     </span>
     ${details.length ? html`<span class="draft-top-details">
       ${details.map((d) => {
@@ -707,7 +714,8 @@ function TopCard({ rank, suggestion: s, data, onTake, baseText, favorite }) {
 function Assessment({ result, picks }) {
   const { analysis, profiles } = result;
   const state = verdict(analysis.winRate);
-  const parts = [['Champions', analysis.championRating], ['Synergien', analysis.duoRating], ['Matchups', analysis.matchupRating]]
+  const parts = [['Champions', analysis.championRating, PART_QUESTIONS.champion], ['Synergien', analysis.duoRating, PART_QUESTIONS.duo],
+    ['Matchups', analysis.matchupRating, PART_QUESTIONS.matchup]]
     .filter(([, rating]) => Math.abs(impact(rating)) >= 0.05)
     .sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]));
   const trend = Math.min(profiles.ally.champions, profiles.enemy.champions) >= MIN_PICKS_FOR_PROFILE ? lengthTrend(profiles) : null;
@@ -718,7 +726,7 @@ function Assessment({ result, picks }) {
       <span class=${`draft-key-verdict ${state.tone}`}>${state.text}</span>
       <strong class="draft-key-winrate">${percent(analysis.winRate)}</strong>
       ${picks < 10 ? html`<span class="muted small">vorläufig, ${picks} von 10 Picks</span>` : null}
-      ${parts.length ? html`<span class="draft-key-facts">${parts.map(([label, rating]) => html`<span key=${label}><span class="muted small">${label}</span> ${value(rating)}</span>`)}</span>` : null}
+      ${parts.length ? html`<span class="draft-key-facts">${parts.map(([label, rating, question]) => html`<span key=${label} data-tip=${question}><span class="muted small">${label}</span> ${value(rating)}</span>`)}</span>` : null}
     </div>
     ${leads.length ? html`<div class="draft-key-length"><span class="muted small">Spieldauer</span>
       ${leads.map((phase, i) => html`<span key=${i} class=${`draft-key-phase ${phase.side}`}>${minuteRange(phase).replace(/^./, (c) => c.toUpperCase())}: <strong>${phase.side === 'ally' ? 'Dein Team' : 'Gegner'}</strong></span>`)}
