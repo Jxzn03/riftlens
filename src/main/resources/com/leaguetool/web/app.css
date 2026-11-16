@@ -684,7 +684,7 @@ table.data.compact td { padding: 3px 10px 3px 0; font-size: 12.5px; }
 .draft-key-phase.ally strong { color: var(--team-ally); }
 .draft-key-phase.enemy strong { color: var(--team-enemy); }
 .draft-analysis-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; align-items: start; }
-.draft-analysis-grid.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.draft-analysis-grid.three { grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: stretch; }
 .draft-divider { display: flex; align-items: center; gap: 10px; width: 100%; margin: 4px 0 0; padding: 4px 0; background: none; border: 0;
   color: var(--text-3); font: inherit; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; cursor: pointer; }
 .draft-divider::before, .draft-divider::after { content: ""; flex: 1; border-top: 1px solid var(--line-2); }

@@ -79,6 +79,19 @@ export function ErrorNote({ prefix, error }) {
   return html`<p class="note bad"><${Icon} name="alert" size=${15} /> ${prefix}: ${error.message || String(error)}</p>`;
 }
 
+/** Breiter Schalter unter einer gekürzten Tabelle; der Pfeil zeigt, dass es mehr Einträge gibt. */
+export function MoreToggle({ open, total, top, onToggle }) {
+  // Beim Einklappen zurück an den Anfang der Karte springen, falls dieser oberhalb des Sichtbereichs liegt.
+  const click = (e) => {
+    const card = e.currentTarget.closest('.card');
+    onToggle();
+    if (open && card) requestAnimationFrame(() => { if (card.getBoundingClientRect().top < 0) card.scrollIntoView({ block: 'start' }); });
+  };
+  return html`<button type="button" class="more-toggle" aria-expanded=${open} onClick=${click}>
+    ${open ? `Nur Top ${top} zeigen` : `${total - top} weitere anzeigen`}<span class="more-arrow" aria-hidden="true">${open ? '▲' : '▼'}</span>
+  </button>`;
+}
+
 export function Card({ title, aside, children, cls = '' }) {
   return html`<section class=${`card ${cls}`}>
     ${title ? html`<header class="card-head"><h3>${title}</h3>${aside ? html`<div class="card-aside">${aside}</div>` : null}</header>` : null}

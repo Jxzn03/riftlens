@@ -1,23 +1,10 @@
 // Ansicht "Summoner": Abfrage eines Spielers über die Riot-API mit Rängen, Champions, Spielmodi und Match-Verlauf.
 import { html, useEffect, useMemo, useState } from '/vendor/htm-preact.js';
 import { store, useStore, useViewState, api, go, percent } from './core.js';
-import { Icon, Img, Button, Select, Card, Spinner, Empty, Tag, DataGrid, ItemIcons, SpellIcons } from './ui.js';
+import { Icon, Img, Button, Select, Card, Spinner, Empty, Tag, DataGrid, ItemIcons, SpellIcons, MoreToggle } from './ui.js';
 
 const TOP_N = 5; // Standardansicht Mitspieler: nur die ersten 5 Einträge
 const TOP_CHAMPS = 5; // Standardansicht Champions
-// Breiter Schalter unter einer gekürzten Tabelle; der Pfeil zeigt, dass es mehr Einträge gibt.
-function MoreToggle({ open, total, top, onToggle }) {
-  // Beim Einklappen zurück an den Anfang der Karte springen, falls dieser oberhalb des Sichtbereichs liegt.
-  const click = (e) => {
-    const card = e.currentTarget.closest('.card');
-    onToggle();
-    if (open && card) requestAnimationFrame(() => { if (card.getBoundingClientRect().top < 0) card.scrollIntoView({ block: 'start' }); });
-  };
-  return html`<button type="button" class="more-toggle" aria-expanded=${open} onClick=${click}>
-    ${open ? `Nur Top ${top} zeigen` : `${total - top} weitere anzeigen`}<span class="more-arrow" aria-hidden="true">${open ? '▲' : '▼'}</span>
-  </button>`;
-}
-
 const DEFAULTS = { query: '', platform: '', count: '50', result: null, error: null, loading: false, mode: '' };
 const COUNTS = [20, 50, 100, 200, 300, 500, 1000].map((n) => ({ value: String(n), label: `${n} Matches` }));
 const MAX_RECENT = 8;

@@ -1,7 +1,7 @@
 // Draft-Assistent: Eingabe der Picks und Bans, die fünf besten nächsten Picks und die Gesamteinschätzung.
 import { html, useState, useEffect, useMemo, useRef } from '/vendor/htm-preact.js';
 import { store, useStore, useViewState, useSourceLabel, api, normalize, percent, sortRows, activeSort, useFavorites, openChampion, toast } from './core.js';
-import { Icon, Img, Button, Select, Segmented, Switch, Card, Empty, ErrorNote, Loading, Tag, Spinner, FavoriteMark } from './ui.js';
+import { Icon, Img, Button, Select, Segmented, Switch, Card, Empty, ErrorNote, Loading, Tag, Spinner, FavoriteMark, MoreToggle } from './ui.js';
 
 const ROLES = [
   { value: 'TOP', label: 'Top' }, { value: 'JUNGLE', label: 'Jungle' }, { value: 'MIDDLE', label: 'Mid' },
@@ -834,8 +834,8 @@ function Analysis({ result, data, picks }) {
           <${ChampionTable} label="Dein Team" rows=${analysis.allyChampions} data=${data} sign=${1} />
           <${ChampionTable} label="Gegner" rows=${analysis.enemyChampions} data=${data} sign=${-1} />
         <//>
-        <${PairCard} title="Synergien deines Teams" hint=${`Top ${MAX_DUOS}`} rows=${topDuos(analysis.allyDuos)} data=${data} separator="+" />
-        <${PairCard} title="Synergien des Gegners" hint=${`Top ${MAX_DUOS}`} rows=${topDuos(analysis.enemyDuos)} data=${data} separator="+" enemy />
+        <${PairCard} title="Synergien deines Teams" rows=${analysis.allyDuos} data=${data} />
+        <${PairCard} title="Synergien des Gegners" rows=${analysis.enemyDuos} data=${data} enemy />
       </div>
     <//>
   </div>`;
@@ -967,8 +967,15 @@ function MatchupCard({ rows, data }) {
   <//>`;
 }
 
-/** Höchstens so viele Duos je Team, die stärksten Synergien zuerst. */
+/** So viele Paarungen je Team zeigt die eingeklappte Karte, die übrigen über „weitere anzeigen“. */
 const MAX_DUOS = 8;
+/** Sortierbare Spalten der Synergie-Karten; Klick auf den Kopf sortiert, Zahlen zuerst absteigend. */
+const PAIR_COLUMNS = [
+  { key: 'winRate', title: 'WR', value: (row) => row.winRate },
+  { key: 'rating', title: DELTA_TITLE, value: (row) => row.rating },
+  { key: 'games', title: 'Spiele', value: (row) => row.games },
+];
+const PAIR_DEFAULTS = { sort: 'rating', dir: -1 };
 
 const ENEMY_DUO_TIP = 'Synergie: wie viel besser die beiden Gegner-Champions zusammen gewinnen, als ihre Einzelstärke erwarten '
   + 'lässt. Angabe aus Sicht des Gegners als Änderung seiner erwarteten Winrate in Prozentpunkten: Grün = starke Synergie '
@@ -976,22 +983,37 @@ const ENEMY_DUO_TIP = 'Synergie: wie viel besser die beiden Gegner-Champions zus
 
 /**
  * Duos eines Teams mit Winrate und Synergie-Wert, jeweils aus Sicht dieses Teams: beim Gegner „Δ Gegner-WR“, eine
- * starke Synergie ist dort also grün und positiv (wie im Gegner-Tab der Matchups).
+ * starke Synergie ist dort also grün und positiv (wie im Gegner-Tab der Matchups). Sortierbar (Standard: stärkste
+ * Synergie zuerst, Stand je Team bis zum Neustart); eingeklappt die ersten {@link MAX_DUOS} der Sortierung, aufsteigend
+ * nach Δ also die schwächsten.
  */
-function PairCard({ title, hint, rows, data, separator, enemy = false }) {
-  return html`<${Card} title=${title} aside=${hint}>
+function PairCard({ title, rows, data, enemy = false }) {
+  const [view, setView] = useViewState(enemy ? 'draft-duos-enemy' : 'draft-duos-ally', PAIR_DEFAULTS);
+  const [open, setOpen] = useState(false);
+  const sort = { key: view.sort, dir: view.dir };
+  const sorted = sortRows(rows, PAIR_COLUMNS, sort);
+  const shown = open ? sorted : sorted.slice(0, MAX_DUOS);
+  const headCell = (c) => {
+    const active = sort.key === c.key;
+    const delta = c.key === 'rating';
+    return html`<th key=${c.key} aria-sort=${active ? (sort.dir === 1 ? 'ascending' : 'descending') : 'none'}>
+      <button type="button" class=${`sort-head ${active ? 'active' : ''}`} data-tip=${delta ? (enemy ? ENEMY_DUO_TIP : deltaTip('duo')) : undefined}
+        onClick=${() => setView({ sort: c.key, dir: active ? -sort.dir : -1 })}>
+        <span>${delta && enemy ? 'Δ Gegner-WR' : c.title}</span>${active ? html`<${Icon} name=${sort.dir === 1 ? 'up' : 'down'} size=${12} />` : null}
+      </button>
+    </th>`;
+  };
+  return html`<${Card} title=${title}>
     ${rows.length === 0 ? html`<p class="muted small">Noch keine Paarungen.</p>` : html`<div class="grid-scroll"><table class="data draft-table draft-pairs">
-      <thead><tr><th>Paarung</th><th>WR</th><th data-tip=${enemy ? ENEMY_DUO_TIP : deltaTip('duo')}>${enemy ? 'Δ Gegner-WR' : DELTA_TITLE}</th><th>Spiele</th></tr></thead>
-      <tbody>${rows.map((row) => html`<tr key=${`${row.first.champion}-${row.second.champion}`}>
-        <td><span class="draft-pair"><${ChampionCell} data=${data} champion=${row.first.champion} /><span class="muted">${separator}</span><${ChampionCell} data=${data} champion=${row.second.champion} /></span></td>
+      <thead><tr><th>Paarung</th>${PAIR_COLUMNS.map(headCell)}</tr></thead>
+      <tbody>${shown.map((row) => html`<tr key=${`${row.first.champion}-${row.second.champion}`}>
+        <td><span class="draft-pair"><${ChampionCell} data=${data} champion=${row.first.champion} /><span class="muted">+</span><${ChampionCell} data=${data} champion=${row.second.champion} /></span></td>
         <td>${percent(row.winRate)}</td><td class=${toneOf(impact(row.rating))}>${impactText(row.rating)}</td><td class="muted">${count(row.games)}</td>
       </tr>`)}</tbody>
-    </table></div>`}
+    </table></div>
+    ${rows.length > MAX_DUOS ? html`<${MoreToggle} open=${open} total=${rows.length} top=${MAX_DUOS} onToggle=${() => setOpen(!open)} />` : null}`}
   <//>`;
 }
-
-/** Die stärksten Synergien eines Teams (höchster Überschuss über der Erwartung), höchstens {@link MAX_DUOS}. */
-const topDuos = (duos) => [...duos].sort((a, b) => b.rating - a.rating).slice(0, MAX_DUOS);
 
 const DAMAGE_TYPES = [['physical', 'Physisch'], ['magic', 'Magisch'], ['true', 'True']];
 
