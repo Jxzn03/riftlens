@@ -6,7 +6,7 @@
 
     <groupId>com.leaguetool</groupId>
     <artifactId>league-tool</artifactId>
-    <version>0.1.0-SNAPSHOT</version>
+    <version>1.2.0</version>
     <name>RiftLens</name>
     <description>Privates Desktop-Tool für League-of-Legends-Daten (Champions, Items, Runen, Abilities, Summoner Spells) mit Statistiken von Lolalytics.</description>
 
