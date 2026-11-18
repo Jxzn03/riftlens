@@ -42,4 +42,16 @@ class ItemTest {
                 shop(3003, "Archangel's Staff"), shop(323003, "Archangel's Staff"));
         assertEquals(List.of(1101, 3003), Item.summonersRiftItems(items).stream().map(Item::id).toList());
     }
+
+    @Test
+    void finalBootsNeedDepthTwo() {
+        Item basic = new Item(1001, "Boots", "", "", new ItemGold(300, 300, 210, true), List.of("Boots"), Map.of(),
+                List.of(), List.of(), Set.of(Item.SUMMONERS_RIFT), true, 1, "", false, "1001.png", 0);
+        Item upgraded = new Item(3020, "Sorcerer's Shoes", "", "", new ItemGold(1100, 800, 770, true), List.of("Boots"),
+                Map.of(), List.of(1001), List.of(), Set.of(Item.SUMMONERS_RIFT), true, 2, "", false, "3020.png", 0);
+        assertTrue(basic.isBoots());
+        assertFalse(basic.isFinalBoots(), "Basis-Boots sind keine fertigen Boots");
+        assertTrue(upgraded.isFinalBoots());
+        assertFalse(shop(3089, "Rabadon's Deathcap").isFinalBoots());
+    }
 }

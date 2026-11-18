@@ -104,9 +104,9 @@ public final class Text {
 
     private static final Pattern SPACES_ALL = Pattern.compile("\\s+");
 
-    /** Normalisierte Suchanfrage: getrimmt, klein geschrieben, {@code null} → "". */
-    public static String query(String raw) {
-        return raw == null ? "" : raw.trim().toLowerCase(Locale.ROOT);
+    /** Fasst jeden Leerraum (auch Zeilenumbrüche) zu einem Leerzeichen zusammen. */
+    public static String collapseSpaces(String s) {
+        return SPACES_ALL.matcher(s).replaceAll(" ");
     }
 
     /** Werte je Rang: "7 / 6.5 / 6" bzw. ein einzelner Wert, wenn alle gleich sind. */
@@ -118,13 +118,6 @@ public final class Text {
         if (allSame) {
             return num(values.get(0));
         }
-        StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < values.size(); i++) {
-            if (i > 0) {
-                sb.append(" / ");
-            }
-            sb.append(num(values.get(i)));
-        }
-        return sb.toString();
+        return values.stream().map(Text::num).collect(java.util.stream.Collectors.joining(" / "));
     }
 }

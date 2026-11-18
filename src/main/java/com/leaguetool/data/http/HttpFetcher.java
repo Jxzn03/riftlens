@@ -13,10 +13,6 @@ public interface HttpFetcher {
     /** Führt ein GET aus. Fehlerstatus (4xx/5xx) wird <em>nicht</em> als Exception gemeldet. */
     HttpResult get(String url, Map<String, String> headers) throws IOException;
 
-    default HttpResult get(String url) throws IOException {
-        return get(url, Map.of());
-    }
-
     /** GET, das bei Nicht-2xx eine {@link HttpStatusException} wirft. */
     default String getText(String url) throws IOException {
         HttpResult r = get(url, Map.of());

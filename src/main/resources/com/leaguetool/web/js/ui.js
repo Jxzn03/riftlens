@@ -406,3 +406,57 @@ export function SpellIcons({ data, keys, size = 30 }) {
       : html`<span key=${i} class="muted">Spell ${key}</span>`;
   })}</span>`;
 }
+
+// ------------------------------------------------------------------ Bestätigung
+
+/**
+ * Eingebettete Rückfrage statt `window.confirm`: `await confirmDialog({ title, message, confirmLabel, danger })` liefert
+ * true oder false. Angezeigt wird sie von `ConfirmHost` (im Rahmen in `shell.js`); Escape bricht ab, Enter bestätigt.
+ */
+export function confirmDialog({ title, message = '', confirmLabel = 'OK', cancelLabel = 'Abbrechen', danger = false, icon = null }) {
+  const previous = store.get().confirm;
+  if (previous) {
+    previous.resolve(false);
+  }
+  return new Promise((resolve) => store.set({ confirm: { title, message, confirmLabel, cancelLabel, danger, icon, resolve } }));
+}
+
+export function ConfirmHost() {
+  const request = useStore((s) => s.confirm);
+  const confirmButton = useRef();
+  useEffect(() => {
+    if (request && confirmButton.current) {
+      confirmButton.current.focus();
+    }
+  }, [request]);
+  if (!request) {
+    return null;
+  }
+  const close = (answer) => {
+    store.set({ confirm: null });
+    request.resolve(answer);
+  };
+  const onKeyDown = (e) => {
+    if (e.key === 'Escape') {
+      e.stopPropagation();
+      close(false);
+    }
+  };
+  return html`<div class="overlay confirm-overlay" onMouseDown=${(e) => e.target === e.currentTarget && close(false)}>
+    <div class=${`modal confirm ${request.danger ? 'danger' : ''}`} role="alertdialog" aria-modal="true" aria-label=${request.title} onKeyDown=${onKeyDown}>
+      <div class="confirm-body">
+        <span class="confirm-icon"><${Icon} name=${request.icon || (request.danger ? 'trash' : 'alert')} size=${20} /></span>
+        <div class="confirm-text">
+          <h2>${request.title}</h2>
+          ${request.message ? html`<p class="muted">${request.message}</p>` : null}
+        </div>
+      </div>
+      <footer class="modal-foot">
+        <${Button} kind="ghost" onClick=${() => close(false)}>${request.cancelLabel}<//>
+        <button type="button" ref=${confirmButton} class=${`btn ${request.danger ? 'danger' : 'primary'}`} onClick=${() => close(true)}>
+          <span>${request.confirmLabel}</span>
+        </button>
+      </footer>
+    </div>
+  </div>`;
+}

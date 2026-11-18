@@ -54,7 +54,7 @@ final class ApiRoutes {
     private static final List<String> LOLALYTICS_STAT_TIERS = List.of("all", "iron", "bronze", "silver", "gold", "gold_plus",
             "platinum", "platinum_plus", "emerald", "emerald_plus", "diamond", "diamond_plus", "d2_plus", "master_plus",
             "grandmaster", "challenger");
-    private static final String LOLALYTICS_DEFAULT_TIER = "emerald_plus";
+    private static final String LOLALYTICS_DEFAULT_TIER = LolalyticsClient.DEFAULT_TIER;
 
     private final WebContext ctx;
     private final ObjectMapper json;
@@ -67,7 +67,7 @@ final class ApiRoutes {
         this.json = json;
         this.draft = new DraftEndpoint(ctx);
         this.archive = new DraftArchiveEndpoint(ctx);
-        this.fearless = new FearlessEndpoint(ctx);
+        this.fearless = new FearlessEndpoint(ctx, archive.drafts());
     }
 
     /** Antwort eines Endpunkts: ein zu serialisierendes Objekt oder fertige JSON-Bytes. */
@@ -83,15 +83,19 @@ final class ApiRoutes {
             case "POST settings" -> saveSettings(body);
             case "GET ui-state" -> readUiState();
             case "PUT ui-state" -> writeUiState(body);
-            case "GET build" -> Dto.buildTotals(totals(items(params)));
+            case "GET build" -> Dto.buildTotals(BuildCalculator.totals(items(params)));
             case "POST verify" -> verify();
             case "GET summoner" -> summoner(params);
             case "GET stats" -> stats(path, params);
             case "GET champions" -> champion(path, params);
             case "POST draft" -> draft(body);
-            case "GET draft-archive" -> archive.list();
-            case "POST draft-archive" -> archive.record(parse(body));
+            case "GET draft-archive" -> {
+                fearless.backfillArchive(); // Serienspiele aus älteren Dateien zuerst nachtragen, sonst fehlen sie in der Liste
+                yield archive.list();
+            }
+            case "POST draft-archive" -> path.size() == 1 ? archive.record(parse(body)) : archive.restore(path);
             case "DELETE draft-archive" -> archive.delete(path);
+            case "PUT draft-archive" -> archive.updateRoles(path, parse(body), fearless::updateRolesMatching);
             case "GET fearless", "DELETE fearless" -> fearless.handle(method, path, json.createObjectNode());
             case "POST fearless", "PUT fearless" -> fearless.handle(method, path, body.length == 0 ? json.createObjectNode() : parse(body));
             case "GET lcu" -> ClientSyncEndpoint.get(ctx);
@@ -142,7 +146,7 @@ final class ApiRoutes {
     }
 
     private Object levels(Champion champion, Map<String, String> params) {
-        BuildTotals totals = totals(items(params));
+        BuildTotals totals = BuildCalculator.totals(items(params));
         RunePage runes = runePage(params);
         double asRatio = doubleParam(params, "asRatio", champion.stats().attackSpeed());
         AdaptiveType adaptiveType = adaptiveType(champion);
@@ -160,8 +164,8 @@ final class ApiRoutes {
         Optional<WikiClient> wiki = ctx.wiki();
         List<Item> build = items(params);
         RunePage runes = runePage(params);
-        int level = Math.max(StatCalculator.MIN_LEVEL, Math.min(StatCalculator.MAX_LEVEL, (int) doubleParam(params, "level", 11)));
-        StatBlock bonus = totals(build).stats().plus(runes.at(level));
+        int level = StatCalculator.clampLevel((int) doubleParam(params, "level", 11));
+        StatBlock bonus = BuildCalculator.totals(build).stats().plus(runes.at(level));
         if (wiki.isEmpty()) {
             // Haste hängt nicht vom Wiki ab; ohne Wiki fehlen nur Immobilisierungen und statische Abklingzeiten.
             FinalStats stats = ChampionBuildCalculator.compute(champion.stats(), level, bonus,
@@ -180,7 +184,7 @@ final class ApiRoutes {
     }
 
     /** Runenseite des Build-Rechners: {@code runes=8010,9111}, {@code shards=5008,5008,5001}, {@code stacks=9105:10}. */
-    record RunePage(List<Integer> runes, List<Integer> shards, Map<Integer, Integer> stacks) {
+    private record RunePage(List<Integer> runes, List<Integer> shards, Map<Integer, Integer> stacks) {
 
         StatBlock at(int level) {
             return RuneEffects.stats(runes, shards, stacks, level);
@@ -194,7 +198,7 @@ final class ApiRoutes {
     private static final int MAX_RUNES = 6;
     private static final int MAX_SHARDS = 3;
 
-    static RunePage runePage(Map<String, String> params) {
+    private static RunePage runePage(Map<String, String> params) {
         List<Integer> runes = ints(params.get("runes"), "Runen-ID").stream().distinct().limit(MAX_RUNES).toList();
         List<Integer> shards = ints(params.get("shards"), "Shard-ID").stream().limit(MAX_SHARDS).toList();
         Map<Integer, Integer> stacks = new HashMap<>();
@@ -262,10 +266,6 @@ final class ApiRoutes {
             }
         }
         return items;
-    }
-
-    private static BuildTotals totals(List<Item> items) {
-        return BuildCalculator.totals(items);
     }
 
     private static double doubleParam(Map<String, String> params, String name, double fallback) {
@@ -339,7 +339,7 @@ final class ApiRoutes {
         LolalyticsBuild build = client.build(slug, tier, lane, period);
         LolalyticsFullTierList.Row row = list.rows().get(championKey);
         String opponentLane = lane != null ? lane : row == null ? "" : row.lane();
-        return Dto.lolalyticsReport(build, data, ctx.itemClassifier(data), championKey, opponentLane);
+        return Dto.lolalyticsReport(build, data, opponentLane);
     }
 
     private LolalyticsClient lolalytics() {
@@ -415,6 +415,9 @@ final class ApiRoutes {
                 "platforms", Arrays.stream(Platform.values()).map(Platform::id).toList(),
                 "lcuFolder", s.lcuFolder(),
                 "draftArchiveLimit", s.draftArchiveLimit(), "draftArchiveLimits", AppSettings.DRAFT_ARCHIVE_LIMITS,
+                "draftArchiveDefault", AppSettings.DRAFT_ARCHIVE_DEFAULT,
+                "fearlessSeriesLimit", s.fearlessSeriesLimit(), "fearlessSeriesLimits", AppSettings.FEARLESS_SERIES_LIMITS,
+                "fearlessSeriesDefault", AppSettings.FEARLESS_SERIES_DEFAULT,
                 "lcuDetected", ctx.lcuLocator().detectedInstallFolder().map(Path::toString).orElse(null),
                 "file", s.file().toString());
     }
@@ -446,6 +449,9 @@ final class ApiRoutes {
         Platform.fromId(n.path("platform").asText("")).ifPresent(p -> s.setPlatform(p.id()));
         if (n.path("draftArchiveLimit").isInt()) {
             s.setDraftArchiveLimit(n.path("draftArchiveLimit").asInt());
+        }
+        if (n.path("fearlessSeriesLimit").isInt()) {
+            s.setFearlessSeriesLimit(n.path("fearlessSeriesLimit").asInt());
         }
         if (lcuFolder != null) {
             s.setLcuFolder(lcuFolder);

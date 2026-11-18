@@ -3,6 +3,8 @@ package com.leaguetool.web;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import com.leaguetool.util.Json;
+
 import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -20,7 +22,7 @@ public final class SmokeTest {
     /** @return Exit-Code: 0 bei Erfolg, 1 bei einem Fehler */
     public static int run(WebServer server) {
         HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
-        ObjectMapper json = new ObjectMapper();
+        ObjectMapper json = Json.MAPPER;
         try {
             JsonNode data = json.readTree(get(http, server, "/api/bootstrap"));
             String champion = data.path("champions").path(0).path("id").asText();

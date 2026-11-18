@@ -99,7 +99,6 @@ class LcuLocatorTest {
         LcuLocator locator = locator(manual.toString());
 
         assertEquals(Optional.of(new LcuLockfile(4400, "pw4400")), locator.find());
-        assertEquals(Optional.of(manual), locator.installFolder());
         assertEquals(Optional.of(auto), locator.detectedInstallFolder(), "Die Anzeige nennt weiter den automatischen Fund");
     }
 

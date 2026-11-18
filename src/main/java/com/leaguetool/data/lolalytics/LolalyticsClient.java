@@ -1,5 +1,6 @@
 package com.leaguetool.data.lolalytics;
 
+import com.leaguetool.data.http.Interrupts;
 import com.leaguetool.cache.FileCache;
 import com.leaguetool.data.http.HttpFetcher;
 import com.leaguetool.model.Role;
@@ -20,6 +21,7 @@ import java.util.Objects;
  */
 public final class LolalyticsClient {
 
+    public static final String DEFAULT_TIER = "emerald_plus";
     public static final String BASE_URL = "https://lolalytics.com/lol/tierlist/";
     public static final Duration MIN_INTERVAL = Duration.ofSeconds(2);
     public static final Duration MAX_AGE = Duration.ofHours(12);
@@ -73,43 +75,6 @@ public final class LolalyticsClient {
     }
 
     /**
-     * @param tier z. B. {@code emerald_plus}, {@code gold}, {@code all}
-     * @param lane {@code all}, {@code top}, {@code jungle}, {@code middle}, {@code bottom}, {@code support}
-     */
-    public LolalyticsTierList tierList(String tier, String lane) throws IOException {
-        String t = safe(tier, "emerald_plus");
-        String l = safe(lane, "all");
-        String key = "lolalytics/tierlist_" + t + "_" + l + ".html";
-        FileCache.CacheResult res = cache.getFreshOrStale(FileCache.GLOBAL, key, MAX_AGE, notBefore.get(), () -> fetch(t, l));
-        try {
-            return LolalyticsParser.parse(res.content());
-        } catch (IOException e) {
-            cache.delete(FileCache.GLOBAL, key); // unbrauchbaren Eintrag nicht behalten
-            throw e;
-        }
-    }
-
-    /** Lanes, die für die Gesamtansicht zusätzlich geholt werden. */
-    public static final java.util.List<String> LANES = java.util.List.of("top", "jungle", "middle", "bottom", "support");
-
-    /**
-     * Gesamtansicht: Die Seite liefert pro Abfrage nur die ersten ~20 Champions befüllt aus. Darum werden
-     * "all" und alle fünf Lanes geholt (je gecacht, mit Pause) und zusammengeführt; je Champion gilt die
-     * Zeile mit dem größten Lane-Anteil.
-     */
-    public LolalyticsTierList tierListAllLanes(String tier) throws IOException {
-        LolalyticsTierList base = tierList(tier, "all");
-        java.util.Map<String, LolalyticsChampion> merged = new java.util.LinkedHashMap<>();
-        base.champions().forEach(c -> merged.put(c.slug(), c));
-        for (String lane : LANES) {
-            for (LolalyticsChampion c : tierList(tier, lane).champions()) {
-                merged.merge(c.slug(), c, (a, b) -> b.laneShare() > a.laneShare() ? b : a);
-            }
-        }
-        return new LolalyticsTierList(base.patch(), base.avgWinRate(), new java.util.ArrayList<>(merged.values()));
-    }
-
-    /**
      * Vollständige Tierliste mit allen Champions (aus dem eingebetteten Seitenzustand, ein Abruf genügt).
      *
      * @param lane {@code all} (je Champion die Hauptlane) oder eine einzelne Lane
@@ -121,7 +86,7 @@ public final class LolalyticsClient {
     /** @param staleOk ein veralteter Eintrag wird sofort geliefert und im Hintergrund erneuert ({@link #load}) */
     public LolalyticsFullTierList fullTierList(String tier, String lane, LolalyticsPeriod period, boolean staleOk)
             throws IOException {
-        String t = safe(tier, "emerald_plus");
+        String t = safe(tier, DEFAULT_TIER);
         String l = safe(lane, "all");
         // "v4": enthält PBI und Lane-Anteil; ältere Cache-Einträge ohne diese Felder dürfen nicht weiterverwendet werden.
         String key = "lolalytics/full_v4_" + t + "_" + l + "_" + period.cacheSuffix() + ".json";
@@ -158,7 +123,7 @@ public final class LolalyticsClient {
 
     private Source buildSource(String slug, String tier, String lane, LolalyticsPeriod period) {
         requireSlug(slug);
-        String t = safe(tier, "emerald_plus");
+        String t = safe(tier, DEFAULT_TIER);
         String l = lane == null ? null : safe(lane, "all");
         // "v4": enthält Matchups mit Delta-Werten, Schaden, Spieldauer und Itemplätze; ältere Cache-Einträge haben diese Felder nicht.
         String key = "lolalytics/build_v4_" + slug + "_" + t + "_" + (l == null ? "main" : l) + "_" + period.cacheSuffix() + ".json";
@@ -188,7 +153,7 @@ public final class LolalyticsClient {
 
     private static Source teamSource(String slug, String tier, String lane) {
         requireSlug(slug);
-        String t = safe(tier, "emerald_plus");
+        String t = safe(tier, DEFAULT_TIER);
         String l = safe(lane, "all");
         String key = "lolalytics/team_v1_" + slug + "_" + t + "_" + l + "_30d.json";
         String url = TEAM_API_URL + "?ep=build-team&v=1&patch=" + LolalyticsPeriod.LAST_30_DAYS.patchParam() + "&c=" + slug
@@ -272,11 +237,7 @@ public final class LolalyticsClient {
 
     private synchronized java.util.concurrent.Executor refreshExecutor() {
         if (refreshExecutor == null) {
-            refreshExecutor = java.util.concurrent.Executors.newSingleThreadExecutor(r -> {
-                Thread thread = new Thread(r, "lolalytics-refresh");
-                thread.setDaemon(true);
-                return thread;
-            });
+            refreshExecutor = java.util.concurrent.Executors.newSingleThreadExecutor(Thread.ofPlatform().daemon().name("lolalytics-refresh").factory());
         }
         return refreshExecutor;
     }
@@ -321,8 +282,7 @@ public final class LolalyticsClient {
             try {
                 Thread.sleep(100);
             } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                throw new InterruptedIOException("Abgebrochen");
+                throw Interrupts.toIo(e, "Abgebrochen");
             }
         }
     }
@@ -332,11 +292,6 @@ public final class LolalyticsClient {
         String extract(String html) throws IOException;
     }
 
-    private String fetch(String tier, String lane) throws IOException {
-        throttle();
-        return http.getText(BASE_URL + "?tier=" + tier + "&lane=" + lane);
-    }
-
     private synchronized void throttle() throws IOException {
         if (requestedBefore) {
             long waitMs = minInterval.toMillis() - (System.nanoTime() - lastRequestNanos) / 1_000_000;
@@ -344,8 +299,7 @@ public final class LolalyticsClient {
                 try {
                     Thread.sleep(waitMs);
                 } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    throw new InterruptedIOException("Abgebrochen");
+                    throw Interrupts.toIo(e, "Abgebrochen");
                 }
             }
         }

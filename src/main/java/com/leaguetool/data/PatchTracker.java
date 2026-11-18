@@ -1,10 +1,10 @@
 package com.leaguetool.data;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.leaguetool.cache.FileCache;
 import com.leaguetool.util.Patches;
+import com.leaguetool.util.Json;
 
 import java.io.IOException;
 import java.time.Instant;
@@ -25,7 +25,6 @@ public final class PatchTracker {
     }
 
     static final String STATE_KEY = "patch/state.json";
-    private static final ObjectMapper MAPPER = new ObjectMapper();
 
     private final FileCache cache;
     private volatile String patch = "";
@@ -77,9 +76,9 @@ public final class PatchTracker {
 
     private void save(String current, String previous) {
         try {
-            ObjectNode state = MAPPER.createObjectNode().put("patch", current).put("previous", previous)
+            ObjectNode state = Json.MAPPER.createObjectNode().put("patch", current).put("previous", previous)
                     .put("changedAt", changedAt.toString());
-            cache.writeText(FileCache.GLOBAL, STATE_KEY, MAPPER.writerWithDefaultPrettyPrinter().writeValueAsString(state));
+            cache.writeText(FileCache.GLOBAL, STATE_KEY, Json.pretty(state));
         } catch (IOException e) {
             // Ohne gespeicherten Stand läuft der Abgleich beim nächsten Start erneut; das schadet nicht.
         }
@@ -94,7 +93,7 @@ public final class PatchTracker {
                 return;
             }
             try {
-                JsonNode state = MAPPER.readTree(cache.readText(FileCache.GLOBAL, STATE_KEY).orElse("{}"));
+                JsonNode state = Json.MAPPER.readTree(cache.readText(FileCache.GLOBAL, STATE_KEY).orElse("{}"));
                 patch = state.path("patch").asText("");
                 changedAt = Instant.parse(state.path("changedAt").asText(Instant.EPOCH.toString()));
             } catch (IOException | DateTimeParseException e) {

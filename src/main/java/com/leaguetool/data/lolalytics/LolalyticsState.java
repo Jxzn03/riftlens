@@ -2,11 +2,12 @@ package com.leaguetool.data.lolalytics;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.NullNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+
+import com.leaguetool.util.Json;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -22,12 +23,11 @@ import java.util.regex.Pattern;
  *
  * <p>Aufbau: {@code objs} ist eine flache Liste, Werte in Objekten und Listen sind Base-36-Verweise auf andere
  * Einträge. {@code extract…} löst die benötigten Teile auf und erzeugt ein kompaktes JSON für den Cache,
- * {@code parse…} liest dieses JSON. Ändert die Seite ihren Aufbau, gibt es eine klare Fehlermeldung statt
+ * {@code parse…} liest dieses Json.MAPPER. Ändert die Seite ihren Aufbau, gibt es eine klare Fehlermeldung statt
  * falscher Werte.
  */
 final class LolalyticsState {
 
-    private static final ObjectMapper JSON = new ObjectMapper();
     private static final Pattern STATE = Pattern.compile("<script type=\"qwik/json\">(.*?)</script>", Pattern.DOTALL);
     private static final Pattern REFERENCE = Pattern.compile("[0-9a-z]+");
     private static final int MAX_DEPTH = 12;
@@ -55,7 +55,7 @@ final class LolalyticsState {
         out.set("slugs", resolve(objects, page.get("champPath"), 0));
         ObjectNode rows = out.putObject("rows");
         JsonNode resolved = resolve(objects, list.get("cid"), 0);
-        for (Map.Entry<String, JsonNode> e : fields(resolved)) {
+        for (Map.Entry<String, JsonNode> e : resolved.properties()) {
             JsonNode row = e.getValue();
             ObjectNode compact = rows.putObject(e.getKey());
             for (String field : List.of("tier", "lane", "pctLane", "wr", "pr", "br", "pbi", "games")) {
@@ -65,13 +65,13 @@ final class LolalyticsState {
         if (rows.isEmpty()) {
             throw new IOException("Lolalytics: Tierliste enthält keine Champions (Seite geändert?)");
         }
-        return JSON.writeValueAsString(out);
+        return Json.MAPPER.writeValueAsString(out);
     }
 
     static LolalyticsFullTierList parseTierList(String json) throws IOException {
-        JsonNode root = JSON.readTree(json);
+        JsonNode root = Json.MAPPER.readTree(json);
         Map<Integer, LolalyticsFullTierList.Row> rows = new HashMap<>();
-        for (Map.Entry<String, JsonNode> e : fields(root.path("rows"))) {
+        for (Map.Entry<String, JsonNode> e : root.path("rows").properties()) {
             JsonNode r = e.getValue();
             int tierRank = r.path("tier").asInt(0);
             String tier = tierRank > 0 && tierRank < TIERS.size() ? TIERS.get(tierRank) : "";
@@ -81,7 +81,7 @@ final class LolalyticsState {
                     r.path("br").asDouble() / 100.0, r.path("pbi").asInt(), r.path("games").asInt()));
         }
         Map<Integer, String> slugs = new HashMap<>();
-        for (Map.Entry<String, JsonNode> e : fields(root.path("slugs"))) {
+        for (Map.Entry<String, JsonNode> e : root.path("slugs").properties()) {
             slugs.put(Integer.valueOf(e.getKey()), e.getValue().asText());
         }
         return new LolalyticsFullTierList(root.path("patch").asText(""), root.path("analysed").asLong(),
@@ -126,14 +126,14 @@ final class LolalyticsState {
         JsonNode time = resolve(objects, build.get("sidebar"), 0).path("time");
         out.set("time", time.path("time"));
         out.set("timeWin", time.path("timeWin"));
-        return JSON.writeValueAsString(out);
+        return Json.MAPPER.writeValueAsString(out);
     }
 
     /** Antwort der Team-Schnittstelle; sie liefert dieselben Spalten wie die Matchups der Champion-Seite. */
     static String extractTeam(String body) throws IOException {
         JsonNode root;
         try {
-            root = JSON.readTree(body);
+            root = Json.MAPPER.readTree(body);
         } catch (JsonProcessingException e) {
             throw new IOException("Lolalytics: Antwort der Team-Schnittstelle ist kein JSON (geändert oder blockiert?)");
         }
@@ -142,11 +142,11 @@ final class LolalyticsState {
         }
         ObjectNode out = JsonNodeFactory.instance.objectNode();
         out.set("team", compactPairs(root.path("team_h"), root.path("team"), List.of()));
-        return JSON.writeValueAsString(out);
+        return Json.MAPPER.writeValueAsString(out);
     }
 
     static LolalyticsPairs parseTeam(String json) throws IOException {
-        return pairs(JSON.readTree(json).path("team"));
+        return pairs(Json.MAPPER.readTree(json).path("team"));
     }
 
     /**
@@ -163,7 +163,7 @@ final class LolalyticsState {
         int winRate = column(header, "wr");
         int games = column(header, "n");
         List<Integer> extra = optional.stream().map(name -> indexOf(header, name)).toList();
-        for (Map.Entry<String, JsonNode> lane : fields(lanes)) {
+        for (Map.Entry<String, JsonNode> lane : lanes.properties()) {
             ArrayNode rows = out.putArray(lane.getKey());
             for (JsonNode row : lane.getValue()) {
                 ArrayNode compact = rows.addArray().add(row.path(id)).add(row.path(winRate)).add(row.path(games));
@@ -196,7 +196,7 @@ final class LolalyticsState {
 
     private static LolalyticsPairs pairs(JsonNode lanes) {
         Map<String, Map<Integer, LolalyticsPairs.Stat>> byLane = new HashMap<>();
-        for (Map.Entry<String, JsonNode> lane : fields(lanes)) {
+        for (Map.Entry<String, JsonNode> lane : lanes.properties()) {
             Map<Integer, LolalyticsPairs.Stat> rows = new HashMap<>();
             for (JsonNode row : lane.getValue()) {
                 rows.put(row.path(0).asInt(), new LolalyticsPairs.Stat(row.path(1).asDouble() / 100.0, row.path(2).asInt(),
@@ -217,9 +217,9 @@ final class LolalyticsState {
     }
 
     static LolalyticsBuild parseBuild(String json) throws IOException {
-        JsonNode root = JSON.readTree(json);
+        JsonNode root = Json.MAPPER.readTree(json);
         Map<Integer, LolalyticsBuild.Entry> runes = new HashMap<>();
-        for (Map.Entry<String, JsonNode> e : fields(root.path("runes"))) {
+        for (Map.Entry<String, JsonNode> e : root.path("runes").properties()) {
             // Je Rune: [Pickrate, Winrate, Spiele]; der erste Eintrag ist die Position in der Hauptreihe.
             // Schlüssel mit Buchstaben (z. B. 5008f) sind Shard-Varianten je Reihe und keine Runen-IDs.
             JsonNode first = e.getValue().path(0);
@@ -274,7 +274,7 @@ final class LolalyticsState {
         if (!m.find()) {
             throw new IOException("Lolalytics: Seitenzustand nicht gefunden (Seite geändert oder Zugriff blockiert)");
         }
-        JsonNode objects = JSON.readTree(m.group(1).replace("\\x3C", "<")).path("objs");
+        JsonNode objects = Json.MAPPER.readTree(m.group(1).replace("\\x3C", "<")).path("objs");
         if (!objects.isArray() || objects.isEmpty()) {
             throw new IOException("Lolalytics: Seitenzustand ist leer (Seite geändert?)");
         }
@@ -305,7 +305,7 @@ final class LolalyticsState {
         JsonNode target = objects.path(Integer.parseInt(m.group(), 36));
         if (target.isObject()) {
             ObjectNode copy = JsonNodeFactory.instance.objectNode();
-            for (Map.Entry<String, JsonNode> e : fields(target)) {
+            for (Map.Entry<String, JsonNode> e : target.properties()) {
                 copy.set(e.getKey(), resolve(objects, e.getValue(), depth + 1));
             }
             return copy;
@@ -316,9 +316,5 @@ final class LolalyticsState {
             return copy;
         }
         return target.isMissingNode() ? NullNode.getInstance() : target;
-    }
-
-    private static Iterable<Map.Entry<String, JsonNode>> fields(JsonNode object) {
-        return object::fields;
     }
 }

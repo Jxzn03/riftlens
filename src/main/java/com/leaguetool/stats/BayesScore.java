@@ -1,10 +1,8 @@
 package com.leaguetool.stats;
 
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.List;
-import java.util.Map;
-import java.util.function.Function;
-import java.util.IdentityHashMap;
 
 /**
  * Empirisches Bayes-Ranking (Beta-Binomial) für Zeilen einer Rangliste.
@@ -58,16 +56,14 @@ public final class BayesScore {
         }
         double mean = clamp(totalWins / totalGames, 1e-4, 1 - 1e-4);
         double observed = 0;
-        double inverseGames = 0;
         for (WinStats l : lines) {
             if (l.games() > 0) {
                 double p = (double) l.wins() / l.games();
                 observed += l.games() * (p - mean) * (p - mean);
-                inverseGames += 1.0;   // Σ n·(1/n)
             }
         }
         observed /= totalGames;
-        double noise = mean * (1 - mean) * inverseGames / totalGames;
+        double noise = mean * (1 - mean) * count / totalGames;   // Σ n·(1/n) = Anzahl Zeilen
         double trueVariance = observed - noise;
         double strength = trueVariance <= 0 ? MAX_PRIOR_STRENGTH : mean * (1 - mean) / trueVariance - 1;
         strength = clamp(strength, MIN_PRIOR_STRENGTH, MAX_PRIOR_STRENGTH);
@@ -92,12 +88,9 @@ public final class BayesScore {
     /** Wie {@link StatLine#bestByWilson}, aber nach Bayes-Untergrenze; Prior aus allen übergebenen Zeilen. */
     public static <K> List<StatLine<K>> best(Collection<StatLine<K>> lines, int minGames) {
         Prior prior = estimatePrior(lines);
-        Map<StatLine<K>, Double> scores = new IdentityHashMap<>();
-        lines.forEach(l -> scores.put(l, lowerBound(prior, l.wins(), l.games())));
-        Function<StatLine<K>, Double> score = scores::get;
         return lines.stream().filter(l -> l.games() >= minGames)
-                .sorted(java.util.Comparator.<StatLine<K>>comparingDouble(score::apply).reversed()
-                        .thenComparing(java.util.Comparator.<StatLine<K>>comparingInt(StatLine::games).reversed()))
+                .sorted(Comparator.<StatLine<K>>comparingDouble(l -> lowerBound(prior, l.wins(), l.games())).reversed()
+                        .thenComparing(Comparator.<StatLine<K>>comparingInt(StatLine::games).reversed()))
                 .toList();
     }
 

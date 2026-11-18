@@ -5,6 +5,8 @@ import com.leaguetool.data.GameData;
 import com.leaguetool.data.lolalytics.LolalyticsBuild;
 import com.leaguetool.data.lolalytics.LolalyticsClient;
 import com.leaguetool.data.lolalytics.LolalyticsPeriod;
+import com.leaguetool.draft.DraftArchive;
+import com.leaguetool.draft.DraftArchive.Draft;
 import com.leaguetool.draft.DraftAnalyzer;
 import com.leaguetool.draft.DraftAnalyzer.ChampionResult;
 import com.leaguetool.draft.DraftAnalyzer.PairResult;
@@ -26,6 +28,7 @@ import java.util.Arrays;
 import java.util.EnumMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -63,7 +66,6 @@ final class DraftEndpoint {
         Set<Integer> locked = locked(body.path("locked"), data);
         Set<Integer> excluded = new HashSet<>(bans);
         excluded.addAll(locked);
-        DraftAnalyzer.Risk risk = risk(body.path("risk").asText(""));
         int requestId = body.path("requestId").asInt();
         boolean forEnemy = "enemy".equals(body.path("side").asText());
         // Schneller Modus: erst die Daten für die Vorschläge, das Frontend fragt danach vollständig nach.
@@ -72,7 +74,7 @@ final class DraftEndpoint {
         DraftDataLoader.Loaded loaded;
         try {
             loaded = loader.load(client, new DraftDataLoader.Request(ally, enemy, tier, period, forEnemy, quick),
-                    key -> data.championByKey(key).map(Champion::name).orElse("Champion " + key),
+                    data::championName,
                     (done, total) -> ctx.publish("draft-progress", Dto.obj("requestId", requestId, "done", done, "total", total)),
                     registerRequest(body.path("client").asText(""), requestId));
         } catch (DraftDataLoader.SupersededException e) {
@@ -93,7 +95,7 @@ final class DraftEndpoint {
                 : requestedPickRate.isNumber() ? Math.max(0, Math.min(MAX_MIN_PICK_RATE, requestedPickRate.asDouble()))
                 : DraftAnalyzer.COMMON_MIN_PICK_RATE;
         double minLaneShare = rarePicks ? 0 : DraftAnalyzer.COMMON_MIN_LANE_SHARE;
-        DraftAnalyzer.Config config = new DraftAnalyzer.Config(risk, body.path("ignoreChampionWinRates").asBoolean(), minGames,
+        DraftAnalyzer.Config config = new DraftAnalyzer.Config(body.path("ignoreChampionWinRates").asBoolean(), minGames,
                 minPickRate, minLaneShare);
 
         Map<Role, Integer> allyTeam = team(loaded.allyRoles());
@@ -146,6 +148,25 @@ final class DraftEndpoint {
         return slots;
     }
 
+    /**
+     * Plätze zum Überschreiben der Rollen eines gespeicherten Drafts. Ohne Abgleich mit den Spieldaten: Erlaubt sind
+     * ohnehin nur die Champions, die schon im gespeicherten Draft stehen ({@code DraftArchive.withRoles}).
+     */
+    static List<Slot> storedSlots(JsonNode team) {
+        if (!team.isArray() || team.size() > TEAM_SIZE) {
+            throw new ApiException(400, "Ein Team hat höchstens " + TEAM_SIZE + " Champions.");
+        }
+        List<Slot> slots = new ArrayList<>();
+        for (JsonNode node : team) {
+            if (!node.path("champion").canConvertToInt()) {
+                throw new ApiException(400, "Ungültiger Champion");
+            }
+            String role = node.path("role").asText("");
+            slots.add(new Slot(node.path("champion").asInt(), role.isEmpty() ? null : role(role)));
+        }
+        return slots;
+    }
+
     private static Set<Integer> bans(JsonNode list, GameData data) {
         if (list.size() > MAX_BANS) {
             throw new ApiException(400, "Höchstens " + MAX_BANS + " Bans.");
@@ -171,12 +192,38 @@ final class DraftEndpoint {
         for (List<Slot> team : List.of(ally, enemy)) {
             for (Slot slot : team) {
                 if (locked.contains(slot.champion())) {
-                    String name = data.championByKey(slot.champion()).map(Champion::name).orElse("Champion " + slot.champion());
+                    String name = data.championName(slot.champion());
                     warnings.add(name + " wurde in dieser Fearless-Serie schon gespielt und ist eigentlich gesperrt.");
                 }
             }
         }
         return warnings;
+    }
+
+    /**
+     * Ein vollständiges Brett aus {@code ally}, {@code enemy} und {@code bans}: Teamgröße, doppelte Champions und
+     * Bans werden geprüft (400 mit {@code incompleteMessage} bei unvollständigen Teams).
+     */
+    static Draft board(JsonNode body, GameData data, String incompleteMessage) {
+        List<Slot> ally = slots(body.path("ally"), data);
+        List<Slot> enemy = slots(body.path("enemy"), data);
+        if (ally.size() != DraftArchive.TEAM_SIZE || enemy.size() != DraftArchive.TEAM_SIZE) {
+            throw new ApiException(400, incompleteMessage);
+        }
+        requireDistinct(ally, enemy);
+        JsonNode banList = body.path("bans");
+        if (banList.size() > DraftArchive.MAX_BANS) {
+            throw new ApiException(400, "Höchstens " + DraftArchive.MAX_BANS + " Bans.");
+        }
+        Set<Integer> bans = new LinkedHashSet<>();
+        banList.forEach(node -> bans.add(championKey(node, data)));
+        return new Draft(ally, enemy, new ArrayList<>(bans));
+    }
+
+    /** Slots für eine Antwort: Champion und feste Rolle. */
+    static List<Map<String, Object>> slotsJson(List<Slot> slots) {
+        return slots.stream().map(slot -> Dto.obj("champion", slot.champion(),
+                "role", slot.forcedRole() == null ? null : slot.forcedRole().name())).toList();
     }
 
     static int championKey(JsonNode node, GameData data) {
@@ -203,17 +250,6 @@ final class DraftEndpoint {
             return Role.valueOf(value);
         } catch (IllegalArgumentException e) {
             throw new ApiException(400, "Ungültige Rolle");
-        }
-    }
-
-    private static DraftAnalyzer.Risk risk(String value) {
-        if (value.isEmpty()) {
-            return DraftAnalyzer.Risk.MEDIUM;
-        }
-        try {
-            return DraftAnalyzer.Risk.valueOf(value);
-        } catch (IllegalArgumentException e) {
-            throw new ApiException(400, "Ungültige Risikostufe");
         }
     }
 
@@ -278,7 +314,7 @@ final class DraftEndpoint {
                 .map(e -> loaded.builds().get(new Pick(e.getValue(), e.getKey())))
                 .filter(Objects::nonNull)
                 .toList();
-        TeamProfile profile = TeamProfile.of(builds, config.risk().priorGames());
+        TeamProfile profile = TeamProfile.of(builds, TeamProfile.PRIOR_GAMES);
         return Dto.obj("champions", profile.champions(), "physical", profile.physical(), "magic", profile.magic(), "true", profile.trueDamage(),
                 "ratingByLength", profile.ratingByLength(),
                 "lengthStartMinutes", LolalyticsBuild.LengthBucket.startMinutes(profile.ratingByLength().size()));

@@ -34,8 +34,7 @@ class RiotApiClientTest {
 
     @Test
     void routesPlatformAndRegionalEndpoints() throws Exception {
-        http.respond(EUW + "/lol/league/v4/entries/RANKED_SOLO_5x5/GOLD/II?page=2", Fixtures.read("riot/league-entries.json"))
-                .respond(EUW + "/lol/league/v4/challengerleagues/by-queue/RANKED_SOLO_5x5",
+        http.respond(EUW + "/lol/league/v4/challengerleagues/by-queue/RANKED_SOLO_5x5",
                         Fixtures.read("riot/challenger-league.json"))
                 .respond(EUW + "/lol/league/v4/grandmasterleagues/by-queue/RANKED_SOLO_5x5",
                         "{\"tier\":\"GRANDMASTER\",\"queue\":\"RANKED_SOLO_5x5\",\"entries\":[]}")
@@ -49,13 +48,10 @@ class RiotApiClientTest {
                 .respond(EUROPE + "/lol/match/v5/matches/by-puuid/p-1/ids?queue=420&start=20&count=5&startTime=1700000000",
                         "[]")
                 .respond(EUROPE + "/lol/match/v5/matches/EUW1_7000000001", Fixtures.read("riot/match-ok.json"))
-                .respond(EUROPE + "/lol/match/v5/matches/EUW1_7000000001/timeline",
-                        "{\"metadata\":{\"matchId\":\"EUW1_7000000001\"},\"info\":{\"frameInterval\":60000,\"frames\":[]}}")
                 .respond(EUW + "/lol/status/v4/platform-data", Fixtures.read("riot/platform-status.json"));
 
         RiotApiClient c = client();
         assertEquals(Platform.EUW1, c.platform());
-        assertEquals(3, c.leagueEntries(RiotApi.RANKED_SOLO_QUEUE, Tier.GOLD, "II", 2).size());
         assertEquals(3, c.apexLeague(RiotApi.RANKED_SOLO_QUEUE, Tier.CHALLENGER).size());
         assertTrue(c.apexLeague(RiotApi.RANKED_SOLO_QUEUE, Tier.GRANDMASTER).isEmpty());
         assertTrue(c.apexLeague(RiotApi.RANKED_SOLO_QUEUE, Tier.MASTER).isEmpty());
@@ -65,10 +61,9 @@ class RiotApiClientTest {
         assertTrue(c.matchIdsByPuuid("p-1", 420, 20, 5, 1_700_000_000L).isEmpty());
         JsonNode match = c.match("EUW1_7000000001");
         assertEquals("16.22.712.5432", match.path("info").path("gameVersion").asText());
-        assertEquals(60000, c.timeline("EUW1_7000000001").path("info").path("frameInterval").asInt());
         assertEquals("EUW1", c.platformStatus().path("id").asText());
 
-        assertEquals(11, http.requests().size());
+        assertEquals(9, http.requests().size());
         for (ScriptedFetcher.Request r : http.requests()) {
             assertEquals(KEY, r.headers().get("X-Riot-Token"), r.url());
             assertFalse(r.url().contains(KEY));
@@ -106,8 +101,8 @@ class RiotApiClientTest {
 
     @Test
     void parsesLeagueEntriesWithAndWithoutPuuid() throws Exception {
-        http.respond(EUW + "/lol/league/v4/entries/RANKED_SOLO_5x5/GOLD/II?page=1", Fixtures.read("riot/league-entries.json"));
-        List<LeagueEntry> entries = client().leagueEntries(RiotApi.RANKED_SOLO_QUEUE, Tier.GOLD, "II", 1);
+        http.respond(EUW + "/lol/league/v4/entries/by-puuid/test-puuid-g01", Fixtures.read("riot/league-entries.json"));
+        List<LeagueEntry> entries = client().leagueEntriesByPuuid("test-puuid-g01");
         assertEquals(new LeagueEntry("test-puuid-g01", "test-summoner-g01", "RANKED_SOLO_5x5", Tier.GOLD, "II", 41, 31, 29),
                 entries.get(0));
         assertEquals("test-puuid-g02", entries.get(1).puuid());
@@ -220,9 +215,6 @@ class RiotApiClientTest {
     @Test
     void validatesArguments() {
         RiotApiClient c = client();
-        assertThrows(IllegalArgumentException.class, () -> c.leagueEntries(RiotApi.RANKED_SOLO_QUEUE, Tier.MASTER, "I", 1));
-        assertThrows(IllegalArgumentException.class, () -> c.leagueEntries(RiotApi.RANKED_SOLO_QUEUE, Tier.GOLD, "V", 1));
-        assertThrows(IllegalArgumentException.class, () -> c.leagueEntries(RiotApi.RANKED_SOLO_QUEUE, Tier.GOLD, "I", 0));
         assertThrows(IllegalArgumentException.class, () -> c.apexLeague(RiotApi.RANKED_SOLO_QUEUE, Tier.GOLD));
         assertThrows(IllegalArgumentException.class, () -> c.matchIdsByPuuid("p", 420, 0, 0, null));
         assertThrows(IllegalArgumentException.class, () -> c.matchIdsByPuuid("p", 420, 0, 101, null));

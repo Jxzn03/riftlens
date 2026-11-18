@@ -20,14 +20,6 @@ public interface RiotApi {
 
     Platform platform();
 
-    /**
-     * league-v4 {@code /lol/league/v4/entries/{queue}/{tier}/{division}?page=N} (nur IRON … DIAMOND).
-     *
-     * @param division "I", "II", "III" oder "IV"
-     * @param page     1-basiert; eine leere Liste bedeutet: keine weiteren Seiten
-     */
-    List<LeagueEntry> leagueEntries(String queue, Tier tier, String division, int page) throws IOException;
-
     /** league-v4 Apex-Ligen ({@code challengerleagues/grandmasterleagues/masterleagues/by-queue/{queue}}). */
     List<LeagueEntry> apexLeague(String queue, Tier tier) throws IOException;
 
@@ -49,9 +41,6 @@ public interface RiotApi {
 
     /** match-v5 {@code /lol/match/v5/matches/{matchId}} (rohes MatchDto). */
     JsonNode match(String matchId) throws IOException;
-
-    /** match-v5 {@code /lol/match/v5/matches/{matchId}/timeline} (rohes TimelineDto). */
-    JsonNode timeline(String matchId) throws IOException;
 
     /** lol-status-v4 {@code /lol/status/v4/platform-data} – günstiger Aufruf zur Key-Prüfung. */
     JsonNode platformStatus() throws IOException;

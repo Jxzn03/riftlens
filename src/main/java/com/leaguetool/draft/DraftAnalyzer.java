@@ -27,44 +27,20 @@ import java.util.Set;
 public final class DraftAnalyzer {
 
     /**
-     * Wie stark kleine Stichproben geglättet werden: Je weniger Risiko, desto mehr Spiele braucht ein Wert. Der Faktor
-     * vervielfacht die aus den Daten geschätzten Prior-Spiele ({@link DraftPriors}); die Stufen entsprechen DraftGaps
-     * 3000/2000/1000/500/250 Spielen.
-     */
-    public enum Risk {
-        VERY_LOW(3), LOW(2), MEDIUM(1), HIGH(0.5), VERY_HIGH(0.25);
-
-        /** DraftGaps Prior-Spiele bei mittlerem Risiko; gilt hier nur noch für den Schritt vom Patch zu 30 Tagen. */
-        static final int BASE_PRIOR_GAMES = 1000;
-
-        private final double factor;
-
-        Risk(double factor) {
-            this.factor = factor;
-        }
-
-        public double factor() {
-            return factor;
-        }
-
-        /** Feste Glättung wie bei DraftGap, wo keine Schätzung aus den Daten vorliegt. */
-        public int priorGames() {
-            return (int) Math.round(BASE_PRIOR_GAMES * factor);
-        }
-    }
-
-    /**
-     * @param risk                   Glättung kleiner Stichproben
+     * Die Glättung folgt allein den aus den Daten geschätzten Prior-Spielen ({@link DraftPriors}). DraftGaps Regler
+     * „Risiko“ (Prior-Spiele ×3 bis ×¼) ist entfallen: Gemessen in allen Rang-Bereichen war jede Abweichung von ×1
+     * ungenauer (docs/draft.md).
+     *
      * @param ignoreChampionWinRates bewertet nur Duos und Matchups
      * @param minGames               Mindestspiele eines Vorschlags auf seiner Rolle in den letzten 30 Tagen
      * @param minPickRate            Mindest-Pickrate eines Vorschlags auf seiner Rolle (0..1, 0 = aus)
      * @param minLaneShare           Mindestanteil der Spiele des Champions auf dieser Rolle (0..1, 0 = aus)
      */
-    public record Config(Risk risk, boolean ignoreChampionWinRates, int minGames, double minPickRate, double minLaneShare) {
+    public record Config(boolean ignoreChampionWinRates, int minGames, double minPickRate, double minLaneShare) {
 
         /** Ohne Filter nach Pickrate und Rollenanteil (bisheriges Verhalten, „Seltene Picks zeigen“). */
-        public Config(Risk risk, boolean ignoreChampionWinRates, int minGames) {
-            this(risk, ignoreChampionWinRates, minGames, 0, 0);
+        public Config(boolean ignoreChampionWinRates, int minGames) {
+            this(ignoreChampionWinRates, minGames, 0, 0);
         }
     }
 
@@ -119,14 +95,10 @@ public final class DraftAnalyzer {
         this(data, config, DraftPriors.estimate(data));
     }
 
-    public DraftAnalyzer(DraftDataset data, Config config, DraftPriors priors) {
+    private DraftAnalyzer(DraftDataset data, Config config, DraftPriors priors) {
         this.data = data;
         this.config = config;
         this.priors = priors;
-    }
-
-    public DraftPriors priors() {
-        return priors;
     }
 
     /** Standard für die Mindestspiele: wächst mit der Spielmenge, damit auch kleine Rang-Bereiche Vorschläge haben. */
@@ -227,10 +199,11 @@ public final class DraftAnalyzer {
         // Der Prior wird selbst zum Durchschnitt gezogen, so stark, wie Champion-Stärken auf dieser Rolle streuen.
         // Sonst wäre er bei 30 Tagen die eigene Winrate und wirkungslos.
         Stat full = data.full(pick);
-        double championPrior = priors.championPriorGames(pick.role()) * config.risk().factor();
+        double championPrior = priors.championPriorGames(pick.role());
         double priorWinRate = (full.wins() + championPrior * data.fullAverage()) / (full.games() + championPrior);
-        // Sind beide Zeiträume gleich, wären dieselben Spiele sonst doppelt gezählt.
-        double patchPrior = config.risk().priorGames();
+        // Sind beide Zeiträume gleich, wären dieselben Spiele sonst doppelt gezählt. Der Patch-Wert wird so stark zu
+        // 30 Tagen gezogen, wie Champions sich zwischen Patch und älteren Spielen verschieben (DraftPriors).
+        double patchPrior = priors.patchPriorGames();
         double smoothed = stats.equals(full) ? priorWinRate
                 : (stats.wins() + patchPrior * priorWinRate) / (stats.games() + patchPrior);
         return new ChampionResult(pick, rating(smoothed) - rating(data.selectedAverage()), stats);
@@ -293,9 +266,9 @@ public final class DraftAnalyzer {
         return new PairResult(a, b, rating, combined);
     }
 
-    /** Prior-Spiele einer Paarung: je Rollenpaar aus der Streuung echter Effekte, vervielfacht mit dem Risiko. */
+    /** Prior-Spiele einer Paarung: je Rollenpaar aus der Streuung echter Effekte. */
     private double pairPriorGames(DraftPriors.Kind kind, Pick a, Pick b, double expectedRating) {
-        return priors.pairPriorGames(kind, a.role(), b.role(), winRate(expectedRating)) * config.risk().factor();
+        return priors.pairPriorGames(kind, a.role(), b.role(), winRate(expectedRating));
     }
 
     /** Rating-Punkte über der Erwartung; der Prior zieht kleine Stichproben zur Erwartung, also gegen 0. */

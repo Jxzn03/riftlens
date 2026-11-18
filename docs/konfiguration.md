@@ -17,7 +17,7 @@ für die Draft-Synergien behalten ihre 12 Stunden Cache.
 
 | Pfad | Inhalt |
 |---|---|
-| `settings.properties` | Einstellungen (Sprache, Offline-Modus, Wiki/Riot/Lolalytics an/aus, Rang-Bereich, Plattform, optional API-Key) |
+| `settings.properties` | Einstellungen (Sprache, Offline-Modus, Wiki/Riot/Lolalytics an/aus, Rang-Bereich, Plattform, Größe von Draft-Archiv und Fearless-Serien, optional API-Key) |
 | `cache/<patch>/data/<sprache>/…` | Data-Dragon-JSON pro Patch (unveränderlich, cache-first) |
 | `cache/<patch>/img/…`, `cache/_global/img/…` | Bilder (Champions, Items, Spells, Runen) |
 | `cache/_global/ddragon/versions.json` | Patch-Liste (beim Programmstart frisch geprüft, danach 6 h, sonst Netz mit Cache-Fallback) |

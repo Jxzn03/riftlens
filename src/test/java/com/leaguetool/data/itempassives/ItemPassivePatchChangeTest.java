@@ -1,5 +1,6 @@
 package com.leaguetool.data.itempassives;
 
+import com.leaguetool.data.UpdateReport;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leaguetool.cache.FileCache;
 import com.leaguetool.calc.BuildCalculator;
@@ -76,7 +77,7 @@ class ItemPassivePatchChangeTest {
         assertEquals(50, steraksRatio());
 
         wikiSays(40);
-        ItemPassiveUpdater.Report report = updater.update(patch("16.23.1"), wiki);
+        UpdateReport report = updater.update(patch("16.23.1"), wiki);
 
         assertEquals(40, steraksRatio());
         assertEquals(List.of("Sterak's Gage: Angriffsschaden aus Basis-AD 50 % → 40 %"), report.changes());
@@ -92,7 +93,7 @@ class ItemPassivePatchChangeTest {
         assertEquals(2, http.requests().size());
 
         ItemPassives.install(List.of());
-        ItemPassiveUpdater.Report report = new ItemPassiveUpdater(new FileCache(dir)).update(patch("16.23.1"), wiki);
+        UpdateReport report = new ItemPassiveUpdater(new FileCache(dir)).update(patch("16.23.1"), wiki);
 
         assertEquals(2, http.requests().size(), "kein weiterer Abruf im selben Patch");
         assertEquals(40, steraksRatio());
@@ -106,7 +107,7 @@ class ItemPassivePatchChangeTest {
         updater.update(patch("16.22.1"), wiki);
         http.setOffline(true);
 
-        ItemPassiveUpdater.Report report = updater.update(patch("16.23.1"), wiki);
+        UpdateReport report = updater.update(patch("16.23.1"), wiki);
 
         assertEquals(40, steraksRatio());
         assertTrue(report.changes().isEmpty() || report.changes().stream().noneMatch(c -> c.contains("Sterak")));

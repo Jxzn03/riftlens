@@ -1,7 +1,7 @@
 // App-Rahmen: Navigation, Filterleiste, Schnellsuche, Dialoge, Statuszeile.
 import { html, useState, useEffect, useMemo, useRef } from '/vendor/htm-preact.js';
 import { store, useStore, useFetch, useStatsUrl, api, go, normalize, percent, toast, setPref, clearFavorites, TIERS } from './core.js';
-import { Icon, Img, Button, Select, Segmented, Switch, Spinner, Loading, ErrorNote } from './ui.js';
+import { Icon, Img, Button, Select, Segmented, Switch, Spinner, Loading, ErrorNote, ConfirmHost, confirmDialog } from './ui.js';
 import { ChampionsView } from './champions.js';
 import { ItemsView } from './items.js';
 import { RunesView } from './runes.js';
@@ -61,6 +61,7 @@ export function App() {
     ${palette ? html`<${Palette} data=${data} />` : null}
     ${dialog === 'settings' ? html`<${SettingsDialog} />` : null}
     <${Toast} />
+    <${ConfirmHost} />
   </div>`;
 }
 
@@ -234,8 +235,8 @@ const closeDialog = () => store.set({ dialog: null });
 /** Favoriten wirken sofort, ohne „Speichern“: Sie gehören zum lokalen Oberflächen-Zustand, nicht zu den Einstellungen. */
 function FavoritesSetting() {
   const count = useStore((s) => s.favorites.length);
-  const clear = () => {
-    if (window.confirm(`Alle ${count} Favoriten entfernen?`)) {
+  const clear = async () => {
+    if (await confirmDialog({ title: `Alle ${count} Favoriten entfernen?`, message: 'Der Champion-Pool ist danach leer.', confirmLabel: 'Entfernen', danger: true })) {
       clearFavorites();
       toast('Alle Favoriten entfernt');
     }
@@ -269,7 +270,7 @@ function SettingsDialog() {
         locale: form.locale, offline: form.offline, wikiEnabled: form.wikiEnabled,
         lolalyticsEnabled: form.lolalyticsEnabled,
         riotEnabled: form.riotEnabled, platform: form.platform, lcuFolder: form.lcuFolder || '',
-        draftArchiveLimit: Number(form.draftArchiveLimit),
+        draftArchiveLimit: Number(form.draftArchiveLimit), fearlessSeriesLimit: Number(form.fearlessSeriesLimit),
       };
       if (key.trim() !== '' || form.clearKey) {
         body.riotApiKey = key.trim();
@@ -296,10 +297,12 @@ function SettingsDialog() {
       <${Switch} checked=${form.lolalyticsEnabled} onChange=${(lolalyticsEnabled) => set({ lolalyticsEnabled })}>Lolalytics-Statistiken erlauben (öffentliche Seiten, gecacht)<//>
       <${Switch} checked=${advancedTips} onChange=${(on) => setPref({ advancedTips: on })}>Show Advanced Tooltips (zusätzliche Hover-Infos in der Champions-Statistik)<//>
       <${FavoritesSetting} />
-      <label class="field"><span>Draft-Archiv</span>
+      <label class="field"><span data-tip=${advancedTips ? 'Vollständige Drafts werden nur lokal gespeichert (draft-archive.json im Nutzerordner). Beim Verkleinern werden ältere ausgeblendet und mit dem nächsten neuen Draft gelöscht.' : undefined}>Draft-Archiv</span>
         <${Select} label="Draft-Archiv" value=${String(form.draftArchiveLimit)} onChange=${(limit) => set({ draftArchiveLimit: Number(limit) })}
-          options=${form.draftArchiveLimits.map((n) => ({ value: String(n), label: `Letzte ${n} Drafts behalten` }))} /></label>
-      <p class="muted small">Vollständige Drafts werden nur lokal gespeichert (draft-archive.json im Nutzerordner). Beim Verkleinern werden ältere ausgeblendet und mit dem nächsten neuen Draft gelöscht.</p>
+          options=${form.draftArchiveLimits.map((n) => ({ value: String(n), label: `Letzte ${n} Drafts behalten${n === form.draftArchiveDefault ? ' (Standard)' : ''}` }))} /></label>
+      <label class="field"><span data-tip=${advancedTips ? 'Gilt für beendete Serien (fearless-series.json); die laufende zählt nicht mit. Ihre Games bleiben zusätzlich als Drafts im Draft-Archiv. Beim Verkleinern werden ältere ausgeblendet und mit der nächsten Änderung an den Serien gelöscht.' : undefined}>Fearless-Serien</span>
+        <${Select} label="Fearless-Serien" value=${String(form.fearlessSeriesLimit)} onChange=${(limit) => set({ fearlessSeriesLimit: Number(limit) })}
+          options=${form.fearlessSeriesLimits.map((n) => ({ value: String(n), label: `Letzte ${n} beendete Serien behalten${n === form.fearlessSeriesDefault ? ' (Standard)' : ''}` }))} /></label>
       <div class="divider"></div>
       <${Switch} checked=${form.riotEnabled} onChange=${(riotEnabled) => set({ riotEnabled })}>Riot-API verwenden (Summoner-Abfrage, Verifizierung)<//>
       <label class="field"><span>Riot-API-Key</span>

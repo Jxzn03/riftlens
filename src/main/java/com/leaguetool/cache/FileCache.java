@@ -28,16 +28,11 @@ public final class FileCache {
     public static final String GLOBAL = "_global";
 
     private static final Pattern UNSAFE_CHARS = Pattern.compile("[^A-Za-z0-9._/\\-]");
-    private static final Pattern VERSION_DIR = Pattern.compile("\\d+\\.\\d+\\.\\d+");
 
     private final Path root;
 
     public FileCache(Path root) {
         this.root = root.toAbsolutePath().normalize();
-    }
-
-    public Path root() {
-        return root;
     }
 
     /** Pfad eines Eintrags (unabhängig davon, ob er existiert). */
@@ -85,19 +80,14 @@ public final class FileCache {
         Files.deleteIfExists(pathFor(scope, key));
     }
 
-    public Optional<Instant> lastModified(String scope, String key) throws IOException {
+    private Optional<Instant> lastModified(String scope, String key) throws IOException {
         Path p = pathFor(scope, key);
         return Files.isRegularFile(p) ? Optional.of(Files.getLastModifiedTime(p).toInstant()) : Optional.empty();
     }
 
-    /** {@code true}, wenn der Eintrag existiert und jünger als {@code maxAge} ist. */
-    public boolean isFresh(String scope, String key, Duration maxAge) throws IOException {
-        return isFresh(scope, key, maxAge, Instant.EPOCH);
-    }
-
     /**
-     * Wie {@link #isFresh(String, String, Duration)}, zusätzlich muss der Eintrag nach {@code notBefore} geschrieben
-     * sein (z. B. nach einem Patchwechsel).
+     * {@code true}, wenn der Eintrag existiert, jünger als {@code maxAge} und nach {@code notBefore} geschrieben
+     * ist (z. B. nach einem Patchwechsel).
      */
     public boolean isFresh(String scope, String key, Duration maxAge, Instant notBefore) throws IOException {
         Instant limit = Instant.now().minus(maxAge);
@@ -105,20 +95,6 @@ public final class FileCache {
         return lastModified(scope, key)
                 .map(t -> t.isAfter(threshold))
                 .orElse(false);
-    }
-
-    /**
-     * Cache-first: liefert den Eintrag, sonst wird {@code fetcher} aufgerufen und das Ergebnis gespeichert.
-     * Für unveränderliche Daten (Patch-Dateien).
-     */
-    public String getOrFetch(String scope, String key, IoSupplier<String> fetcher) throws IOException {
-        Optional<String> cached = readText(scope, key);
-        if (cached.isPresent()) {
-            return cached.get();
-        }
-        String fresh = fetcher.get();
-        writeText(scope, key, fresh);
-        return fresh;
     }
 
     /**
@@ -161,7 +137,7 @@ public final class FileCache {
         try (DirectoryStream<Path> dirs = Files.newDirectoryStream(root, Files::isDirectory)) {
             for (Path d : dirs) {
                 String name = d.getFileName().toString();
-                if (VERSION_DIR.matcher(name).matches()) {
+                if (Patches.isRegularVersion(name)) {
                     result.add(name);
                 }
             }

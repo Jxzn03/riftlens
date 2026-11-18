@@ -56,11 +56,7 @@ public final class LcuSync implements AutoCloseable {
     private final Function<LcuLockfile, LcuTransport> connect;
     private final Consumer<State> listener;
     private final boolean background;
-    private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor(r -> {
-        Thread t = new Thread(r, "lt-lcu");
-        t.setDaemon(true);
-        return t;
-    });
+    private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor(Thread.ofPlatform().daemon().name("lt-lcu").factory());
 
     private volatile State state = State.of(Status.OFF, "Abgleich mit dem League-Client ist aus.");
     private boolean enabled;
@@ -88,12 +84,13 @@ public final class LcuSync implements AutoCloseable {
         this.background = background;
     }
 
-    public State state() {
-        return state;
+    private void resetPickable() {
+        pickableGameId = -1;
+        pickable = List.of();
     }
 
-    public synchronized boolean enabled() {
-        return enabled;
+    public State state() {
+        return state;
     }
 
     public synchronized void setEnabled(boolean value) {
@@ -113,8 +110,7 @@ public final class LcuSync implements AutoCloseable {
             }
         } else {
             transport = null;
-            pickableGameId = -1;
-            pickable = List.of();
+            resetPickable();
             update(State.of(Status.OFF, "Abgleich mit dem League-Client ist aus."));
         }
     }
@@ -146,8 +142,7 @@ public final class LcuSync implements AutoCloseable {
         if (transport == null) {
             Optional<LcuLockfile> lockfile = locator.get();
             if (lockfile.isEmpty()) {
-                pickableGameId = -1;
-                pickable = List.of();
+                resetPickable();
                 return State.of(Status.NO_CLIENT, "Kein laufender League-Client gefunden. Liegt League in einem anderen Ordner, ihn in den Optionen eintragen.");
             }
             transport = connect.apply(lockfile.get());
@@ -155,8 +150,7 @@ public final class LcuSync implements AutoCloseable {
         try {
             Optional<JsonNode> session = transport.get(LcuEndpoint.CHAMP_SELECT_SESSION);
             if (session.isEmpty()) {
-                pickableGameId = -1;
-                pickable = List.of();
+                resetPickable();
                 return State.of(Status.IDLE, "Verbunden, keine Champion-Auswahl.");
             }
             ChampSelect champSelect = ChampSelect.parse(session.get());

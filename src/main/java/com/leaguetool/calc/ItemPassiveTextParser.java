@@ -1,5 +1,7 @@
 package com.leaguetool.calc;
 
+import com.leaguetool.util.Text;
+
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -24,7 +26,6 @@ public final class ItemPassiveTextParser {
 
     private static final Pattern PARENTHESIZED_NUMBER = Pattern.compile("\\(\\d+\\)");
     private static final Pattern FILLER = Pattern.compile("\\b(your|of|total|additional|the|an?)\\b");
-    private static final Pattern SPACES = Pattern.compile("\\s+");
 
     private static final Pattern EQUAL_TO = Pattern.compile("gain (?:bonus )?" + TARGET + " equal to " + N + "% " + SOURCE);
     private static final Pattern AS_TARGET = Pattern.compile("gain " + N + "% " + SOURCE + " as (?:bonus )?" + TARGET);
@@ -144,7 +145,7 @@ public final class ItemPassiveTextParser {
                 .replace("heal and shield power", "hsp").replace("movement speed", "ms").replace("move speed", "ms")
                 .replace("grants", "gain").replace("grant", "gain").replace("gains", "gain");
         s = FILLER.matcher(s).replaceAll(" ");
-        s = SPACES.matcher(s).replaceAll(" ").strip();
+        s = Text.collapseSpaces(s).strip();
         return s.endsWith(".") ? s.substring(0, s.length() - 1).strip() : s;
     }
 }

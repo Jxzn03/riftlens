@@ -14,7 +14,7 @@ import com.leaguetool.calc.StatBlock;
 import com.leaguetool.calc.StatCalculator;
 import com.leaguetool.calc.StatType;
 import com.leaguetool.data.GameData;
-import com.leaguetool.data.ddragon.ImageRef;
+import com.leaguetool.data.UpdateReport;
 import com.leaguetool.data.itempassives.ItemPassiveUpdater;
 import com.leaguetool.data.lolalytics.LolalyticsBuild;
 import com.leaguetool.data.lolalytics.LolalyticsCounters;
@@ -35,7 +35,6 @@ import com.leaguetool.model.RuneTree;
 import com.leaguetool.model.StatShard;
 import com.leaguetool.model.SummonerSpell;
 import com.leaguetool.stats.ChampionReport;
-import com.leaguetool.stats.ItemClassifier;
 import com.leaguetool.stats.RunePageKey;
 import com.leaguetool.stats.SkillPath;
 import com.leaguetool.stats.StatLine;
@@ -48,6 +47,7 @@ import java.util.Arrays;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.function.Function;
@@ -58,7 +58,6 @@ final class Dto {
 
     /** So viele Einträge zeigt eine Rangliste. */
     private static final int TOP = 3;
-    private static final int MAX_LEVEL = StatCalculator.MAX_LEVEL;
     private static final List<String> PRIMARY_MODES = List.of("CLASSIC", "ARAM", "URF", "CHERRY");
     private static final int SHORT_MODES = 3;
 
@@ -74,10 +73,15 @@ final class Dto {
         return map;
     }
 
+    private static Map<String, Object> updateReport(UpdateReport r) {
+        return obj("patch", r.patch(), "checkedAt", r.checkedAt(), "count", r.count(),
+                "changes", r.changes(), "review", r.review(), "notes", r.notes());
+    }
+
     // ------------------------------------------------------------------ Bilder
 
-    private static String championIcon(String patch, String file) {
-        return "/img/" + patch + "/champion/" + file;
+    static String patchIcon(String patch, String group, String file) {
+        return "/img/" + patch + "/" + group + "/" + file;
     }
 
     private static String runeIcon(String icon) {
@@ -86,8 +90,8 @@ final class Dto {
 
     // ------------------------------------------------------------------ Bootstrap
 
-    static Map<String, Object> bootstrap(GameData data, int version, ItemPassiveUpdater.Report passives,
-                                         RuneEffectUpdater.Report runes, PatchTracker.Change patchChange) {
+    static Map<String, Object> bootstrap(GameData data, int version, UpdateReport passives,
+                                         UpdateReport runes, PatchTracker.Change patchChange) {
         String patch = data.patch();
         List<Item> riftItems = Item.summonersRiftItems(data.items());
         return obj(
@@ -96,17 +100,15 @@ final class Dto {
                 "offline", data.offline(),
                 "patchChange", patchChange == null ? null : obj("from", patchChange.previous(), "to", patchChange.current(),
                         "at", patchChange.changedAt().toString()),
-                "itemPassives", obj("patch", passives.patch(), "checkedAt", passives.checkedAt(), "count", passives.count(),
-                        "changes", passives.changes(), "review", passives.review(), "notes", passives.notes()),
-                "runeEffectStatus", obj("patch", runes.patch(), "checkedAt", runes.checkedAt(), "count", runes.count(),
-                        "changes", runes.changes(), "review", runes.review(), "notes", runes.notes()),
+                "itemPassives", updateReport(passives),
+                "runeEffectStatus", updateReport(runes),
                 "champions", data.champions().stream().map(c -> champion(c, patch)).toList(),
                 "items", data.items().stream().map(i -> item(i, patch, riftItems.contains(i))).toList(),
                 "runeTrees", data.runeTrees().stream().map(Dto::runeTree).toList(),
                 "spells", data.summonerSpells().stream().map(s -> spell(s, patch)).toList(),
                 "shards", StatShard.ALL.stream().map(s -> obj("id", s.id(), "name", s.name())).toList(),
                 "shardRows", RuneEffects.shardRows(),
-                "runeEffects", RuneEffects.all().stream().map(e -> obj("id", e.id(), "kind", e.kind().name().toLowerCase(),
+                "runeEffects", RuneEffects.all().stream().map(e -> obj("id", e.id(), "kind", e.kind().name().toLowerCase(Locale.ROOT),
                         "maxStacks", e.maxStacks(), "stackLabel", e.stackLabel(), "summary", e.summary())).toList());
     }
 
@@ -115,7 +117,7 @@ final class Dto {
                 "id", c.id(), "key", c.key(), "name", c.name(), "title", c.title(), "blurb", c.blurb(),
                 "resource", c.resource(),
                 "info", obj("attack", c.info().attack(), "defense", c.info().defense(), "magic", c.info().magic()),
-                "icon", championIcon(patch, c.imageFile()),
+                "icon", patchIcon(patch, "champion", c.imageFile()),
                 "splash", "/img/splash/" + c.id() + "_0.jpg");
     }
 
@@ -126,7 +128,7 @@ final class Dto {
                 "gold", obj("base", i.gold().base(), "total", i.gold().total(), "sell", i.gold().sell()),
                 "tags", i.tags(), "from", i.from(), "into", i.into(),
                 "rift", rift, "completed", i.isCompleted(),
-                "icon", "/img/" + patch + "/item/" + i.imageFile(),
+                "icon", patchIcon(patch, "item", i.imageFile()),
                 "stats", statRows(ItemStatParser.parse(i).stats()));
     }
 
@@ -154,7 +156,7 @@ final class Dto {
                 "cooldown", s.cooldown(), "cooldownText", s.cooldowns().isEmpty() ? "–" : Text.perRank(s.cooldowns()) + " s",
                 "rangeText", Text.ranges(s.ranges()), "summonerLevel", s.summonerLevel(), "modes", modes,
                 "modesShort", modes.size() > SHORT_MODES ? head + " +" + (modes.size() - SHORT_MODES) : head,
-                "classic", s.isClassic(), "icon", "/img/" + patch + "/spell/" + s.imageFile());
+                "classic", s.isClassic(), "icon", patchIcon(patch, "spell", s.imageFile()));
     }
 
     private static List<Map<String, Object>> statRows(StatBlock block) {
@@ -176,7 +178,6 @@ final class Dto {
     }
 
     private static Map<String, Object> ability(Ability a, String patch) {
-        ImageRef ref = a.isPassive() ? ImageRef.passive(patch, a.imageFile()) : ImageRef.spell(patch, a.imageFile());
         String group = a.isPassive() ? "passive" : "spell";
         int ranks = Math.max(1, Math.max(Math.max(a.maxRank(), a.cooldowns().size()),
                 Math.max(a.costs().size(), a.ranges().size())));
@@ -191,15 +192,11 @@ final class Dto {
         }
         return obj("slot", a.slot().name(), "slotLabel", a.slot().label(), "name", a.name(),
                 "description", a.description(), "passive", a.isPassive(), "maxRank", a.maxRank(),
-                "costType", a.costType(), "icon", "/img/" + patch + "/" + group + "/" + fileName(ref),
+                "costType", a.costType(), "icon", patchIcon(patch, group, a.imageFile()),
                 "ranks", ranks, "cooldowns", a.cooldowns(), "cooldownTexts", cooldownTexts,
                 "cooldownSummary", a.cooldowns().isEmpty() ? "" : "Abklingzeit: " + Text.perRank(a.cooldowns()) + " s",
                 "costs", costs, "ranges", ranges,
                 "hasRankTable", !a.cooldowns().isEmpty() || !a.costs().isEmpty() || !a.ranges().isEmpty());
-    }
-
-    private static String fileName(ImageRef ref) {
-        return ref.cacheKey().substring(ref.cacheKey().lastIndexOf('/') + 1);
     }
 
     // ------------------------------------------------------------------ Wiki-Vergleich
@@ -249,7 +246,7 @@ final class Dto {
         }
         rows.add(statRow("Angriffsschaden", s.attackDamage(), s.attackDamagePerLevel()));
         List<String> attackSpeed = new ArrayList<>();
-        for (int level = 1; level <= MAX_LEVEL; level++) {
+        for (int level = StatCalculator.MIN_LEVEL; level <= StatCalculator.MAX_LEVEL; level++) {
             attackSpeed.add(Text.num(StatCalculator.attackSpeedAtLevel(s.attackSpeed(), s.attackSpeedPerLevel(), level), 3));
         }
         rows.add(obj("label", "Angriffstempo", "base", Text.num(s.attackSpeed()),
@@ -263,7 +260,7 @@ final class Dto {
 
     private static Map<String, Object> statRow(String label, double base, double perLevel) {
         List<String> values = new ArrayList<>();
-        for (int level = 1; level <= MAX_LEVEL; level++) {
+        for (int level = StatCalculator.MIN_LEVEL; level <= StatCalculator.MAX_LEVEL; level++) {
             values.add(Text.num(StatCalculator.statAtLevel(base, perLevel, level), 1));
         }
         return obj("label", label, "base", Text.num(base), "perLevel", perLevel == 0 ? "–" : "+" + Text.num(perLevel),
@@ -460,7 +457,7 @@ final class Dto {
                 "shards", key.shards().stream().map(StatShard::nameOf).collect(Collectors.joining(" / ")));
     }
 
-    /** Bevorzugt die besten Einträge (Wilson-Untergrenze, Mindest-Stichprobe), sonst die häufigsten. */
+    /** Bevorzugt die besten Einträge (Bayes-Untergrenze, Mindest-Stichprobe), sonst die häufigsten. */
     private static <K> Map<String, Object> ranking(StatRanking<K> ranking, Function<K, Object> keyView) {
         boolean best = !ranking.best().isEmpty();
         List<StatLine<K>> lines = best ? ranking.best() : ranking.mostFrequent();
@@ -507,11 +504,11 @@ final class Dto {
     }
 
     /** Gleiche Form wie {@link #report(ChampionReport)}, damit die Oberfläche beide Quellen gleich anzeigt. */
-    static Map<String, Object> lolalyticsReport(LolalyticsBuild b, GameData data, ItemClassifier classifier, int championKey,
+    static Map<String, Object> lolalyticsReport(LolalyticsBuild b, GameData data,
                                                 String opponentLane) {
         List<StatLine<Integer>> boots = new ArrayList<>();
         for (LolalyticsBuild.Entry e : b.boots()) {
-            if (e.key().matches("\\d+") && classifier.isFinalBoots(Integer.parseInt(e.key()))) {
+            if (e.key().matches("\\d+") && data.item(Integer.parseInt(e.key())).filter(Item::isFinalBoots).isPresent()) {
                 boots.add(line(Integer.valueOf(e.key()), e.winRate(), e.games(), e.pickRate()));
             }
         }
@@ -529,15 +526,13 @@ final class Dto {
             pages.putIfAbsent(key, line(key, p.winRate(), p.games(), b.games() == 0 ? 0 : (double) p.games() / b.games()));
         }
         int min = Math.max(LOLALYTICS_MIN_GAMES, (int) Math.ceil(b.games() * LOLALYTICS_MIN_SHARE));
-        ChampionReport report = new ChampionReport(championKey, min, b.games(),
+        ChampionReport report = new ChampionReport(b.games(),
                 (int) Math.min(b.games(), Math.round(b.games() * b.winRate())), b.pickRate(), b.banRate(),
                 ranking(b.starters(), Dto::idList, min),
                 StatRanking.of(boots, min),
                 ranking(b.coreBuilds(), Dto::idList, min),
-                StatRanking.of(List.of(), min), StatRanking.of(List.of(), min), StatRanking.of(List.of(), min),
                 StatRanking.of(keystones, min),
                 StatRanking.of(pages.values(), min),
-                StatRanking.of(List.of(), min), StatRanking.of(List.of(), min), StatRanking.of(List.of(), min),
                 ranking(b.skillOrders(), Dto::maxOrder, min),
                 ranking(b.skillStarts(), Dto::skillDigits, min),
                 ranking(b.spells(), Dto::idList, min));

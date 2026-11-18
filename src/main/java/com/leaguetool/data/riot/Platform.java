@@ -40,16 +40,6 @@ public enum Platform {
         return name().toLowerCase(Locale.ROOT);
     }
 
-    /** Regionales Routing für match-v5, z. B. {@code europe}. */
-    public String matchRegion() {
-        return matchRegion;
-    }
-
-    /** Regionales Routing für account-v1. */
-    public String accountRegion() {
-        return accountRegion;
-    }
-
     public String platformBaseUrl() {
         return "https://" + id() + ".api.riotgames.com";
     }

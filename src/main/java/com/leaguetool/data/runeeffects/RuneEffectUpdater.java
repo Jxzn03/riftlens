@@ -1,7 +1,7 @@
 package com.leaguetool.data.runeeffects;
 
+import com.leaguetool.data.UpdateReport;
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.leaguetool.cache.FileCache;
@@ -12,6 +12,7 @@ import com.leaguetool.data.wiki.WikiRuneShards;
 import com.leaguetool.model.Rune;
 import com.leaguetool.model.RuneTree;
 import com.leaguetool.util.Text;
+import com.leaguetool.util.Json;
 
 import java.io.IOException;
 import java.time.LocalDate;
@@ -33,20 +34,6 @@ import java.util.regex.Matcher;
  */
 public final class RuneEffectUpdater {
 
-    /**
-     * Ergebnis eines Abgleichs.
-     *
-     * @param changes automatisch übernommene Änderungen dieses Patches
-     * @param review  Runen, deren Text nicht ausgewertet werden konnte (letzter Wert bleibt)
-     * @param notes   Hinweise (Quellen, Wiki nicht verfügbar)
-     */
-    public record Report(String patch, String checkedAt, int count, List<String> changes, List<String> review,
-                         List<String> notes) {
-        static Report none() {
-            return new Report("", "", RuneEffects.definitions().size(), List.of(), List.of(), List.of());
-        }
-    }
-
     record Result(Map<Integer, double[]> params, List<List<Integer>> rows, List<String> review, List<String> notes) {
     }
 
@@ -55,16 +42,15 @@ public final class RuneEffectUpdater {
     private static final int MAX_HISTORY = 30;
     private static final double MAX_PLAUSIBLE_VALUE = 1000;
     private static final double EPSILON = 1e-9;
-    private static final ObjectMapper MAPPER = new ObjectMapper();
 
     private final FileCache cache;
-    private volatile Report latest = Report.none();
+    private volatile UpdateReport latest = UpdateReport.none(RuneEffects.definitions().size());
 
     public RuneEffectUpdater(FileCache cache) {
         this.cache = cache;
     }
 
-    public Report latest() {
+    public UpdateReport latest() {
         return latest;
     }
 
@@ -75,7 +61,7 @@ public final class RuneEffectUpdater {
      * @param wiki     Wiki-Client oder {@code null}, wenn das Wiki aus ist (Shards behalten dann ihren Stand)
      * @param newPatch {@code true} beim ersten Start nach einem Patchwechsel
      */
-    public Report update(GameData data, WikiClient wiki, boolean newPatch) {
+    public UpdateReport update(GameData data, WikiClient wiki, boolean newPatch) {
         JsonNode state = readState();
         Map<Integer, double[]> previous = RuneEffects.defaults();
         List<List<Integer>> previousRows = RuneEffects.DEFAULT_SHARD_ROWS;
@@ -97,12 +83,12 @@ public final class RuneEffectUpdater {
             notes.addAll(result.notes());
             RuneEffects.install(result.params(), result.rows());
             List<String> changes = changes(previous, previousRows, result);
-            latest = new Report(data.patch(), LocalDate.now().toString(), result.params().size(), changes,
+            latest = new UpdateReport(data.patch(), LocalDate.now().toString(), result.params().size(), changes,
                     result.review(), notes);
             persist(data.patch(), result, latest);
         } catch (IOException | RuntimeException e) {
             RuneEffects.install(previous, previousRows);
-            latest = new Report(data.patch(), LocalDate.now().toString(), previous.size(), List.of(), List.of(),
+            latest = new UpdateReport(data.patch(), LocalDate.now().toString(), previous.size(), List.of(), List.of(),
                     List.of("Abgleich fehlgeschlagen, letzter Stand bleibt aktiv: " + e.getMessage()));
         }
         return latest;
@@ -230,23 +216,15 @@ public final class RuneEffectUpdater {
 
     private JsonNode readState() {
         try {
-            return cache.readText(FileCache.GLOBAL, STATE_KEY).map(RuneEffectUpdater::parse).orElse(null);
+            return cache.readText(FileCache.GLOBAL, STATE_KEY).map(Json::parseOrThrow).orElse(null);
         } catch (IOException | RuntimeException e) {
             return null;
         }
     }
 
-    private static JsonNode parse(String json) {
-        try {
-            return MAPPER.readTree(json);
-        } catch (IOException e) {
-            throw new IllegalStateException(e);
-        }
-    }
-
     private static Map<Integer, double[]> params(JsonNode node) {
         Map<Integer, double[]> out = new HashMap<>();
-        node.fields().forEachRemaining(e -> {
+        node.properties().forEach(e -> {
             try {
                 int id = Integer.parseInt(e.getKey());
                 double[] values = new double[e.getValue().size()];
@@ -275,19 +253,22 @@ public final class RuneEffectUpdater {
         return rows;
     }
 
-    private static Report report(JsonNode node, String patch) {
-        return new Report(patch, node.path("checkedAt").asText(""), RuneEffects.definitions().size(),
-                strings(node.path("changes")), strings(node.path("review")), strings(node.path("notes")));
+    private static UpdateReport report(JsonNode node, String patch) {
+        return new UpdateReport(patch, node.path("checkedAt").asText(""), RuneEffects.definitions().size(),
+                Json.strings(node.path("changes")), Json.strings(node.path("review")), Json.strings(node.path("notes")));
     }
 
-    private static List<String> strings(JsonNode array) {
-        List<String> out = new ArrayList<>();
-        array.forEach(n -> out.add(n.asText()));
-        return out;
+    /** Bisheriger Verlauf; fehlt er oder ist er beschädigt, beginnt ein neuer (der neue Stand ist dann schon gespeichert). */
+    private JsonNode readHistory() {
+        try {
+            return cache.readText(FileCache.GLOBAL, HISTORY_KEY).map(Json::parseOrThrow).orElse(null);
+        } catch (IOException | RuntimeException e) {
+            return null;
+        }
     }
 
-    private void persist(String patch, Result result, Report report) throws IOException {
-        ObjectNode state = MAPPER.createObjectNode();
+    private void persist(String patch, Result result, UpdateReport report) throws IOException {
+        ObjectNode state = Json.MAPPER.createObjectNode();
         state.put("patch", patch);
         ObjectNode params = state.putObject("params");
         result.params().entrySet().stream().sorted(Map.Entry.comparingByKey()).forEach(e -> {
@@ -304,17 +285,17 @@ public final class RuneEffectUpdater {
         report.changes().forEach(rep.putArray("changes")::add);
         report.review().forEach(rep.putArray("review")::add);
         report.notes().forEach(rep.putArray("notes")::add);
-        cache.writeText(FileCache.GLOBAL, STATE_KEY, MAPPER.writerWithDefaultPrettyPrinter().writeValueAsString(state));
+        cache.writeText(FileCache.GLOBAL, STATE_KEY, Json.pretty(state));
 
         if (!report.changes().isEmpty()) {
-            JsonNode existing = cache.readText(FileCache.GLOBAL, HISTORY_KEY).map(RuneEffectUpdater::parse).orElse(null);
-            ArrayNode history = existing instanceof ArrayNode array ? array : MAPPER.createArrayNode();
+            JsonNode existing = readHistory();
+            ArrayNode history = existing instanceof ArrayNode array ? array : Json.MAPPER.createArrayNode();
             ObjectNode entry = history.addObject().put("patch", patch).put("date", LocalDate.now().toString());
             report.changes().forEach(entry.putArray("changes")::add);
             while (history.size() > MAX_HISTORY) {
                 history.remove(0);
             }
-            cache.writeText(FileCache.GLOBAL, HISTORY_KEY, MAPPER.writerWithDefaultPrettyPrinter().writeValueAsString(history));
+            cache.writeText(FileCache.GLOBAL, HISTORY_KEY, Json.pretty(history));
         }
     }
 }

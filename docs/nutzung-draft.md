@@ -5,35 +5,15 @@ Ergänzt die [README](../README.md) und [`nutzung.md`](nutzung.md).
 
 **Bedienung:** Picks beider Teams und Bans eintragen. Ohne feste Rolle sagt das Tool die wahrscheinlichste Verteilung
 voraus. Für jede Situation stehen die **fünf besten Picks** hervorgehoben oben, wahlweise für dein Team oder den Gegner
-und je Rolle gefiltert. Ein Klick übernimmt den Pick.
+und je Rolle gefiltert. Ein Klick übernimmt den Pick. Beim Start der App und bei jedem Wechsel auf „Beste Picks“ ist
+„Für mein Team“ gewählt; zum Gegner wechselt die Ansicht nur von selbst, wenn du einen Gegner-Pick entfernst (am Brett
+oder per Klick im Archiv).
 
 **Draft-Analyse:** erwartete Winrate, Gesamteinschätzung, alle Matchups und Synergien, Schadensverteilung und Vorsprung
 nach Spieldauer.
 
-**Archiv:** Vollständige Drafts (alle zehn Champions, 10 Sekunden unverändert) landen automatisch im Bereich „Archiv“,
-standardmäßig die letzten 10, in den Einstellungen auch 25, 50 oder 100. Gespeichert wird nur lokal in
-`draft-archive.json` und nur Champions, Rollen und Bans, keine Spielernamen. „Laden“ holt einen Draft zurück aufs
-Brett; ein Klick auf einen Champion lädt ihn ohne diesen Pick und zeigt, was an seiner Stelle am besten gewesen wäre.
-Weicht ein vollständiger Draft in weniger als 3 Champions von einem gespeicherten ab, gilt er als Variante und
-verdrängt keine älteren Einträge.
-
-**Fearless-Serie** (Schalter im Draft-Tab, Standard aus; für Scrims oder nachgestellte Profispiele): Es gilt Hard
-Fearless. Champions, die ein Team in einem früheren Spiel der Serie gepickt hat, sind danach für **beide** Teams
-gesperrt. Bans werden nicht übertragen. Beim Einschalten wählst du das Format (Bo3, Bo5 oder Offen) und optional eine
-Bezeichnung wie „Scrim Dienstag“; der aktuelle Draft ist Spiel 1. Ein Spiel zählt erst nach „Spiel abschließen“ (alle
-zehn Champions nötig, Ergebnis optional). Danach ist das Brett leer, die gesperrten Champions stehen unter den Bans,
-sind in der Auswahl ausgegraut und fehlen in den Vorschlägen. Das letzte Spiel lässt sich zurücknehmen. Eine Bo3 oder
-Bo5 endet von selbst, sobald sie entschieden ist; Ausschalten beendet die Serie. Während einer Serie nimmt das Archiv
-keine Drafts auf. Gespeichert wird nur lokal in `fearless-series.json`, wie im Archiv nur Champions, Rollen, Bans und
-die Bezeichnung. Der League-Client wird dafür nicht zusätzlich abgefragt.
-Mit dem Client-Abgleich fragt der Tab nach dem Ende einer Champion-Auswahl mit vollem Brett, ob der Draft als nächstes
-Spiel zählen soll; automatisch übernommen wird nichts (in der Finalisierung kann noch jemand dodgen). Wird im Client ein
-gesperrter Champion gepickt, etwa im Ranked bei vergessener Serie, erscheint ein Hinweis mit „Serie beenden“. Läuft eine
-Serie seit über 12 Stunden ohne neues Spiel, fragt der Tab einmal je Sitzung, ob sie noch aktuell ist.
-Unter „Archiv › Fearless-Serien“ stehen laufende und beendete Serien mit ihren Spielen (beendete: so viele wie
-Archiv-Einträge eingestellt sind). „Laden“ und der Klick auf einen Champion funktionieren wie im Archiv, dazu gelten die
-Sperren, die in diesem Spiel galten. Die zuletzt beendete Serie lässt sich wieder öffnen, etwa nach einem falsch
-eingetragenen Ergebnis; Bezeichnungen lassen sich jederzeit ändern.
+**Archiv und Fearless-Serien:** siehe [`nutzung-archiv.md`](nutzung-archiv.md) (Aufnahme, Papierkorb, Rollen nachträglich
+korrigieren, Hard Fearless).
 
 **Abgleich mit dem League-Client** (Schalter im Draft-Tab, Standard aus, sein Stand bleibt über Neustarts erhalten;
 ausgeschaltet wird der Client nie abgefragt): Während der Champion-Auswahl übernimmt das
@@ -50,9 +30,10 @@ Es folgt [DraftGap](https://github.com/vigovlugt/draftgap) (MIT-Lizenz): Winrate
 Synergien (Duos) und Matchups addieren sich. Kleine Stichproben werden zur Erwartung hin geglättet. Abweichungen:
 
 - Die Glättung richtet sich je Rollenpaar nach der gemessenen Streuung echter Effekte. Lane-Matchups und das
-  Botlane-Duo zählen schon bei wenigen Spielen, Duos über die Map erst bei sehr vielen. Das **Risiko** vervielfacht
-  diese Glättung.
-- Die Champion-Winrate wird auch bei „30 Tage“ zum Durchschnitt hin geglättet.
+  Botlane-Duo zählen schon bei wenigen Spielen, Duos über die Map erst bei sehr vielen. Einen Regler „Risiko“
+  gibt es nicht: Messungen zeigten, dass jede andere Stärke der Glättung die Schätzung verschlechtert.
+- Die Champion-Winrate wird auch bei „30 Tage“ zum Durchschnitt hin geglättet. Bei „letzter Patch“ wird sie so stark
+  zum 30-Tage-Wert gezogen, wie sich Champions zwischen Patches tatsächlich verschieben (aus den Daten geschätzt).
 
 **Bewertung der Vorschläge**
 

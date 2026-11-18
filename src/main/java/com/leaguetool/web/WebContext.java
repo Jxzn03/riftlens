@@ -21,8 +21,6 @@ import com.leaguetool.data.riot.RateLimiter;
 import com.leaguetool.data.riot.RiotApi;
 import com.leaguetool.data.riot.RiotApiClient;
 import com.leaguetool.data.wiki.WikiClient;
-import com.leaguetool.stats.GameItemClassifier;
-import com.leaguetool.stats.ItemClassifier;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -38,7 +36,6 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BiConsumer;
 
 /**
@@ -52,7 +49,7 @@ public final class WebContext implements AutoCloseable {
     private final FileCache cache;
     private final HttpFetcher http;
     private final String ddragonBase;
-    private final ExecutorService background = Executors.newCachedThreadPool(daemon("lt-web-worker"));
+    private final ExecutorService background = Executors.newCachedThreadPool(Thread.ofPlatform().daemon().name("lt-web-worker-", 1).factory());
     private final LolalyticsClient lolalytics;
     private final ItemPassiveUpdater itemPassives;
     private final RuneEffectUpdater runeEffects;
@@ -75,8 +72,6 @@ public final class WebContext implements AutoCloseable {
     /** Versionsliste beim ersten Laden nach dem Programmstart frisch abfragen, damit ein neuer Patch sofort zählt. */
     private volatile boolean versionsChecked;
     private volatile PatchTracker.Change lastPatchChange;
-    private GameData classifierData;
-    private ItemClassifier classifier;
 
     public WebContext(AppSettings settings) {
         this(settings, new JavaHttpFetcher(), DDragonClient.BASE_URL);
@@ -140,8 +135,7 @@ public final class WebContext implements AutoCloseable {
     }
 
     synchronized void rebuildServices() {
-        GameData shown = gameData;
-        gameDataService = new GameDataService(new DDragonClient(http, cache, settings.locale(), ddragonBase), shown);
+        gameDataService = new GameDataService(new DDragonClient(http, cache, settings.locale(), ddragonBase));
         wiki = newWikiClient();
     }
 
@@ -274,14 +268,6 @@ public final class WebContext implements AutoCloseable {
         return riotClients.computeIfAbsent(platform, p -> new RiotApiClient(http, settings::riotApiKey, p, riotLimiter));
     }
 
-    synchronized ItemClassifier itemClassifier(GameData data) {
-        if (classifierData != data) {
-            classifier = new GameItemClassifier(data.items());
-            classifierData = data;
-        }
-        return classifier;
-    }
-
     /** Bilddatei aus dem Cache; fehlt sie, wird sie (je URL nur einmal gleichzeitig) heruntergeladen. */
     Path image(ImageRef ref) throws IOException {
         Optional<Path> existing = cache.file(ref.cacheScope(), ref.cacheKey());
@@ -321,15 +307,6 @@ public final class WebContext implements AutoCloseable {
     public void close() {
         lcu.close();
         background.shutdownNow();
-    }
-
-    private static java.util.concurrent.ThreadFactory daemon(String prefix) {
-        AtomicInteger n = new AtomicInteger();
-        return r -> {
-            Thread t = new Thread(r, prefix + "-" + n.incrementAndGet());
-            t.setDaemon(true);
-            return t;
-        };
     }
 
     private record BootstrapCache(GameData data, byte[] json) {

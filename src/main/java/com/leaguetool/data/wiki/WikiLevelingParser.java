@@ -62,11 +62,6 @@ public final class WikiLevelingParser {
         return slot == AbilitySlot.R ? 3 : 5;
     }
 
-    /** Standard-Rangzahl aus dem Parameter {@code skill}: "R" = 3, sonst 5. */
-    public static int defaultRanks(String skill) {
-        return skill != null && skill.trim().equalsIgnoreCase("R") ? 3 : 5;
-    }
-
     /**
      * Wertet einen {@code leveling}-Parameter aus (kann mehrere {@code {{st|...}}} enthalten).
      *

@@ -1,7 +1,8 @@
 package com.leaguetool.data.lcu;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+
+import com.leaguetool.util.Json;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -32,7 +33,6 @@ public final class LcuLocator {
     static final String CLIENT_EXECUTABLE = "LeagueClient.exe";
     private static final String LEAGUE_FOLDER = "League of Legends";
     private static final Pattern INSTALL_PATH = Pattern.compile("(?m)^\\s*product_install_full_path:\\s*\"?([^\"\\r\\n]+?)\"?\\s*$");
-    private static final ObjectMapper JSON = new ObjectMapper();
 
     private final Supplier<String> manualFolder;
     private final Path riotData;
@@ -84,11 +84,6 @@ public final class LcuLocator {
             }
         }
         return Optional.empty();
-    }
-
-    /** Erster bekannter Ordner mit installiertem Client, auch wenn er gerade nicht läuft (für die Optionen). */
-    public Optional<Path> installFolder() {
-        return candidates().stream().filter(LcuLocator::isInstallFolder).findFirst();
     }
 
     /** Ohne den von Hand gewählten Ordner: was die automatische Suche findet. */
@@ -178,7 +173,7 @@ public final class LcuLocator {
             return folders;
         }
         try {
-            JsonNode associated = JSON.readTree(installs.toFile()).path("associated_client");
+            JsonNode associated = Json.MAPPER.readTree(installs.toFile()).path("associated_client");
             associated.fieldNames().forEachRemaining(folder -> {
                 if (folder.toLowerCase().contains("league of legends")) {
                     folders.add(Path.of(folder));

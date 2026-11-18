@@ -1,9 +1,10 @@
 package com.leaguetool.web;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+
+import com.leaguetool.util.Json;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -36,7 +37,6 @@ final class SummonerHistory {
     static final int MAX_STORED = 1200;
     static final String LEGACY_PREFIX = "riot/match/";
 
-    private static final ObjectMapper JSON = new ObjectMapper();
     private static final List<String> INFO_FIELDS = List.of("queueId", "gameMode", "gameDuration", "gameEndTimestamp",
             "gameCreation");
     private static final List<String> OWN_FIELDS = List.of("championId", "championName", "teamPosition",
@@ -74,7 +74,7 @@ final class SummonerHistory {
     static SummonerHistory read(String puuid, byte[] gzip) throws IOException {
         JsonNode root;
         try (InputStream in = new GZIPInputStream(new ByteArrayInputStream(gzip))) {
-            root = JSON.readTree(in);
+            root = Json.MAPPER.readTree(in);
         }
         SummonerHistory history = new SummonerHistory(puuid);
         if (root == null || root.path("v").asInt() != VERSION || !puuid.equals(root.path("puuid").asText())) {
@@ -106,8 +106,8 @@ final class SummonerHistory {
                 .sorted(Comparator.comparingLong((ObjectNode m) -> m.path("gameCreation").asLong()).reversed())
                 .limit(MAX_STORED).toList();
         Map<Integer, Integer> remap = new HashMap<>();
-        ArrayNode outMates = JSON.createArrayNode();
-        ArrayNode outMatches = JSON.createArrayNode();
+        ArrayNode outMates = Json.MAPPER.createArrayNode();
+        ArrayNode outMatches = Json.MAPPER.createArrayNode();
         for (ObjectNode match : kept) {
             ObjectNode copy = match.deepCopy();
             ArrayNode refs = copy.putArray("mates");
@@ -121,14 +121,14 @@ final class SummonerHistory {
             }
             outMatches.add(copy);
         }
-        ObjectNode root = JSON.createObjectNode().put("v", VERSION).put("puuid", puuid);
+        ObjectNode root = Json.MAPPER.createObjectNode().put("v", VERSION).put("puuid", puuid);
         root.set("mates", outMates);
         root.set("matches", outMatches);
         ArrayNode outGone = root.putArray("gone");
         gone.forEach(outGone::add);
         ByteArrayOutputStream bytes = new ByteArrayOutputStream();
         try (OutputStream out = new GZIPOutputStream(bytes)) {
-            JSON.writeValue(out, root);
+            Json.MAPPER.writeValue(out, root);
         }
         dirty = false;
         return bytes.toByteArray();
@@ -177,7 +177,7 @@ final class SummonerHistory {
             return false;
         }
         JsonNode own = participants.get(ownIndex);
-        ObjectNode out = JSON.createObjectNode().put("id", id);
+        ObjectNode out = Json.MAPPER.createObjectNode().put("id", id);
         copy(info, out, INFO_FIELDS);
         copy(own, out.putObject("p"), OWN_FIELDS);
         ArrayNode refs = out.putArray("mates");

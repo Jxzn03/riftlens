@@ -51,15 +51,6 @@ public final class DDragonClient {
         this.baseUrl = baseUrl;
     }
 
-    public String locale() {
-        return locale;
-    }
-
-    /** Alle regulären Versionen, neueste zuerst (versions.json bis zu 6 Stunden aus dem Cache). */
-    public List<String> versions() throws IOException {
-        return versions(false);
-    }
-
     /**
      * @param checkNow {@code true} fragt versions.json sofort neu ab (beim Programmstart, damit ein neuer Patch beim
      *                 ersten Start erkannt wird); ohne Netz gilt der Cache

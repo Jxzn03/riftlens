@@ -28,11 +28,7 @@ final class EventHub implements AutoCloseable {
     private static final long SLEEP_GAP_NANOS = TimeUnit.SECONDS.toNanos(20);
 
     private final ObjectMapper json;
-    private final ScheduledExecutorService writer = Executors.newSingleThreadScheduledExecutor(r -> {
-        Thread t = new Thread(r, "lt-events");
-        t.setDaemon(true);
-        return t;
-    });
+    private final ScheduledExecutorService writer = Executors.newSingleThreadScheduledExecutor(Thread.ofPlatform().daemon().name("lt-events").factory());
     private final List<Client> clients = new ArrayList<>();
 
     private volatile Runnable onLastClientGone;

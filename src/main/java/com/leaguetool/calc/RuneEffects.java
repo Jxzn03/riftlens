@@ -205,13 +205,6 @@ public final class RuneEffects {
         return out;
     }
 
-    /** Aktuell gültige Zahlen je ID (Kopie). */
-    public static Map<Integer, double[]> current() {
-        Map<Integer, double[]> out = new HashMap<>();
-        current.forEach((id, p) -> out.put(id, p.clone()));
-        return out;
-    }
-
     /** Aktuelle Shard-Reihen. */
     public static List<List<Integer>> shardRows() {
         return shardRows;
@@ -239,11 +232,6 @@ public final class RuneEffects {
         return DEFINITIONS.stream().map(d -> entry(d, params.get(d.id()))).toList();
     }
 
-    public static Optional<Entry> byId(int id) {
-        Definition d = BY_ID.get(id);
-        return d == null ? Optional.empty() : Optional.of(entry(d, current.get(id)));
-    }
-
     private static Entry entry(Definition d, double[] p) {
         int max = switch (d.kind()) {
             case ALWAYS -> 0;
@@ -261,7 +249,7 @@ public final class RuneEffects {
      * @param stacks Stapel bzw. Schalter (0/1) je Runen-ID; fehlend = 0
      */
     public static StatBlock stats(List<Integer> runes, List<Integer> shards, Map<Integer, Integer> stacks, int level) {
-        int lvl = Math.max(1, Math.min(MAX_LEVEL, level));
+        int lvl = StatCalculator.clampLevel(level);
         Map<Integer, double[]> params = current;
         List<List<Integer>> rows = shardRows;
         StatBlock block = StatBlock.EMPTY;
@@ -299,7 +287,7 @@ public final class RuneEffects {
 
     /** Linear von {@code from} (Level 1) bis {@code to} (Level 18). */
     static double byLevel(double from, double to, int level) {
-        int lvl = Math.max(1, Math.min(MAX_LEVEL, level));
+        int lvl = StatCalculator.clampLevel(level);
         return from + (to - from) * (lvl - 1) / (MAX_LEVEL - 1);
     }
 

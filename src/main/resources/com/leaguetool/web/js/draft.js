@@ -1,7 +1,7 @@
 // Draft-Assistent: Eingabe der Picks und Bans, die fünf besten nächsten Picks und die Gesamteinschätzung.
 import { html, useState, useEffect, useMemo, useRef } from '/vendor/htm-preact.js';
 import { store, useStore, useViewState, useSourceLabel, api, normalize, percent, sortRows, activeSort, useFavorites, openChampion, toast } from './core.js';
-import { Icon, Img, Button, Select, Segmented, Switch, Card, Empty, ErrorNote, Loading, Tag, Spinner, FavoriteMark, MoreToggle } from './ui.js';
+import { Icon, Img, Button, Select, Segmented, Switch, Card, Empty, ErrorNote, Loading, Tag, Spinner, FavoriteMark, MoreToggle, confirmDialog } from './ui.js';
 
 const ROLES = [
   { value: 'TOP', label: 'Top' }, { value: 'JUNGLE', label: 'Jungle' }, { value: 'MIDDLE', label: 'Mid' },
@@ -34,10 +34,6 @@ const MAX_BANS = 10;
 const TOP_PICKS = 5;
 const MAX_TABLE_ROWS = 40;
 
-const RISKS = [
-  { value: 'VERY_LOW', label: 'Sehr niedrig (×3)' }, { value: 'LOW', label: 'Niedrig (×2)' },
-  { value: 'MEDIUM', label: 'Mittel (×1)' }, { value: 'HIGH', label: 'Hoch (×½)' }, { value: 'VERY_HIGH', label: 'Sehr hoch (×¼)' },
-];
 const AUTO_MIN_GAMES = 'auto';
 const MIN_GAMES = [0, 1000, 2500, 4300, 10000, 25000].map((n) => ({ value: String(n), label: `ab ${n.toLocaleString('de-DE')} Spiele` }));
 /** Pickrate auf der Rolle in Prozent; „Auto“ ist der Standard des Backends. */
@@ -49,10 +45,12 @@ const CLIENT_ID = crypto.randomUUID();
 
 const DEFAULTS = {
   ally: Array(TEAM_SIZE).fill(null), enemy: Array(TEAM_SIZE).fill(null), bans: [],
-  side: 'ally', role: '', risk: 'MEDIUM', minGames: AUTO_MIN_GAMES, minPickRate: AUTO_MIN_GAMES, ignoreChampionWinRates: false, rarePicks: false,
+  side: 'ally', role: '', minGames: AUTO_MIN_GAMES, minPickRate: AUTO_MIN_GAMES, ignoreChampionWinRates: false, rarePicks: false,
   tab: 'picks', picker: null,
   // Sperren eines aus dem Archiv geladenen Serienspiels ({ seriesId, label, game, locked }); null = keine.
   fearlessContext: null, archiveMode: 'drafts',
+  // Aus „Drafts“ geladener Eintrag ({ id, ally, enemy }), dessen Rollen sich überschreiben lassen; null = keiner.
+  loadedDraft: null,
 };
 
 /** Winrate-Anteil eines Rating-Werts in Prozentpunkten. */
@@ -93,6 +91,33 @@ function completeDraftKey(view) {
 }
 
 /**
+ * Plätze der zuletzt berechneten Analyse (`result.slots`), solange der Draft-Tab offen ist und die Analyse nicht lädt;
+ * sonst `null`. Die Archiv-Aufnahme läuft auch bei geschlossenem Tab und holt sich hier nur ab, was das Brett ohnehin
+ * zeigt: Es gibt dafür keine eigene Anfrage, keine Vorhersage und keinen Zugriff auf den Client.
+ */
+let shownSlots = null;
+
+/**
+ * Auto-Rollen, die das Brett für Picks ohne feste Rolle zeigt (Champion → Rolle), nur zum Sortieren Top bis Support.
+ * Leer, wenn keine Analyse vorliegt oder sie nicht zu genau diesen zehn Champions gehört.
+ */
+function shownRolesOf(view, slots) {
+  const board = completeDraftKey(view);
+  const ids = (team) => (slots?.[team] || []).map((s) => s.champion).sort((a, b) => a - b);
+  if (!slots || board === null || JSON.stringify([ids('ally'), ids('enemy')]) !== board) {
+    return {};
+  }
+  const shown = {};
+  ['ally', 'enemy'].forEach((team) => slots[team].forEach((s) => {
+    const slot = view[team].find((x) => x && x.champion === s.champion);
+    if (slot && !slot.role && s.role) {
+      shown[s.champion] = s.role;
+    }
+  }));
+  return shown;
+}
+
+/**
  * Legt vollständige Drafts im lokalen Archiv ab, auch wenn der Tab gerade nicht offen ist. Hinaus gehen nur Champions,
  * feste Rollen und Bans vom Brett, und zwar nur an das eigene Backend (`POST /api/draft-archive`). Das Backend nimmt
  * nur Drafts auf, die sich von jedem gezeigten Eintrag in mindestens drei Champions unterscheiden: Ein geladener Draft
@@ -101,10 +126,10 @@ function completeDraftKey(view) {
 let archiveKey = null;
 let archiveTimer = null;
 store.subscribe(() => {
-  // Während einer Fearless-Serie gehören vollständige Drafts in die Serie, nicht ins Archiv; ein geladenes Serienspiel
-  // ebenso wenig.
+  // Während einer Fearless-Serie nimmt die Aufzeichnung nichts auf: Erst „Spiel abschließen“ legt das Spiel (im Backend)
+  // auch unter „Drafts“ an. Ein geladenes Serienspiel ebenso wenig.
   const view = store.get().views.draft;
-  const key = store.get().fearless?.active || view?.fearlessContext ? null : completeDraftKey(view);
+  const key = store.get().fearless?.active || view?.fearlessContext || isSeriesGame(view) ? null : completeDraftKey(view);
   if (key === archiveKey) {
     return;
   }
@@ -113,12 +138,28 @@ store.subscribe(() => {
   archiveTimer = key ? setTimeout(() => archiveDraft(key), ARCHIVE_DELAY_MS) : null;
 });
 
+/**
+ * Ob das volle Brett einem Spiel einer Fearless-Serie entspricht (laufend, beendet oder im Papierkorb). Solche Drafts
+ * gehören zur Serie: Ohne diese Prüfung käme z. B. ein wieder geöffnetes oder geladenes Serienspiel nach dem Beenden
+ * erneut als neuer Draft oben ins Archiv, und nach dem Löschen der Serie stünde es dort weiter.
+ */
+function isSeriesGame(view) {
+  const state = store.get().fearless;
+  if (!state || !view || completeDraftKey(view) === null) {
+    return false;
+  }
+  const board = { ally: view.ally.filter(Boolean), enemy: view.enemy.filter(Boolean) };
+  return [...(state.active ? [state.active] : []), ...state.finished, ...(state.trash || [])]
+    .some((series) => series.games.some((game) => draftChanges(game, board) === 0));
+}
+
 function archiveDraft(key) {
   const view = store.get().views.draft;
-  if (completeDraftKey(view) !== key || store.get().fearless?.active || view.fearlessContext) {
+  if (completeDraftKey(view) !== key || store.get().fearless?.active || view.fearlessContext || isSeriesGame(view)) {
     return;
   }
-  api.post('/api/draft-archive', { ally: view.ally.filter(Boolean), enemy: view.enemy.filter(Boolean), bans: view.bans || [] })
+  api.post('/api/draft-archive', { ally: view.ally.filter(Boolean), enemy: view.enemy.filter(Boolean), bans: view.bans || [],
+    shownRoles: shownRolesOf(view, shownSlots) })
     .then((outcome) => {
       if (outcome.saved) {
         store.set({ draftArchiveRev: (store.get().draftArchiveRev || 0) + 1 });
@@ -136,7 +177,7 @@ function useDraftResult(view, dataSource, locked) {
     // Fearless: in früheren Spielen der Serie gespielte Champions fehlen in den Vorschlägen.
     locked: [...locked.keys()],
     // Spielzahlen gelten nur für seltene Picks, sonst die Pickrate auf der Rolle.
-    risk: view.risk, rarePicks: Boolean(view.rarePicks),
+    rarePicks: Boolean(view.rarePicks),
     minGames: !view.rarePicks || view.minGames === AUTO_MIN_GAMES ? null : Number(view.minGames),
     minPickRate: view.rarePicks || !view.minPickRate || view.minPickRate === AUTO_MIN_GAMES ? null : Number(view.minPickRate),
     ignoreChampionWinRates: view.ignoreChampionWinRates,
@@ -250,6 +291,14 @@ function ClientSync({ lcu, onToggle }) {
 
 const FEARLESS_FORMATS = [{ value: 'BO3', label: 'Bo3' }, { value: 'BO5', label: 'Bo5' }, { value: 'OPEN', label: 'Offen' }];
 const formatLabel = (format) => FEARLESS_FORMATS.find((f) => f.value === format)?.label || format;
+/** Höchstzahl der Spiele je Serie wie `FearlessSeries.MAX_GAMES`; „Offen“ ohne gewählte Spielzahl nutzt sie. */
+const MAX_SERIES_GAMES = 10;
+const GAME_COUNT_OPTIONS = Array.from({ length: MAX_SERIES_GAMES }, (_, i) => ({ value: String(i + 1), label: `${i + 1} ${i ? 'Games' : 'Game'}` }));
+/** Ob die Serie eine feste Spielzahl hat: Bo3/Bo5 oder „Offen“ mit beim Start gewählter Zahl. */
+const limitedSeries = (series) => series.format !== 'OPEN' || series.maxGames < MAX_SERIES_GAMES;
+/** „Bo3“, „Offen“ oder mit gewählter Spielzahl „Offen, max. 4“. */
+const seriesFormatLabel = (series) => (series.format === 'OPEN' && limitedSeries(series)
+  ? `${formatLabel(series.format)}, max. ${series.maxGames}` : formatLabel(series.format));
 const NO_LOCKS = [];
 /** Ab so langer Pause ohne neues Spiel fragt der Tab, ob die Serie noch läuft. */
 const STALE_SERIES_MS = 12 * 60 * 60 * 1000;
@@ -266,6 +315,68 @@ function boardSlots(team, data, skip = null) {
   return [...team.filter((s) => data.championByKey.has(s.champion))
     .map((s) => (s.champion === skip ? null : { champion: s.champion, role: s.role || null })), ...Array(TEAM_SIZE).fill(null)]
     .slice(0, TEAM_SIZE);
+}
+
+/** Nur Champion und feste Rolle eines Teams, für den Vergleich und zum Speichern. */
+const teamRoles = (team) => team.filter(Boolean).map((s) => ({ champion: s.champion, role: s.role || null }));
+
+/**
+ * Der gespeicherte Draft, aus dem das Brett geladen wurde: ein Archiv-Eintrag (`view.loadedDraft`, Stand beim Laden bzw.
+ * letzten Speichern) oder ein Serienspiel (`view.fearlessContext`, Stand aus `store.fearless`). `sameChampions`: jede
+ * Seite hat genau seine Champions, nur dann lassen sich die Rollen überschreiben; mit anderen Champions bleibt alles
+ * bei der normalen Aufnahme. `rolesChanged`: das Brett weicht in festen Rollen ab.
+ */
+function storedTarget(view, fearlessState) {
+  let target = null;
+  if (view.fearlessContext && fearlessState) {
+    const { seriesId, game: number } = view.fearlessContext;
+    const series = [...(fearlessState.active ? [fearlessState.active] : []), ...fearlessState.finished].find((s) => s.id === seriesId);
+    const game = series?.games.find((g) => g.number === number);
+    if (game) {
+      target = { kind: 'game', seriesId, number, ally: game.ally, enemy: game.enemy };
+    }
+  } else if (view.loadedDraft) {
+    target = { kind: 'draft', ...view.loadedDraft };
+  }
+  return target;
+}
+
+/** Ob das Brett (`ally`/`enemy` als Brett-Plätze) dieselben Champions je Seite hat und ob feste Rollen abweichen. */
+function compareStored(target, ally, enemy) {
+  const board = { ally: teamRoles(ally), enemy: teamRoles(enemy) };
+  const same = (side) => board[side].length === target[side].length
+    && target[side].every((s) => board[side].some((b) => b.champion === s.champion));
+  const sameChampions = same('ally') && same('enemy');
+  const rolesChanged = sameChampions && ['ally', 'enemy'].some((side) => target[side]
+    .some((s) => (board[side].find((b) => b.champion === s.champion).role || null) !== (s.role || null)));
+  return { sameChampions, rolesChanged, board };
+}
+
+/**
+ * Überschreibt die festen Rollen des geladenen gespeicherten Drafts mit denen vom Brett. Nur das eigene Backend,
+ * Champions und Bans bleiben unverändert. Liefert ein Promise mit einem Zusatz für die Meldung (z. B. „, auch unter „Drafts““).
+ */
+function saveStoredRoles(target, board, setView) {
+  if (target.kind === 'game') {
+    return api.put(`/api/fearless/${target.seriesId}/game/${target.number}`, board).then((next) => {
+      store.set({ fearless: next });
+      // Der gleiche Draft unter „Drafts“ hat die Rollen mitbekommen oder wurde neu angelegt: die Liste dort neu laden.
+      if (next.draftsUpdated || next.draftsRecreated) {
+        store.set({ draftArchiveRev: (store.get().draftArchiveRev || 0) + 1 });
+      }
+      return next.draftsRecreated ? ', unter „Drafts“ neu angelegt' : next.draftsUpdated ? ', auch unter „Drafts“' : '';
+    });
+  }
+  return api.put(`/api/draft-archive/${target.id}`, board).then(async (next) => {
+    setView({ loadedDraft: { id: next.entry.id, ally: next.entry.ally, enemy: next.entry.enemy } });
+    store.set({ draftArchiveRev: (store.get().draftArchiveRev || 0) + 1 });
+    // Gleiche Spiele einer Fearless-Serie haben die Rollen mitbekommen: deren Stand neu holen.
+    if (next.seriesUpdated) {
+      store.set({ fearless: await api.get('/api/fearless') });
+      return ', auch in der Fearless-Serie';
+    }
+    return '';
+  });
 }
 
 /** Aktionen auf die Serien; jede Antwort ist der neue Gesamtstand und landet im Store. */
@@ -289,47 +400,131 @@ function useFearless() {
   };
   return {
     state, error, busy,
-    start: (format, label) => call(api.post('/api/fearless', { format, label })),
+    start: (format, label, maxGames) => call(api.post('/api/fearless', { format, label, ...(format === 'OPEN' ? { maxGames: Number(maxGames) } : {}) })),
     finish: (draft, result) => call(api.post('/api/fearless/game', { ...draft, result })),
+    addDraftTo: (id, draftId) => call(api.post(`/api/fearless/${id}/game`, { draftId })),
     undo: () => call(api.del('/api/fearless/game')),
     end: () => call(api.post('/api/fearless/end')),
-    rename: (id, label) => call(api.put(`/api/fearless/${id}`, { label })),
+    rename: (id, label, maxGames) => call(api.put(`/api/fearless/${id}`, { label, ...(maxGames ? { maxGames: Number(maxGames) } : {}) })),
+    reorder: (id, order) => call(api.put(`/api/fearless/${id}`, { order })),
     remove: (id) => call(api.del(`/api/fearless/${id}`)),
+    removeGame: (id, number) => call(api.del(`/api/fearless/${id}/game/${number}`)),
+    replaceGame: (id, number, board) => call(api.put(`/api/fearless/${id}/game/${number}`, { replace: true, ...board })),
+    setResult: (id, number, result) => call(api.put(`/api/fearless/${id}/game/${number}`, { result })),
+    restore: (id) => call(api.post(`/api/fearless/${id}/restore`)),
+    purge: (id) => call(api.del(`/api/fearless/trash/${id}`)),
+    emptyTrash: () => call(api.del('/api/fearless/trash')),
   };
+}
+
+/**
+ * Das Brett zum Speichern als Serienspiel (Abschließen oder geladenes Spiel überschreiben): Picks je Team in
+ * Rollen-Reihenfolge (Top bis Support), damit Sperrleiste und Serienansicht danach geordnet sind. Gespeichert wird nur
+ * die Reihenfolge; die Rolle bleibt fest oder leer wie auf dem Brett. Die gerade angezeigten Auto-Rollen gehen als
+ * `shownRoles` mit: Damit ordnet das Backend auch Gegner ohne feste Rolle, ohne neu vorherzusagen.
+ */
+function seriesBoard(view, draftResult) {
+  const ordered = (team) => {
+    const predicted = new Map((draftResult?.slots[team] || []).map((s) => [s.champion, s.role]));
+    return view[team].filter(Boolean).map((slot, i) => ({ slot, i, order: roleOrder(slot.role || predicted.get(slot.champion)) }))
+      .sort((a, b) => a.order - b.order || a.i - b.i).map(({ slot }) => slot);
+  };
+  const shownRoles = {};
+  ['ally', 'enemy'].forEach((team) => (draftResult?.slots[team] || []).forEach((s) => {
+    const slot = view[team].find((x) => x && x.champion === s.champion);
+    if (slot && !slot.role && s.role) {
+      shownRoles[s.champion] = s.role;
+    }
+  }));
+  return { ally: ordered('ally'), enemy: ordered('enemy'), bans: view.bans, shownRoles };
+}
+
+/** Meldung nach geänderter Spielzahl: beendet, wieder geöffnet oder blockiert durch eine andere laufende Serie; sonst `null`. */
+function maxGamesNote(next, series, maxGames) {
+  const name = series.label ? `„${series.label}“` : 'Die Serie';
+  return next.ended ? `${name} ist beendet: alle ${maxGames} Games gespielt`
+    : next.reopened ? `${name} läuft wieder, Platz für ${maxGames} Games`
+      : next.reopenBlocked ? `${name} bleibt beendet, weil schon eine andere Serie läuft` : null;
 }
 
 /** „Spiel 3/5 · 2:0“; ohne eingetragene Ergebnisse ohne Stand. */
 function seriesProgress(series) {
-  const game = series.format === 'OPEN' ? `Spiel ${series.nextGame}` : `Spiel ${series.nextGame}/${series.maxGames}`;
+  const game = limitedSeries(series) ? `Game ${series.nextGame}/${series.maxGames}` : `Game ${series.nextGame}`;
   return series.wins + series.losses > 0 ? `${game} · ${series.wins}:${series.losses}` : game;
 }
 
-/** Bezeichnung ändern: Eingabe mit Enter/Escape, leer entfernt die Bezeichnung. */
-function LabelEditor({ value, maxLength, onSave, onCancel }) {
-  const [text, setText] = useState(value || '');
+/** Titel des Bearbeiten-Knopfs: Bei offenen Serien lässt sich dort auch die Spielzahl ändern. */
+const editTitle = (series) => (series.format === 'OPEN' ? 'Bezeichnung und Anzahl Games ändern' : 'Bezeichnung ändern');
+
+/**
+ * Bezeichnung ändern: Eingabe mit Enter/Escape, leer entfernt die Bezeichnung. Bei offenen Serien dazu die Spielzahl,
+ * nicht unter der Zahl gespielter Spiele; `onSave(label, maxGames)`, `maxGames` nur bei offenen Serien.
+ * Eine laufende offene Serie mit mindestens einem Game lässt sich hier vorzeitig beenden: Die Anzahl Games wird auf die
+ * gespielten gesetzt, damit ist sie voll und endet (mehr Games öffnen sie später wieder). Bo3/Bo5 nicht.
+ */
+function LabelEditor({ series, maxLength, onSave, onCancel }) {
+  const [text, setText] = useState(series.label || '');
+  const open = series.format === 'OPEN';
+  const [count, setCount] = useState(String(series.maxGames));
   const input = useRef();
   useEffect(() => input.current.focus(), []);
+  const save = () => onSave(text, open ? count : undefined);
+  const played = series.games.length;
+  const canEnd = open && !series.endedAt && played > 0;
+  const endNow = async () => {
+    if (await confirmDialog({ title: 'Serie jetzt beenden?', icon: 'lock', confirmLabel: 'Beenden',
+      message: `Die Anzahl Games wird auf ${played} gesetzt. ${played === 1 ? 'Das gespielte Game bleibt' : `Die ${played} gespielten Games bleiben`} unter Archiv › Fearless erhalten; danach gibt es keine Sperren mehr. Mehr Games öffnen die Serie später wieder.` })) {
+      onSave(text, String(played));
+    }
+  };
+  const countOptions = GAME_COUNT_OPTIONS.filter((o) => Number(o.value) >= Math.max(1, played));
   return html`<div class="draft-fearless-rename">
     <input ref=${input} class="input" type="text" maxlength=${maxLength} spellcheck="false" value=${text} aria-label="Bezeichnung"
       placeholder="Bezeichnung (optional)" onInput=${(e) => setText(e.currentTarget.value)}
-      onKeyDown=${(e) => (e.key === 'Enter' ? onSave(text) : e.key === 'Escape' ? onCancel() : null)} />
-    <${Button} icon="ok" kind="icon" title="Bezeichnung speichern" onClick=${() => onSave(text)} />
+      onKeyDown=${(e) => (e.key === 'Enter' ? save() : e.key === 'Escape' ? onCancel() : null)} />
+    ${open ? html`<${Select} label="Anzahl Games" cls="draft-fearless-count" value=${count} options=${countOptions} onChange=${setCount} />` : null}
+    <${Button} icon="ok" kind="icon" title=${open ? 'Speichern' : 'Bezeichnung speichern'} onClick=${save} />
+    ${canEnd ? html`<${Button} icon="lock" kind="ghost" onClick=${endNow}
+      title=${`Serie nach ${played} ${played === 1 ? 'Game' : 'Games'} beenden`}>Jetzt beenden<//>` : null}
     <${Button} icon="x" kind="icon" title="Abbrechen" onClick=${onCancel} />
   </div>`;
 }
 
+/** Schalter an: Start-Formular öffnen; aus: Formular schließen oder die laufende Serie (nach Rückfrage) beenden. */
+async function toggleFearless(on, fearless, form, setForm) {
+  const active = fearless.state?.active || null;
+  if (on) {
+    setForm({ format: 'BO3', label: '', maxGames: String(MAX_SERIES_GAMES) });
+  } else if (form) {
+    setForm(null);
+  } else if (active) {
+    const games = active.games.length;
+    if (games > 0 && !(await confirmDialog({ title: 'Fearless-Serie beenden?', icon: 'lock', confirmLabel: 'Serie beenden',
+      message: `${games === 1 ? 'Das gespielte Game bleibt' : `Die ${games} gespielten Games bleiben`} unter Archiv › Fearless erhalten. Danach gibt es keine Sperren mehr.` }))) {
+      return;
+    }
+    fearless.end().then((next) => next && toast(games > 0 ? 'Fearless-Serie beendet' : 'Fearless-Serie verworfen'));
+  }
+}
+
+/** Schalter der Fearless-Serie in der Optionsleiste rechts neben der Pickrate; Formular und Stand zeigt `FearlessPanel`. */
+function FearlessSwitch({ fearless, form, setForm }) {
+  const advancedTips = useStore((s) => Boolean(s.prefs.advancedTips));
+  return html`<${Switch} checked=${Boolean(fearless.state?.active || form)} onChange=${(on) => toggleFearless(on, fearless, form, setForm)}
+    tip=${advancedTips ? 'Hard Fearless für Bo3, Bo5 oder offene Scrim-Blöcke: Champions, die ein Team in einem früheren Game der Serie gepickt hat, sind danach für beide Teams gesperrt. Bans werden nicht übertragen. Nur lokal, ohne Abfrage beim League-Client.' : undefined}>Fearless-Serie<//>`;
+}
+
 /**
- * Schalter und Stand der Fearless-Serie (Hard Fearless): Picks beider Teams aus abgeschlossenen Spielen sind in den
+ * Stand der Fearless-Serie (Hard Fearless): Picks beider Teams aus abgeschlossenen Spielen sind in den
  * folgenden Spielen gesperrt, Bans nicht. Ein Spiel zählt erst nach „Spiel abschließen“, nie automatisch.
  */
-function FearlessPanel({ fearless, view, setView, data, boardComplete, lcuStatus, conflicts }) {
+function FearlessPanel({ fearless, form, setForm, view, setView, data, locked, draftResult, boardComplete, lcuStatus, conflicts }) {
   const advancedTips = useStore((s) => Boolean(s.prefs.advancedTips));
   const staleAck = useStore((s) => s.fearlessStaleAck);
   const { state, busy } = fearless;
   const active = state?.active || null;
   const context = view.fearlessContext || null;
   const maxLength = state?.maxLabelLength || 60;
-  const [form, setForm] = useState(null);
   const [finishing, setFinishing] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [offer, setOffer] = useState(false);
@@ -356,41 +551,69 @@ function FearlessPanel({ fearless, view, setView, data, boardComplete, lcuStatus
   const lastActivity = active ? Date.parse(active.games.length ? active.games[active.games.length - 1].playedAt : active.startedAt) : 0;
   const stale = active && Date.now() - lastActivity > STALE_SERIES_MS && staleAck !== active.id;
 
-  const toggle = (on) => {
-    if (on) {
-      setForm({ format: 'BO3', label: '' });
-    } else if (form) {
-      setForm(null);
-    } else if (active) {
-      const games = active.games.length;
-      if (games > 0 && !window.confirm(`Fearless-Serie beenden? ${games === 1 ? 'Das gespielte Spiel bleibt' : `Die ${games} gespielten Spiele bleiben`} unter Archiv › Serien erhalten.`)) {
-        return;
-      }
-      fearless.end().then((next) => next && toast(games > 0 ? 'Fearless-Serie beendet' : 'Fearless-Serie verworfen'));
-    }
-  };
-  const start = () => fearless.start(form.format, form.label).then((next) => {
+  const toggle = (on) => toggleFearless(on, fearless, form, setForm);
+  const start = () => fearless.start(form.format, form.label, form.maxGames).then((next) => {
     if (next) {
       setForm(null);
       setView({ fearlessContext: null });
-      toast('Fearless-Serie gestartet: Der aktuelle Draft ist Spiel 1');
+      toast('Fearless-Serie gestartet: Der aktuelle Draft ist Game 1');
     }
   });
+  // Aus dem Archiv geladenes Spiel einer Serie (laufend oder beendet): Es ist kein neues Spiel, sondern lässt sich mit
+  // geänderten Champions, Rollen oder Bans überschreiben. Normale Archiv-Drafts bekommen das nicht (nur Rollen speichern).
+  const allSeries = state ? [...(active ? [active] : []), ...state.finished] : [];
+  const contextSeries = context ? allSeries.find((s) => s.id === context.seriesId) || null : null;
+  const contextGame = contextSeries ? contextSeries.games.find((g) => g.number === context.game) || null : null;
+  const loaded = Boolean(contextGame);
+  const head = active || (loaded ? contextSeries : null);
+  const sameKeys = (a, b) => a.length === b.length && a.every((key) => b.includes(key));
+  const keys = (slots) => slots.filter(Boolean).map((s) => s.champion);
+  const gameChanged = loaded && !(sameKeys(keys(view.ally), keys(contextGame.ally)) && sameKeys(keys(view.enemy), keys(contextGame.enemy))
+    && sameKeys(view.bans, contextGame.bans));
+  // Hard Fearless über die ganze Serie: Ein Champion aus einem anderen Spiel (auch einem späteren) darf nicht hinein.
+  const clashes = loaded ? [...view.ally, ...view.enemy].filter(Boolean).map((slot) => ({ slot,
+    other: contextSeries.games.find((g) => g.number !== contextGame.number && [...g.ally, ...g.enemy].some((s) => s.champion === slot.champion)) }))
+    .filter((c) => c.other) : [];
+  const gameName = loaded ? `Game ${contextGame.number}${contextSeries.id !== head.id ? ` von ${contextSeries.label ? `„${contextSeries.label}“` : 'der beendeten Serie'}` : ''}` : '';
+  const saveGame = () => fearless.replaceGame(contextSeries.id, contextGame.number, seriesBoard(view, draftResult)).then((next) => {
+    if (next) {
+      if (next.draftsUpdated || next.draftsRecreated) {
+        store.set({ draftArchiveRev: (store.get().draftArchiveRev || 0) + 1 });
+      }
+      toast(`${gameName} gespeichert${next.draftsUpdated ? ', auch unter „Drafts“' : ''}`);
+    }
+  });
+  const closeGame = async () => {
+    if (gameChanged && !(await confirmDialog({ title: 'Änderungen verwerfen?', icon: 'x', confirmLabel: 'Verwerfen',
+      message: `${gameName} bleibt, wie es gespeichert ist.` }))) {
+      return;
+    }
+    setView({ ally: DEFAULTS.ally, enemy: DEFAULTS.enemy, bans: [], picker: null, fearlessContext: null, loadedDraft: null });
+  };
+  const saveTip = !gameChanged ? 'Champions und Bans entsprechen dem gespeicherten Game (Rollen: „Rollen speichern“)'
+    : !boardComplete ? 'Erst alle zehn Champions eintragen'
+      : clashes.length ? `In der Serie schon gespielt: ${clashes.map((c) => `${data.championByKey.get(c.slot.champion)?.name} (Game ${c.other.number})`).join(', ')}`
+        : advancedTips ? 'Überschreibt Champions, Rollen und Bans dieses Games; Ergebnis und Datum bleiben' : undefined;
+
   const finish = (result) => {
-    const draft = { ally: view.ally.filter(Boolean), enemy: view.enemy.filter(Boolean), bans: view.bans };
-    fearless.finish(draft, result).then((next) => {
+    fearless.finish(seriesBoard(view, draftResult), result).then((next) => {
       if (!next) {
         return;
       }
       setView({ ally: DEFAULTS.ally, enemy: DEFAULTS.enemy, bans: [], picker: null });
+      // Das Spiel steht jetzt auch unter „Drafts“: die Liste dort neu laden.
+      if (next.draftRecorded) {
+        store.set({ draftArchiveRev: (store.get().draftArchiveRev || 0) + 1 });
+      }
       const series = next.series;
-      toast(next.ended ? `Serie beendet nach Spiel ${next.game}${series.wins + series.losses > 0 ? ` (${series.wins}:${series.losses})` : ''}`
-        : `Spiel ${next.game} abgeschlossen, ${next.locked.length} Champions gesperrt`);
+      toast(next.ended ? `Serie beendet nach Game ${next.game}${series.wins + series.losses > 0 ? ` (${series.wins}:${series.losses})` : ''}`
+        : `Game ${next.game} abgeschlossen, ${next.locked.length} Champions gesperrt`);
     });
   };
-  const undo = () => {
+  const undo = async () => {
     const board = view.ally.some(Boolean) || view.enemy.some(Boolean) || view.bans.length > 0;
-    if (board && !window.confirm('Letztes Spiel zurücknehmen? Sein Draft ersetzt das aktuelle Brett.')) {
+    if (board && !(await confirmDialog({ title: `Game ${active.games.length} zurücknehmen?`, icon: 'undo', confirmLabel: 'Zurücknehmen',
+      message: 'Sein Draft ersetzt das aktuelle Brett, seine Champions sind wieder frei.' }))) {
       return;
     }
     fearless.undo().then((next) => {
@@ -398,15 +621,68 @@ function FearlessPanel({ fearless, view, setView, data, boardComplete, lcuStatus
         const game = next.undone;
         setView({ ally: boardSlots(game.ally, data), enemy: boardSlots(game.enemy, data),
           bans: game.bans.filter((key) => data.championByKey.has(key)).slice(0, MAX_BANS), picker: null, fearlessContext: null });
-        toast(`Spiel ${game.number} zurückgenommen`);
+        toast(`Game ${game.number} zurückgenommen`);
       }
     });
   };
-  const rename = (label) => fearless.rename(active.id, label).then((next) => next && setRenaming(false));
+  const rename = (label, maxGames) => fearless.rename(head.id, label, maxGames).then((next) => {
+    if (next) {
+      setRenaming(false);
+      const note = maxGamesNote(next, head, maxGames);
+      if (note) {
+        toast(note);
+      }
+    }
+  });
 
+  // Eigene Zeile unter dem Brett, alles nebeneinander: In der mittleren Spalte würde das Panel (und die mit jedem Spiel
+  // wachsende Sperrleiste) die Team-Spalten in die Höhe strecken.
+  // Der Schalter sitzt in der Optionsleiste (`FearlessSwitch`); ohne Serie und Formular bleibt die Zeile leer.
   return html`<div class="draft-fearless">
-    <${Switch} checked=${Boolean(active || form)} onChange=${toggle}
-      tip=${advancedTips ? 'Hard Fearless für Bo3, Bo5 oder offene Scrim-Blöcke: Champions, die ein Team in einem früheren Spiel der Serie gepickt hat, sind danach für beide Teams gesperrt. Bans werden nicht übertragen. Nur lokal, ohne Abfrage beim League-Client.' : undefined}>Fearless-Serie<//>
+    ${head || form ? html`<div class="draft-fearless-main open">
+      ${form ? html`
+        <${Segmented} label="Format" value=${form.format} options=${FEARLESS_FORMATS} onChange=${(format) => setForm({ ...form, format })} />
+        ${form.format === 'OPEN' ? html`<span data-tip=${advancedTips ? 'Nach so vielen Games endet die Serie von selbst; vorher lässt sie sich jederzeit beenden' : undefined}>
+          <${Select} label="Anzahl Games" cls="draft-fearless-count" value=${form.maxGames} options=${GAME_COUNT_OPTIONS}
+            onChange=${(maxGames) => setForm({ ...form, maxGames })} />
+        </span>` : null}
+        <input class="input draft-fearless-label" type="text" maxlength=${maxLength} spellcheck="false" value=${form.label} aria-label="Bezeichnung"
+          placeholder="Bezeichnung (optional), z. B. Scrim Dienstag" onInput=${(e) => setForm({ ...form, label: e.currentTarget.value })}
+          onKeyDown=${(e) => e.key === 'Enter' && start()} />
+        <div class="draft-fearless-actions">
+          <${Button} kind="primary" icon="ok" onClick=${start} disabled=${busy}>Serie starten<//>
+          <${Button} kind="ghost" onClick=${() => setForm(null)}>Abbrechen<//>
+        </div>` : null}
+      ${head ? html`
+        ${renaming ? html`<${LabelEditor} series=${head} maxLength=${maxLength} onSave=${rename} onCancel=${() => setRenaming(false)} />`
+          : html`<div class="draft-fearless-head">
+            <strong class="draft-fearless-title">${head.label || 'Fearless-Serie'}</strong>
+            <${Button} icon="edit" kind="ghost" title=${editTitle(head)} onClick=${() => setRenaming(true)}
+              tip=${advancedTips ? 'Freie Bezeichnung, nur lokal gespeichert' : undefined} />
+          </div>`}
+        <span class="muted small">${active ? `${seriesFormatLabel(active)} · ${seriesProgress(active)} · ${state.locked.length} gesperrt`
+          : `${seriesFormatLabel(head)} · ${head.games.length} ${head.games.length === 1 ? 'Game' : 'Games'} · beendet`}</span>
+        <div class="draft-fearless-actions">
+          ${loaded ? html`
+            <span class="small">${gameName} geladen</span>
+            <${Button} kind="primary" icon="ok" onClick=${saveGame} disabled=${busy || !gameChanged || !boardComplete || clashes.length > 0}
+              tip=${saveTip}>Änderungen in Game ${contextGame.number} speichern<//>
+            <${Button} kind="ghost" icon="x" onClick=${closeGame} disabled=${busy}
+              tip=${advancedTips ? `Leert das Brett${active ? '; danach geht es mit der laufenden Serie weiter' : ''}` : undefined}>Schließen<//>`
+          : !active ? null
+          : finishing ? html`
+            <span class="small">Ergebnis für dein Team:</span>
+            <${Button} kind="primary" onClick=${() => finish('WIN')} disabled=${busy}>Gewonnen<//>
+            <${Button} onClick=${() => finish('LOSS')} disabled=${busy}>Verloren<//>
+            <${Button} kind="ghost" onClick=${() => finish(null)} disabled=${busy}>Ohne Ergebnis<//>
+            <${Button} icon="x" kind="icon" title="Abbrechen" onClick=${() => setFinishing(false)} />`
+          : html`
+            <${Button} icon="lock" onClick=${() => setFinishing(true)} disabled=${!boardComplete || busy || Boolean(context)}
+              tip=${context ? 'Erst das geladene Serien-Game schließen' : !boardComplete ? 'Erst alle zehn Champions eintragen' : advancedTips ? 'Sperrt die zehn Picks für die folgenden Games und leert das Brett' : undefined}>Game ${active.nextGame} abschließen<//>
+            <${Button} icon="undo" kind="icon" title="Letztes Game zurücknehmen" onClick=${undo} disabled=${busy || active.games.length === 0}
+              tip=${active.games.length ? `Game ${active.games.length} zurücknehmen` : undefined} />`}
+        </div>` : null}
+    </div>` : null}
     ${stale ? html`<div class="draft-fearless-notice">
       <${Icon} name="alert" size=${15} />
       <span>${active.label ? `„${active.label}“` : 'Die Fearless-Serie'} läuft seit ${new Date(active.startedAt).toLocaleString('de-DE', SERIES_DATE)}. Noch aktuell?</span>
@@ -418,59 +694,23 @@ function FearlessPanel({ fearless, view, setView, data, boardComplete, lcuStatus
     ${active && conflicts.length ? html`<div class="draft-fearless-notice">
       <${Icon} name="alert" size=${15} />
       <span>Im League-Client gepickt, aber in der Serie gesperrt: ${conflicts.map((key) => data.championByKey.get(key)?.name).filter(Boolean).join(', ')}.
-        Läuft gerade kein Fearless-Spiel?</span>
+        Läuft gerade kein Fearless-Game?</span>
       <div class="draft-fearless-actions"><${Button} onClick=${() => toggle(false)} disabled=${busy}>Serie beenden<//></div>
     </div>` : null}
     ${offer && active && !finishing ? html`<div class="draft-fearless-notice offer">
       <${Icon} name="lock" size=${15} />
-      <span>Champion-Auswahl beendet. Draft als Spiel ${active.nextGame} der Serie übernehmen?</span>
+      <span>Champion-Auswahl beendet. Draft als Game ${active.nextGame} der Serie übernehmen?</span>
       <div class="draft-fearless-actions">
         <${Button} kind="primary" onClick=${() => { setOffer(false); setFinishing(true); }}>Übernehmen<//>
         <${Button} kind="ghost" onClick=${() => setOffer(false)}>Nicht übernehmen<//>
       </div>
     </div>` : null}
-    ${form ? html`<div class="draft-fearless-form">
-      <${Segmented} label="Format" value=${form.format} options=${FEARLESS_FORMATS} onChange=${(format) => setForm({ ...form, format })} />
-      <input class="input" type="text" maxlength=${maxLength} spellcheck="false" value=${form.label} aria-label="Bezeichnung"
-        placeholder="Bezeichnung (optional), z. B. Scrim Dienstag" onInput=${(e) => setForm({ ...form, label: e.currentTarget.value })}
-        onKeyDown=${(e) => e.key === 'Enter' && start()} />
-      <div class="draft-fearless-actions">
-        <${Button} kind="primary" icon="ok" onClick=${start} disabled=${busy}>Serie starten<//>
-        <${Button} kind="ghost" onClick=${() => setForm(null)}>Abbrechen<//>
-      </div>
-    </div>` : null}
-    ${active ? html`<div class="draft-fearless-bar">
-      ${renaming ? html`<${LabelEditor} value=${active.label} maxLength=${maxLength} onSave=${rename} onCancel=${() => setRenaming(false)} />`
-        : html`<div class="draft-fearless-head">
-          <strong class="draft-fearless-title">${active.label || 'Fearless-Serie'}</strong>
-          <${Button} icon="edit" kind="ghost" title="Bezeichnung ändern" onClick=${() => setRenaming(true)}
-            tip=${advancedTips ? 'Freie Bezeichnung, nur lokal gespeichert' : undefined} />
-        </div>`}
-      <span class="muted small">${formatLabel(active.format)} · ${seriesProgress(active)} · ${state.locked.length} gesperrt</span>
-      <div class="draft-fearless-actions">
-        ${finishing ? html`
-          <span class="small">Ergebnis für dein Team:</span>
-          <${Button} kind="primary" onClick=${() => finish('WIN')} disabled=${busy}>Gewonnen<//>
-          <${Button} onClick=${() => finish('LOSS')} disabled=${busy}>Verloren<//>
-          <${Button} kind="ghost" onClick=${() => finish(null)} disabled=${busy}>Ohne Ergebnis<//>
-          <${Button} icon="x" kind="icon" title="Abbrechen" onClick=${() => setFinishing(false)} />`
-        : html`
-          <${Button} icon="lock" onClick=${() => setFinishing(true)} disabled=${!boardComplete || busy || Boolean(context)}
-            tip=${context ? 'Erst das geladene Serienspiel schließen' : !boardComplete ? 'Erst alle zehn Champions eintragen' : advancedTips ? 'Sperrt die zehn Picks für die folgenden Spiele und leert das Brett' : undefined}>Spiel ${active.nextGame} abschließen<//>
-          <${Button} icon="undo" kind="icon" title="Letztes Spiel zurücknehmen" onClick=${undo} disabled=${busy || active.games.length === 0}
-            tip=${active.games.length ? `Spiel ${active.games.length} zurücknehmen` : undefined} />`}
-      </div>
-    </div>` : null}
-    ${context ? html`<div class="draft-fearless-context small">
-      <${Icon} name="lock" size=${14} />
-      <span>Sperren aus ${context.label || 'Serie'}, Spiel ${context.game}</span>
-      <${Button} icon="x" kind="icon" title="Sperren des Serienspiels aufheben" onClick=${() => setView({ fearlessContext: null })} />
-    </div>` : null}
+    <${FearlessLocks} locked=${locked} data=${data} />
     ${fearless.error ? html`<${ErrorNote} prefix="Fearless" error=${fearless.error} />` : null}
   </div>`;
 }
 
-/** Gesperrte Champions nach Spiel, unter den Bans; einklappbar, der Stand wird gespeichert. */
+/** Gesperrte Champions nach Spiel, nebeneinander in der Fearless-Zeile; einklappbar, der Stand wird gespeichert. */
 function FearlessLocks({ locked, data }) {
   const open = useStore((s) => s.draftFearlessLocksOpen !== false);
   if (locked.size === 0) {
@@ -483,30 +723,60 @@ function FearlessLocks({ locked, data }) {
       <${Icon} name="lock" size=${14} /><span>Fearless-Sperren</span><span class="muted small">${locked.size}</span>
       <span class=${`draft-locks-chevron ${open ? 'open' : ''}`}><${Icon} name="chevron" size=${14} /></span>
     </button>
-    ${open ? [...games].map(([game, champions]) => html`<div class="draft-locks-game" key=${game}>
-      <span class="muted small">Spiel ${game}</span>
-      ${champions.map((key) => {
+    ${open ? html`<div class="draft-locks-games">${[...games].map(([game, champions]) => {
+      // Je Spiel zuerst die fünf Picks deines Teams, dann die des Gegners, jeweils Top bis Support (so gespeichert).
+      // Die Spiele stehen untereinander in festen Spalten, damit Top unter Top steht; Unbekanntes hält seinen Platz frei.
+      const icons = (keys) => keys.map((key, i) => {
         const champion = data.championByKey.get(key);
-        return champion ? html`<span key=${key} class="draft-lock-icon" data-tip=${`${champion.name}: in Spiel ${game} gespielt`}>
+        return champion ? html`<span key=${key} class="draft-lock-icon" data-tip=${`${champion.name}: in Game ${game} gespielt`}>
           <${Img} src=${champion.icon} size=${24} alt=${champion.name} />
-        </span>` : null;
-      })}
-    </div>`) : null}
+        </span>` : html`<span key=${`empty-${i}`} class="draft-lock-icon empty"></span>`;
+      });
+      return html`<div class="draft-locks-game" key=${game}>
+        <span class="muted small">Game ${game}</span>
+        <span class="draft-locks-team ally" aria-label="Dein Team">${icons(champions.slice(0, TEAM_SIZE))}</span>
+        ${champions.length > TEAM_SIZE ? html`<span class="draft-locks-team enemy" aria-label="Gegner">${icons(champions.slice(TEAM_SIZE))}</span>` : null}
+      </div>`;
+    })}</div>` : null}
   </div>`;
 }
+
+/**
+ * „Beste Picks“ beginnt für dein Team: beim Start der App (auch wenn zuletzt der Gegner gewählt war) und bei jedem Wechsel
+ * auf den Reiter. Zum Gegner wechselt die Seite nur von selbst, wenn ein Gegner-Pick entfernt wird (am Brett oder per
+ * Klick im Archiv), oder von Hand.
+ */
+let sideResetDone = false;
 
 export function DraftView() {
   const data = useStore((s) => s.data);
   const advancedTips = useStore((s) => Boolean(s.prefs.advancedTips));
   const dataSource = useStore((s) => s.dataSource);
   const [view, setView] = useViewState('draft', DEFAULTS);
+  useEffect(() => {
+    if (!sideResetDone) {
+      sideResetDone = true;
+      if (view.side !== 'ally') {
+        setView({ side: 'ally' });
+      }
+    }
+  }, []);
   const fearless = useFearless();
+  // Start-Formular der Serie: geöffnet über den Schalter in der Optionsleiste, angezeigt in der Fearless-Zeile.
+  const [fearlessForm, setFearlessForm] = useState(null);
   const fearlessActive = fearless.state?.active || null;
   const fearlessContext = view.fearlessContext || null;
   // Champion-Key → Spiel, in dem er gespielt wurde. Ein geladenes Serienspiel bringt seine eigenen Sperren mit.
   const lockedList = fearlessContext ? fearlessContext.locked : fearlessActive ? fearless.state.locked : NO_LOCKS;
   const locked = useMemo(() => new Map(lockedList.map((l) => [l.champion, l.game])), [lockedList]);
   const { result, error, loading, completing, requestId } = useDraftResult(view, dataSource, locked);
+  // Für die Archiv-Aufnahme (Modulebene) merken, was das Brett an Auto-Rollen zeigt; ohne offenen Tab gibt es nichts.
+  useEffect(() => {
+    shownSlots = loading || !result ? null : result.slots;
+    return () => {
+      shownSlots = null;
+    };
+  }, [result, loading]);
   const sourceLabel = useSourceLabel();
   const client = useClientSync(view, setView, data);
   const owned = useMemo(() => new Set(client.champSelect ? client.lcu.pickable : []), [client.champSelect, client.lcu]);
@@ -548,13 +818,28 @@ export function DraftView() {
       }
       return slot && role && slot.role === role ? { ...slot, role: null } : slot;
     });
+    // Ein geladener gespeicherter Draft wird erst mit „Rollen speichern“ überschrieben.
     setView({ [teamName]: team });
   };
 
+  const stored = storedTarget(view, fearless.state);
+  const storedState = stored ? compareStored(stored, view.ally, view.enemy) : null;
+  const [savingRoles, setSavingRoles] = useState(false);
+  const saveRoles = (board) => {
+    setSavingRoles(true);
+    // Die jetzt angezeigten Auto-Rollen gehen mit (nur zum Sortieren); ohne passende Analyse bleibt die Liste leer.
+    saveStoredRoles(stored, { ...board, shownRoles: shownRolesOf(view, loading ? null : result?.slots) }, setView)
+      .then((also) => toast(`Rollen ${stored.kind === 'game' ? `in Game ${stored.number} der Serie` : 'im gespeicherten Draft'} übernommen${also}`))
+      .catch((e) => toast(`Rollen nicht gespeichert: ${e.message || e}`))
+      .finally(() => setSavingRoles(false));
+  };
+
+  // Ein entfernter Gegner-Pick schaltet „Beste Picks“ auf den Gegner um (was an seiner Stelle am stärksten wäre);
+  // sonst bleibt die Seite, wie sie ist.
   const clearSlot = (teamName, index) => {
     const team = [...view[teamName]];
     team[index] = null;
-    setView({ [teamName]: team });
+    setView({ [teamName]: team, ...(teamName === 'enemy' ? { side: 'enemy' } : {}) });
   };
 
   const takeSuggestion = (suggestion) => {
@@ -570,7 +855,7 @@ export function DraftView() {
     }
   };
 
-  const reset = () => setView({ ally: DEFAULTS.ally, enemy: DEFAULTS.enemy, bans: [], fearlessContext: null });
+  const reset = () => setView({ ally: DEFAULTS.ally, enemy: DEFAULTS.enemy, bans: [], fearlessContext: null, loadedDraft: null });
   const picks = view.ally.filter(Boolean).length + view.enemy.filter(Boolean).length;
 
   return html`<div class="page draft">
@@ -581,18 +866,22 @@ export function DraftView() {
         <${WinPanel} analysis=${result?.analysis} picks=${picks} loading=${loading} completing=${completing} />
         <${BanRow} bans=${view.bans} data=${data} onAdd=${() => setView({ picker: { team: 'bans' } })}
           onRemove=${(key) => setView({ bans: view.bans.filter((b) => b !== key) })} />
-        <${FearlessLocks} locked=${locked} data=${data} />
         <div class="draft-actions">
           <${Button} icon="trash" onClick=${reset} disabled=${picks === 0 && view.bans.length === 0 && !fearlessContext}>Draft leeren<//>
+          ${storedState && storedState.sameChampions ? html`<${Button} icon="ok" onClick=${() => saveRoles(storedState.board)}
+            disabled=${savingRoles || !storedState.rolesChanged || (loading && stored.kind === 'draft')}
+            title=${storedState.rolesChanged ? 'Rollen in den gespeicherten Draft übernehmen' : 'Rollen sind gespeichert'}
+            tip=${advancedTips ? `Überschreibt nur die Rollen ${stored.kind === 'game' ? `von Game ${stored.number} der Fearless-Serie` : 'des geladenen Drafts im Archiv'}; mit anderen Champions entsteht wie bisher ein neuer Draft` : undefined}>
+            ${storedState.rolesChanged ? 'Rollen speichern' : 'Gespeichert'}<//>` : null}
           <span class="muted small">${sourceLabel}</span>
         </div>
         <${ClientSync} lcu=${client.lcu} onToggle=${client.toggle} />
-        <${FearlessPanel} fearless=${fearless} view=${view} setView=${setView} data=${data} boardComplete=${picks === 2 * TEAM_SIZE}
-          lcuStatus=${client.lcu?.status} conflicts=${client.champSelect ? lockedOnBoard : NO_LOCKS} />
       </div>
       <${TeamColumn} title="Gegner" team="enemy" slots=${view.enemy} result=${result} data=${data} pending=${pendingRole} hints=${hints.enemy}
         onPick=${(index) => setView({ picker: { team: 'enemy', index } })} onRole=${setSlotRole} onClear=${clearSlot} />
     </section>
+    <${FearlessPanel} fearless=${fearless} form=${fearlessForm} setForm=${setFearlessForm} view=${view} setView=${setView} data=${data} locked=${locked} draftResult=${result}
+      boardComplete=${picks === 2 * TEAM_SIZE} lcuStatus=${client.lcu?.status} conflicts=${client.champSelect ? lockedOnBoard : NO_LOCKS} />
 
     ${error ? html`<${ErrorNote} prefix="Draft konnte nicht berechnet werden" error=${error} />` : null}
     ${loading || completing ? html`<${ProgressNote} requestId=${requestId} completing=${completing} />` : null}
@@ -601,13 +890,10 @@ export function DraftView() {
     </ul>` : null}
 
     <div class="draft-tabs">
-      <${Segmented} label="Bereich" value=${view.tab} onChange=${(tab) => setView({ tab })}
+      <${Segmented} label="Bereich" value=${view.tab}
+        onChange=${(tab) => setView(tab === 'picks' && view.tab !== 'picks' ? { tab, side: 'ally' } : { tab })}
         options=${[{ value: 'picks', label: 'Beste Picks' }, { value: 'analysis', label: 'Draft-Analyse' }, { value: 'archive', label: 'Archiv' }]} />
       <div class="draft-options">
-        <label class="draft-option" data-tip="Wie sehr Matchups und Synergien mit wenigen Spielen zählen (auch Champion-Werte im aktuellen Patch). Mittel entspricht DraftGap.">
-          <span class="muted small">Risiko</span>
-          <${Select} label="Risiko" value=${view.risk} options=${RISKS} onChange=${(risk) => setView({ risk })} />
-        </label>
         ${view.rarePicks ? html`<label class="draft-option" data-tip=${advancedTips ? 'Mindestspiele eines Vorschlags auf seiner Rolle in den letzten 30 Tagen. Auto richtet sich nach der Spielmenge des Rang-Bereichs; in Emerald+ entspricht das etwa dem Standard von DraftGap.' : undefined}>
           <span class="muted small">Games</span>
           <${Select} label="Mindestspiele" value=${view.minGames} onChange=${(minGames) => setView({ minGames })}
@@ -617,6 +903,7 @@ export function DraftView() {
           <${Select} label="Mindest-Pickrate" value=${view.minPickRate || AUTO_MIN_GAMES} onChange=${(minPickRate) => setView({ minPickRate })}
             options=${[{ value: AUTO_MIN_GAMES, label: autoLabel(result, false) }, ...MIN_PICK_RATES]} />
         </label>`}
+        <${FearlessSwitch} fearless=${fearless} form=${fearlessForm} setForm=${setFearlessForm} />
         <${Switch} checked=${view.ignoreChampionWinRates} onChange=${(ignoreChampionWinRates) => setView({ ignoreChampionWinRates })}
           tip=${advancedTips ? 'Bewertet nur Synergien und Matchups, nicht die allgemeine Stärke der Champions' : undefined}>Nur Synergien und Matchups<//>
         <${Switch} checked=${Boolean(view.rarePicks)} onChange=${(rarePicks) => setView({ rarePicks })}
@@ -803,7 +1090,7 @@ function ChampionPicker({ data, used, locked, title, onChoose, onClose }) {
           const game = locked.get(c.key);
           return html`<button type="button" key=${c.key} disabled=${used.has(c.key)} aria-disabled=${game ? 'true' : undefined}
             onClick=${() => !game && onChoose(c.key)} class=${`${favorites.has(c.key) ? 'favorite' : ''} ${game ? 'locked' : ''}`}
-            data-tip=${game ? `${c.name}: in Spiel ${game} gespielt (Fearless)` : undefined}>
+            data-tip=${game ? `${c.name}: in Game ${game} gespielt (Fearless)` : undefined}>
             <${Img} src=${c.icon} size=${48} /><span>${c.name}</span>
             ${favorites.has(c.key) ? html`<${FavoriteMark} size=${13} />` : null}
             ${game ? html`<span class="draft-lock-mark"><${Icon} name="lock" size=${12} /></span>` : null}
@@ -1357,6 +1644,18 @@ function LengthChart({ values, starts }) {
 // ------------------------------------------------------------------ Archiv: Ansicht
 
 const ARCHIVE_DATE = { dateStyle: 'short', timeStyle: 'short' };
+/** Drafts je Seite in Archiv-Listen: Bei bis zu 1000 gespeicherten Drafts würde die ganze Liste Zehntausende Icons zeichnen. */
+const ARCHIVE_PAGE = 50;
+
+/** Knopf unter einer Liste, die nur die ersten `shown` von `total` Einträgen zeigt. */
+function ShowMore({ shown, total, onMore }) {
+  if (shown >= total) {
+    return null;
+  }
+  return html`<button type="button" class="more-toggle" onClick=${onMore}>
+    ${Math.min(ARCHIVE_PAGE, total - shown)} weitere anzeigen (${shown} von ${total})<span class="more-arrow" aria-hidden="true">▼</span>
+  </button>`;
+}
 const patchLabel = (patch) => (patch ? `Patch ${patch.split('.').slice(0, 2).join('.')}` : '');
 
 /** Ausgetauschte Champions zwischen zwei Drafts, wie `DraftArchive.changes` im Backend (vertauschte Seiten zählen nicht). */
@@ -1376,6 +1675,7 @@ function Archive({ data, view, setView }) {
   const rev = useStore((s) => s.draftArchiveRev || 0);
   const advancedTips = useStore((s) => Boolean(s.prefs.advancedTips));
   const [state, setState] = useState({ list: null, error: null });
+  const [shown, setShown] = useState(ARCHIVE_PAGE);
   useEffect(() => {
     let active = true;
     api.get('/api/draft-archive').then((list) => active && setState({ list, error: null }))
@@ -1387,23 +1687,77 @@ function Archive({ data, view, setView }) {
 
   const board = { ally: view.ally.filter(Boolean), enemy: view.enemy.filter(Boolean) };
   const boardComplete = board.ally.length === TEAM_SIZE && board.enemy.length === TEAM_SIZE;
+  const fearlessState = useStore((s) => s.fearless);
+  // Randfall: Ein voller Draft wurde archiviert, bevor die Serie startete, und ist dann auch deren Spiel 1.
+  const seriesGames = useMemo(() => (fearlessState ? [...(fearlessState.active ? [fearlessState.active] : []), ...fearlessState.finished] : [])
+    .flatMap((series) => series.games.map((game) => ({ series, game }))), [fearlessState]);
+  const fearlessBadge = (entry) => {
+    const match = seriesGames.find(({ game }) => draftChanges(entry, game) === 0);
+    if (!match) {
+      return null;
+    }
+    const { series, game } = match;
+    const name = series.label ? `„${series.label}“` : `der Serie vom ${new Date(series.startedAt).toLocaleString('de-DE', ARCHIVE_DATE)}`;
+    // Klick springt zum Spiel unter „Archiv › Fearless“.
+    return html`<button type="button" class="tag fearless"
+      data-tip=${`Game ${game.number} ${name} (${formatLabel(series.format)}): unter „Fearless“ öffnen`}
+      onClick=${() => setView({ archiveMode: 'series', seriesFocus: { seriesId: series.id, game: game.number } })}>
+      <${Icon} name="lock" size=${11} />${series.label ? html`<span class="tag-text">${series.label}</span><span>·</span>` : null}<span class="tag-fixed">Game ${game.number} (Fearless)</span>
+    </button>`;
+  };
 
   const load = (entry, without) => {
-    setView(boardPatch(entry, data, without));
+    // Gemerkt, damit spätere Rollen-Änderungen diesen Eintrag überschreiben können (nur bei gleichen Champions).
+    const loadedDraft = { id: entry.id, ally: entry.ally, enemy: entry.enemy };
+    // Ein Spiel einer Fearless-Serie (gleiche zehn Champions) lädt wie unter „Fearless“ mit den Sperren der Spiele davor.
+    const match = seriesGames.find(({ game }) => draftChanges(entry, game) === 0);
+    if (match) {
+      const context = seriesGameContext(match.series, match.game);
+      setView({ ...boardPatch(entry, data, without), loadedDraft, fearlessContext: context });
+      toast(seriesGameToast(context, without, data));
+      return;
+    }
+    setView({ ...boardPatch(entry, data, without), loadedDraft });
     toast(without ? `Draft ohne ${data.championByKey.get(without.champion).name} geladen` : 'Draft aus dem Archiv geladen');
   };
 
-  const remove = (entry) => {
-    if (!window.confirm('Diesen Draft aus dem Archiv löschen?')) {
+  const remove = async (entry) => {
+    if (!(await confirmDialog({ title: 'Draft in den Papierkorb legen?', icon: 'trash', confirmLabel: 'In den Papierkorb',
+      message: `Er bleibt ${state.list?.trashDays || 7} Tage im Papierkorb und lässt sich bis dahin wiederherstellen.` }))) {
       return;
     }
-    api.del(`/api/draft-archive/${entry.id}`).then((list) => setState({ list, error: null }))
+    api.del(`/api/draft-archive/${entry.id}`).then((next) => {
+      setState({ list: next, error: null });
+      toast('Draft im Papierkorb');
+    }).catch((error) => setState((previous) => ({ ...previous, error })));
+  };
+  const restore = (item) => api.post(`/api/draft-archive/${item.id}/restore`).then((next) => {
+    setState({ list: next, error: null });
+    toast('Draft wiederhergestellt');
+  }).catch((error) => setState((previous) => ({ ...previous, error })));
+  const purge = async (item) => {
+    if (!(await confirmDialog({ title: 'Draft endgültig löschen?', danger: true, confirmLabel: 'Endgültig löschen',
+      message: 'Er wird aus dem Papierkorb entfernt. Das lässt sich nicht rückgängig machen.' }))) {
+      return;
+    }
+    api.del(`/api/draft-archive/trash/${item.id}`).then((next) => setState({ list: next, error: null }))
       .catch((error) => setState((previous) => ({ ...previous, error })));
+  };
+  const emptyTrash = async () => {
+    const count = state.list?.trash?.length || 0;
+    if (!(await confirmDialog({ title: 'Papierkorb leeren?', danger: true, confirmLabel: 'Papierkorb leeren',
+      message: `${count === 1 ? 'Ein Draft wird' : `${count} Drafts werden`} endgültig gelöscht. Das lässt sich nicht rückgängig machen.` }))) {
+      return;
+    }
+    api.del('/api/draft-archive/trash').then((next) => {
+      setState({ list: next, error: null });
+      toast('Papierkorb geleert');
+    }).catch((error) => setState((previous) => ({ ...previous, error })));
   };
 
   const mode = view.archiveMode === 'series' ? 'series' : 'drafts';
   const switcher = html`<${Segmented} label="Archiv" value=${mode} onChange=${(archiveMode) => setView({ archiveMode })}
-    options=${[{ value: 'drafts', label: 'Drafts' }, { value: 'series', label: 'Fearless-Serien' }]} />`;
+    options=${[{ value: 'drafts', label: 'Drafts' }, { value: 'series', label: 'Fearless' }]} />`;
   if (mode === 'series') {
     return html`<div class="draft-archive">${switcher}<${SeriesList} data=${data} view=${view} setView=${setView} /></div>`;
   }
@@ -1424,18 +1778,104 @@ function Archive({ data, view, setView }) {
     ${list.entries.length === 0
       ? html`<${Empty} title="Noch keine Drafts im Archiv">Vollständige Drafts erscheinen hier automatisch.<//>`
       : html`<ul class="draft-archive-list">
-        ${list.entries.map((entry) => html`<${ArchiveEntry} key=${entry.id} entry=${entry} data=${data} advancedTips=${advancedTips}
+        ${list.entries.slice(0, shown).map((entry) => html`<${ArchiveEntry} key=${entry.id} entry=${entry} data=${data} advancedTips=${advancedTips}
+          badge=${fearlessBadge(entry)}
           current=${boardComplete && draftChanges(entry, board) === 0} onLoad=${load} onRemove=${remove} />`)}
-      </ul>`}
+      </ul>
+      <${ShowMore} shown=${shown} total=${list.entries.length} onMore=${() => setShown(shown + ARCHIVE_PAGE)} />`}
+    ${list.trash && list.trash.length ? html`<${TrashSection} items=${list.trash} data=${data} days=${list.trashDays || 7}
+      noun="Drafts" storeKey="draftTrashOpen" title=${(item) => new Date(item.savedAt).toLocaleString('de-DE', ARCHIVE_DATE)}
+      body=${TrashedDraft} onRestore=${restore} onPurge=${purge} onEmpty=${emptyTrash} />` : null}
   </div>`;
 }
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** „noch 6 Tage“ bis zum endgültigen Löschen. */
+function remainingText(expiresAt) {
+  const days = Math.ceil((Date.parse(expiresAt) - Date.now()) / DAY_MS);
+  return days <= 1 ? 'läuft heute ab' : `noch ${days} Tage`;
+}
+
+/** Kleine, ausgegraute Champion-Icons eines Teams für den Papierkorb. */
+function trashIcons(team, data) {
+  return team.map((slot) => {
+    const champion = data.championByKey.get(slot.champion);
+    return champion ? html`<${Img} key=${slot.champion} src=${champion.icon} size=${26} alt=${champion.name} />` : null;
+  });
+}
+
+/** Papierkorb-Inhalt eines Drafts: beide Teams. */
+function TrashedDraft({ item, data }) {
+  return html`<div class="draft-archive-teams">
+    <div class="draft-archive-team ally" aria-label="Dein Team">${trashIcons(item.ally, data)}</div>
+    <span class="muted small">vs</span>
+    <div class="draft-archive-team enemy" aria-label="Gegner">${trashIcons(item.enemy, data)}</div>
+  </div>`;
+}
+
+/** Papierkorb-Inhalt einer Serie: Format, Spiele, Stand und die Picks deines Teams je Spiel. */
+function TrashedSeries({ item, data }) {
+  const score = item.wins + item.losses > 0 ? ` · ${item.wins}:${item.losses}` : '';
+  return html`<div class="draft-trash-series">
+    <span class="muted small">${seriesFormatLabel(item)} · ${item.games.length} ${item.games.length === 1 ? 'Game' : 'Games'}${score}</span>
+    <div class="draft-trash-games">
+      ${item.games.map((game) => html`<div key=${game.number} class="draft-archive-team ally" data-tip=${`Game ${game.number}, dein Team`}>
+        ${trashIcons(game.ally, data)}</div>`)}
+    </div>
+  </div>`;
+}
+
+/**
+ * Papierkorb (Drafts oder Fearless-Serien): Gelöschtes bleibt `days` Tage wiederherstellbar, danach räumt das Backend
+ * es automatisch auf. Einklappbar (nur für die Sitzung, je `storeKey`), anfangs zu. `title` und `body` liefern Titel
+ * und Inhalt eines Eintrags.
+ */
+function TrashSection({ items, data, days, noun, storeKey, title, body: Body, onRestore, onPurge, onEmpty }) {
+  const open = useStore((s) => Boolean(s[storeKey]));
+  return html`<section class="draft-trash" aria-label="Papierkorb">
+    <div class="draft-trash-head">
+      <button type="button" class="draft-trash-toggle" aria-expanded=${open} onClick=${() => store.set({ [storeKey]: !open })}>
+        <${Icon} name="trash" size=${14} /><span>Papierkorb</span><span class="muted small">${items.length}</span>
+        <span class=${`draft-locks-chevron ${open ? 'open' : ''}`}><${Icon} name="chevron" size=${14} /></span>
+      </button>
+      <span class="muted small">Gelöschte ${noun} bleiben ${days} Tage wiederherstellbar und werden danach automatisch entfernt.</span>
+      ${open ? html`<${Button} kind="ghost" icon="trash" onClick=${onEmpty}>Papierkorb leeren<//>` : null}
+    </div>
+    ${open ? html`<ul class="draft-trash-list">
+      ${items.map((item) => html`<li key=${item.id} class="draft-trash-entry">
+        <div class="draft-archive-meta">
+          <strong class="draft-trash-title">${title(item)}</strong>
+          <span class="muted small" data-tip=${`Endgültig gelöscht am ${new Date(item.expiresAt).toLocaleString('de-DE', ARCHIVE_DATE)}`}>
+            ${remainingText(item.expiresAt)}</span>
+        </div>
+        <${Body} item=${item} data=${data} />
+        <div class="draft-archive-actions">
+          <${Button} icon="undo" onClick=${() => onRestore(item)}>Wiederherstellen<//>
+          <${Button} icon="trash" kind="icon" title="Endgültig löschen" onClick=${() => onPurge(item)} />
+        </div>
+      </li>`)}
+    </ul>` : null}
+  </section>`;
+}
+
+/** Sitzungs-Kontext eines geladenen Serienspiels: Picks beider Teams aus den Spielen davor sind gesperrt. */
+function seriesGameContext(series, game) {
+  const locked = series.games.filter((g) => g.number < game.number)
+    .flatMap((g) => [...g.ally, ...g.enemy].map((s) => ({ champion: s.champion, game: g.number })));
+  return { seriesId: series.id, label: series.label, game: game.number, locked };
+}
+
+const seriesGameToast = (context, without, data) => (without
+  ? `Game ${context.game} ohne ${data.championByKey.get(without.champion).name} geladen, mit ${context.locked.length} Sperren`
+  : `Game ${context.game} geladen, mit ${context.locked.length} Sperren`);
 
 /** Brett-Stand eines gespeicherten Drafts; `without` lädt ihn ohne einen Pick („Beste Picks“ für dessen Platz). */
 function boardPatch(entry, data, without = null) {
   const skip = (team) => (without && without.team === team ? without.champion : null);
   const patch = {
     ally: boardSlots(entry.ally, data, skip('ally')), enemy: boardSlots(entry.enemy, data, skip('enemy')),
-    bans: entry.bans.filter((key) => data.championByKey.has(key)).slice(0, MAX_BANS), picker: null, fearlessContext: null,
+    bans: entry.bans.filter((key) => data.championByKey.has(key)).slice(0, MAX_BANS), picker: null, fearlessContext: null, loadedDraft: null,
     // Ganzer Draft: die Analyse. Ohne einen Pick: die besten Picks für diese Seite und, wenn bekannt, seine Rolle.
     tab: without ? 'picks' : 'analysis',
   };
@@ -1448,6 +1888,11 @@ function boardPatch(entry, data, without = null) {
 }
 
 const RESULT_LABELS = { WIN: 'Sieg', LOSS: 'Niederlage' };
+/** Ergebnis eines Serienspiels nachträglich ändern (Sicht „Dein Team“); leer = kein Ergebnis. */
+const RESULT_OPTIONS = [{ value: '', label: 'Ohne Ergebnis' }, { value: 'WIN', label: 'Sieg' }, { value: 'LOSS', label: 'Niederlage' }];
+/** So lange bleibt ein angesprungenes Serienspiel hervorgehoben. */
+const FOCUS_MS = 2500;
+const seriesGameId = (seriesId, game) => `fearless-${seriesId}-${game}`;
 
 /**
  * Laufende und beendete Fearless-Serien mit ihren Spielen. Laden und der Klick auf einen Champion wirken wie im Archiv,
@@ -1457,40 +1902,178 @@ function SeriesList({ data, view, setView }) {
   const fearless = useFearless();
   const advancedTips = useStore((s) => Boolean(s.prefs.advancedTips));
   const [renaming, setRenaming] = useState(null);
+  // Serie, für die gerade ein Draft zum Hinzufügen gewählt wird („+“ im Kopf).
+  const [adding, setAdding] = useState(null);
   const { state } = fearless;
+  // Sprung aus dem Etikett unter „Drafts“: zum Spiel scrollen, kurz hervorheben, dann vergessen.
+  const focus = view.seriesFocus || null;
+  // Klappstand je Serie (nur Sitzung); ohne Eintrag sind die laufende und die neueste Serie offen.
+  const openState = useStore((s) => s.fearlessSeriesOpen) || {};
+  const setOpen = (id, open) => store.set({ fearlessSeriesOpen: { ...(store.get().fearlessSeriesOpen || {}), [id]: open } });
+  useEffect(() => {
+    if (!focus || !state) {
+      return undefined;
+    }
+    // Das Ziel eines Sprungs muss aufgeklappt sein, bevor gescrollt wird.
+    if (!(store.get().fearlessSeriesOpen || {})[focus.seriesId]) {
+      setOpen(focus.seriesId, true);
+    }
+    const scroll = setTimeout(() => document.getElementById(seriesGameId(focus.seriesId, focus.game))
+      ?.scrollIntoView({ block: 'center', behavior: 'smooth' }), 50);
+    const timer = setTimeout(() => setView({ seriesFocus: null }), FOCUS_MS);
+    return () => {
+      clearTimeout(scroll);
+      clearTimeout(timer);
+    };
+  }, [focus?.seriesId, focus?.game, Boolean(state)]);
   if (!state) {
     return html`<${Loading} />`;
   }
   const list = [...(state.active ? [state.active] : []), ...state.finished];
+  const seriesName = (series) => (series.label ? `„${series.label}“` : 'Die Serie');
+  // Gleiche Drafts unter „Drafts“ gehen mit in den Papierkorb und kommen mit zurück: die Liste dort neu laden.
+  const draftsChanged = () => store.set({ draftArchiveRev: (store.get().draftArchiveRev || 0) + 1 });
+  const alsoDrafts = (count, verb) => (count ? `, ${count === 1 ? 'ein Draft' : `${count} Drafts`} unter „Drafts“ ${verb}` : '');
+  const restore = (item) => fearless.restore(item.id).then((next) => {
+    if (next) {
+      draftsChanged();
+      toast(`${seriesName(item)} wiederhergestellt${alsoDrafts(next.draftsRestored, 'ebenfalls')}`);
+    }
+  });
+  const purge = async (item) => {
+    if (await confirmDialog({ title: 'Serie endgültig löschen?', danger: true, confirmLabel: 'Endgültig löschen',
+      message: `${seriesName(item)} wird mit ${item.games.length === 1 ? 'ihrem Game' : `allen ${item.games.length} Games`} aus dem Papierkorb entfernt. Das lässt sich nicht rückgängig machen.` })) {
+      fearless.purge(item.id);
+    }
+  };
+  const emptyTrash = async () => {
+    const count = state.trash?.length || 0;
+    if (await confirmDialog({ title: 'Papierkorb leeren?', danger: true, confirmLabel: 'Papierkorb leeren',
+      message: `${count === 1 ? 'Ein Eintrag wird' : `${count} Einträge werden`} endgültig gelöscht. Das lässt sich nicht rückgängig machen.` })) {
+      fearless.emptyTrash().then((next) => next && toast('Papierkorb geleert'));
+    }
+  };
+  const trash = state.trash && state.trash.length ? html`<${TrashSection} items=${state.trash} data=${data} days=${state.trashDays || 7}
+    noun="Serien" storeKey="fearlessTrashOpen" body=${TrashedSeries}
+    title=${(item) => item.label || `Serie vom ${new Date(item.startedAt).toLocaleDateString('de-DE', { dateStyle: 'short' })}`}
+    onRestore=${restore} onPurge=${purge} onEmpty=${emptyTrash} />` : null;
   if (list.length === 0) {
-    return html`<${Empty} title="Noch keine Fearless-Serien">Eine Serie erscheint hier, sobald ihr erstes Spiel abgeschlossen ist.<//>`;
+    return html`<div class="draft-series-list">
+      <${Empty} title="Noch keine Fearless-Serien">Eine Serie erscheint hier, sobald ihr erstes Game abgeschlossen ist.<//>
+      ${trash}
+    </div>`;
   }
   const board = { ally: view.ally.filter(Boolean), enemy: view.enemy.filter(Boolean) };
   const boardComplete = board.ally.length === TEAM_SIZE && board.enemy.length === TEAM_SIZE;
   const context = view.fearlessContext;
 
   const loadGame = (series, game, without) => {
-    const locked = series.games.filter((g) => g.number < game.number)
-      .flatMap((g) => [...g.ally, ...g.enemy].map((s) => ({ champion: s.champion, game: g.number })));
-    setView({ ...boardPatch(game, data, without), fearlessContext: { seriesId: series.id, label: series.label, game: game.number, locked } });
-    toast(without ? `Spiel ${game.number} ohne ${data.championByKey.get(without.champion).name} geladen, mit ${locked.length} Sperren`
-      : `Spiel ${game.number} geladen, mit ${locked.length} Sperren`);
+    const context = seriesGameContext(series, game);
+    setView({ ...boardPatch(game, data, without), fearlessContext: context });
+    toast(seriesGameToast(context, without, data));
   };
-  const rename = (series, label) => fearless.rename(series.id, label).then((next) => next && setRenaming(null));
-  const remove = (series) => {
-    if (window.confirm('Diese Serie mit allen Spielen löschen?')) {
-      fearless.remove(series.id);
+  const rename = (series, label, maxGames) => fearless.rename(series.id, label, maxGames).then((next) => {
+    if (next) {
+      setRenaming(null);
+      const note = maxGamesNote(next, series, maxGames);
+      if (note) {
+        toast(note);
+      }
+    }
+  });
+  // Verwechselte Reihenfolge korrigieren: Spiel um eine Stelle verschieben, die Nummern laufen danach wieder ab 1.
+  const move = (series, number, step) => {
+    const order = series.games.map((g) => g.number);
+    const from = number - 1;
+    const to = from + step;
+    [order[from], order[to]] = [order[to], order[from]];
+    fearless.reorder(series.id, order).then((next) => {
+      if (!next) {
+        return;
+      }
+      // Ein geladenes Spiel dieser Serie trüge sonst Nummer und Sperren der alten Reihenfolge.
+      setView({ seriesFocus: { seriesId: series.id, game: to + 1 },
+        ...(view.fearlessContext?.seriesId === series.id ? { fearlessContext: null } : {}) });
+      toast(`Game ${number} ist jetzt Game ${to + 1}`);
+    });
+  };
+  // Auch die laufende Serie (z. B. versehentlich gestartet): Sie endet dabei, ohne Spiel wird sie ohne Papierkorb verworfen.
+  const remove = async (series) => {
+    const running = !series.endedAt;
+    if (running && series.games.length === 0) {
+      if (await confirmDialog({ title: 'Serie löschen?', icon: 'trash', confirmLabel: 'Löschen',
+        message: `${seriesName(series)} hat noch kein Game und wird verworfen. Es gibt danach keine Fearless-Sperren mehr.` })) {
+        fearless.remove(series.id).then((next) => next && toast('Fearless-Serie gelöscht'));
+      }
+      return;
+    }
+    if (await confirmDialog({ title: 'Serie in den Papierkorb legen?', icon: 'trash', confirmLabel: 'In den Papierkorb',
+      message: `${seriesName(series)} ${running ? 'endet und ' : ''}bleibt mit allen Games ${state.trashDays || 7} Tage im Papierkorb und lässt sich bis dahin wiederherstellen. Gleiche Drafts unter „Drafts“ gehen mit.` })) {
+      fearless.remove(series.id).then((next) => {
+        if (next) {
+          draftsChanged();
+          toast(`Serie im Papierkorb${alsoDrafts(next.draftsMoved, 'ebenfalls')}`);
+        }
+      });
     }
   };
-  const reopen = () => {
+  // Ergebnis korrigieren: Ist eine beendete Serie danach nicht mehr entschieden (z. B. 2:0 → 1:1), läuft sie wieder.
+  const setResult = (series, game, value) => fearless.setResult(series.id, game.number, value || null).then((next) => {
+    if (!next) {
+      return;
+    }
+    const label = value ? RESULT_LABELS[value] : 'kein Ergebnis';
+    if (next.reopened) {
+      toast(`Game ${game.number}: ${label}. Die Serie ist nicht mehr entschieden und läuft wieder`);
+    } else if (next.reopenBlocked) {
+      toast(`Game ${game.number}: ${label}. Die Serie ist nicht mehr entschieden, bleibt aber beendet, weil schon eine andere läuft`);
+    } else if (!series.endedAt && next.ended) {
+      toast(`Game ${game.number}: ${label}. Die Serie ist damit entschieden und beendet`);
+    } else {
+      toast(`Game ${game.number}: ${label}`);
+    }
+  });
+  // Falsch zugeordnetes Spiel aus der Serie lösen (x): ohne Papierkorb, der Draft bleibt unter „Drafts“ und wird dort
+  // bei Bedarf gelöscht.
+  const removeGame = async (series, game) => {
+    if (!(await confirmDialog({ title: `Game ${game.number} aus der Serie entfernen?`, icon: 'x', confirmLabel: 'Entfernen',
+      message: 'Die übrigen Games rücken nach, seine Sperren fallen weg. Der Draft bleibt unter „Drafts“ und lässt sich dort löschen oder mit „+“ an der Serie wieder hinzufügen.' }))) {
+      return;
+    }
+    fearless.removeGame(series.id, game.number).then((next) => {
+      if (next) {
+        // Nummern und Sperren eines geladenen Spiels dieser Serie stimmen danach nicht mehr.
+        if (view.fearlessContext?.seriesId === series.id) {
+          setView({ fearlessContext: null });
+        }
+        if (next.draftRecreated) {
+          draftsChanged();
+        }
+        toast(`Game ${game.number} aus der Serie entfernt, der Draft ${next.draftRecreated ? 'ist wieder' : 'bleibt'} unter „Drafts“`);
+      }
+    });
+  };
+  // Draft aus „Drafts“ als letztes Spiel nachtragen (z. B. nach versehentlichem Entfernen), solange die Serie nicht voll ist.
+  const addDraft = (series, entry) => fearless.addDraftTo(series.id, entry.id).then((next) => {
+    if (!next) {
+      return;
+    }
+    setAdding(null);
+    setOpen(series.id, true);
+    setView({ seriesFocus: { seriesId: series.id, game: next.game },
+      ...(view.fearlessContext?.seriesId === series.id ? { fearlessContext: null } : {}) });
+    toast(`Als Game ${next.game} hinzugefügt${next.ended ? ', die Serie ist damit voll und beendet' : ''}; die Pfeile schieben es an die richtige Stelle`);
+  });
+  const reopen = async () => {
     const filled = view.ally.some(Boolean) || view.enemy.some(Boolean) || view.bans.length > 0;
-    if (!window.confirm(`Serie wieder öffnen und ihr letztes Spiel zurücknehmen?${filled ? ' Sein Draft ersetzt das aktuelle Brett.' : ''}`)) {
+    if (!(await confirmDialog({ title: 'Serie wieder öffnen?', icon: 'undo', confirmLabel: 'Wieder öffnen',
+      message: `Ihr letztes Game wird zurückgenommen${filled ? ', sein Draft ersetzt das aktuelle Brett' : ' und kommt aufs Brett'}.` }))) {
       return;
     }
     fearless.undo().then((next) => {
       if (next && next.undone) {
         setView({ ...boardPatch(next.undone, data), tab: 'picks' });
-        toast(`Serie läuft wieder, Spiel ${next.undone.number} ist zurück auf dem Brett`);
+        toast(`Serie läuft wieder, Game ${next.undone.number} ist zurück auf dem Brett`);
       }
     });
   };
@@ -1503,36 +2086,127 @@ function SeriesList({ data, view, setView }) {
       const score = series.wins + series.losses > 0 ? ` · ${series.wins}:${series.losses}` : '';
       // Nur die zuletzt beendete Serie lässt sich wieder öffnen, und nur, wenn gerade keine läuft.
       const reopenable = !state.active && index === 0 && !running;
-      return html`<section key=${series.id} class=${`draft-series ${running ? 'running' : ''}`}>
+      // Das einzige Spiel einer beendeten Serie entfernt man mit der Serie.
+      const removable = running || series.games.length > 1;
+      const full = series.games.length >= series.maxGames;
+      const open = openState[series.id] ?? (running || index === 0 || (Boolean(focus) && focus.seriesId === series.id));
+      return html`<section key=${series.id} class=${`draft-series ${running ? 'running' : ''} ${open ? 'open' : 'collapsed'}`}>
         <header class="draft-series-head">
+          <button type="button" class="draft-series-toggle" aria-expanded=${open}
+            aria-label=${`${series.label || `Serie vom ${date}`} ${open ? 'einklappen' : 'aufklappen'}`} onClick=${() => setOpen(series.id, !open)}>
+            <span class=${`draft-locks-chevron ${open ? 'open' : ''}`}><${Icon} name="chevron" size=${16} /></span>
+          </button>
           ${renaming === series.id
-            ? html`<${LabelEditor} value=${series.label} maxLength=${state.maxLabelLength || 60}
-              onSave=${(label) => rename(series, label)} onCancel=${() => setRenaming(null)} />`
+            ? html`<${LabelEditor} series=${series} maxLength=${state.maxLabelLength || 60}
+              onSave=${(label, maxGames) => rename(series, label, maxGames)} onCancel=${() => setRenaming(null)} />`
             : html`<div class="draft-fearless-head">
               <strong class="draft-fearless-title">${series.label || `Serie vom ${date}`}</strong>
-              <${Button} icon="edit" kind="ghost" title="Bezeichnung ändern" onClick=${() => setRenaming(series.id)} />
+              <${Button} icon="edit" kind="ghost" title=${editTitle(series)} onClick=${() => setRenaming(series.id)} />
             </div>`}
-          <span class="muted small">${formatLabel(series.format)} · ${series.games.length} ${series.games.length === 1 ? 'Spiel' : 'Spiele'}${score}${series.label ? ` · ${date}` : ''}</span>
+          <span class="muted small">${seriesFormatLabel(series)} · ${series.games.length} ${series.games.length === 1 ? 'Game' : 'Games'}${score}${series.label ? ` · ${date}` : ''}</span>
           ${running ? html`<${Tag}>Läuft<//>` : null}
           <div class="draft-archive-actions">
-            ${reopenable ? html`<${Button} icon="undo" kind="icon" title="Wieder öffnen, letztes Spiel zurücknehmen" onClick=${reopen}
-              tip=${advancedTips ? 'Für ein falsch eingetragenes letztes Spiel oder Ergebnis' : undefined} />` : null}
-            ${running ? null : html`<${Button} icon="trash" kind="icon" title="Serie löschen" onClick=${() => remove(series)} />`}
+            ${reopenable ? html`<${Button} icon="undo" kind="icon" title="Wieder öffnen, letztes Game zurücknehmen" onClick=${reopen}
+              tip=${advancedTips ? 'Für ein falsch eingetragenes letztes Game oder Ergebnis' : undefined} />` : null}
+            <${Button} icon="plus" kind="icon" disabled=${full || fearless.busy}
+              title=${full ? `Serie ist voll (${series.games.length} von ${series.maxGames} Games)` : 'Game aus „Drafts“ hinzufügen'}
+              onClick=${() => setAdding(adding === series.id ? null : series.id)}
+              tip=${advancedTips && !full ? 'Z. B. ein versehentlich entferntes Game; es kommt ans Ende, ohne Ergebnis' : undefined} />
+            <${Button} icon="trash" kind="icon" title=${running && series.games.length === 0 ? 'Serie löschen' : 'Serie in den Papierkorb'}
+              onClick=${() => remove(series)} disabled=${fearless.busy} />
           </div>
         </header>
-        ${series.games.length === 0 ? html`<p class="muted small">Noch kein Spiel abgeschlossen.</p>` : html`<ul class="draft-archive-list">
+        ${adding === series.id && !full ? html`<${AddGamePicker} series=${series} allSeries=${list} data=${data} busy=${fearless.busy}
+          onAdd=${(entry) => addDraft(series, entry)} onClose=${() => setAdding(null)} />` : null}
+        ${!open ? null : series.games.length === 0 ? html`<p class="muted small">Noch kein Game abgeschlossen.</p>` : html`<ul class="draft-archive-list">
           ${series.games.map((game) => html`<${ArchiveEntry} key=${game.number} data=${data} advancedTips=${advancedTips}
-            entry=${{ ...game, savedAt: game.playedAt }} heading=${`Spiel ${game.number}`}
-            badge=${game.result ? html`<${Tag} kind=${game.result === 'WIN' ? '' : 'soft'}>${RESULT_LABELS[game.result]}<//>` : null}
+            domId=${seriesGameId(series.id, game.number)} focus=${Boolean(focus) && focus.seriesId === series.id && focus.game === game.number}
+            entry=${{ ...game, savedAt: game.playedAt }} heading=${`Game ${game.number}`}
+            badge=${html`<${Select} label=${`Ergebnis von Game ${game.number}`} cls="draft-result-select" value=${game.result || ''}
+              options=${RESULT_OPTIONS} onChange=${(value) => setResult(series, game, value)} />`}
             current=${boardComplete && Boolean(context) && context.seriesId === series.id && context.game === game.number && draftChanges(game, board) === 0}
+            actions=${html`${removable ? html`<${Button} icon="x" kind="icon" title=${`Game ${game.number} aus der Serie entfernen`}
+              disabled=${fearless.busy} onClick=${() => removeGame(series, game)}
+              tip=${advancedTips ? 'Für ein falsch zugeordnetes Game: nur aus der Serie, der Draft bleibt unter „Drafts“' : undefined} />` : null}
+            ${series.games.length > 1 ? html`<div class="draft-move" role="group" aria-label=${`Game ${game.number} verschieben`}>
+              <${Button} icon="up" kind="icon" title=${`Game ${game.number} nach vorn`} disabled=${fearless.busy || game.number === 1}
+                onClick=${() => move(series, game.number, -1)} tip=${advancedTips ? 'Bei verwechselter Reihenfolge: Sperren je Game folgen der neuen Reihenfolge' : undefined} />
+              <${Button} icon="down" kind="icon" title=${`Game ${game.number} nach hinten`} disabled=${fearless.busy || game.number === series.games.length}
+                onClick=${() => move(series, game.number, 1)} />
+            </div>` : null}`}
             onLoad=${(entry, without) => loadGame(series, game, without)} />`)}
         </ul>`}
       </section>`;
     })}
+    ${trash}
   </div>`;
 }
 
-function ArchiveEntry({ entry, data, advancedTips, current, onLoad, onRemove, heading = null, badge = null }) {
+/**
+ * Auswahl für „+“ an einer Serie: Drafts aus „Drafts“, die zu keiner Serie gehören und keinen hier schon gespielten
+ * Champion enthalten. Der gewählte kommt als letztes Spiel ohne Ergebnis dazu.
+ */
+function AddGamePicker({ series, allSeries, data, busy, onAdd, onClose }) {
+  const [state, setState] = useState({ list: null, error: null });
+  useEffect(() => {
+    let active = true;
+    api.get('/api/draft-archive').then((list) => active && setState({ list, error: null }))
+      .catch((error) => active && setState({ list: null, error }));
+    return () => {
+      active = false;
+    };
+  }, []);
+  const { list, error } = state;
+  const [shown, setShown] = useState(ARCHIVE_PAGE);
+  const body = () => {
+    if (error) {
+      return html`<${ErrorNote} prefix="Drafts nicht verfügbar" error=${error} />`;
+    }
+    if (!list) {
+      return html`<${Loading} />`;
+    }
+    const taken = new Set(series.games.flatMap((g) => [...g.ally, ...g.enemy].map((s) => s.champion)));
+    const seriesGames = allSeries.flatMap((s) => s.games);
+    const fits = list.entries.filter((entry) => !seriesGames.some((game) => draftChanges(entry, game) === 0)
+      && ![...entry.ally, ...entry.enemy].some((s) => taken.has(s.champion)));
+    if (fits.length === 0) {
+      return html`<p class="muted small">Kein passender Draft unter „Drafts“. Es fehlen Drafts, die schon zu einer Serie gehören
+        oder einen hier schon gespielten Champion enthalten.</p>`;
+    }
+    const team = (slots) => slots.map((slot) => {
+      const champion = data.championByKey.get(slot.champion);
+      return champion ? html`<${Img} key=${slot.champion} src=${champion.icon} size=${30} alt=${champion.name} />` : null;
+    });
+    return html`<ul class="draft-archive-list">
+      ${fits.slice(0, shown).map((entry) => html`<li key=${entry.id} class="draft-archive-entry">
+        <div class="draft-archive-meta">
+          <strong>${new Date(entry.savedAt).toLocaleString('de-DE', ARCHIVE_DATE)}</strong>
+          <span class="muted small">${patchLabel(entry.patch)}</span>
+        </div>
+        <div class="draft-archive-teams">
+          <div class="draft-archive-team ally" aria-label="Dein Team">${team(entry.ally)}</div>
+          <span class="muted small">vs</span>
+          <div class="draft-archive-team enemy" aria-label="Gegner">${team(entry.enemy)}</div>
+        </div>
+        <div class="draft-archive-bans"></div>
+        <div class="draft-archive-actions">
+          <${Button} icon="plus" disabled=${busy} onClick=${() => onAdd(entry)}>Als Game ${series.nextGame}<//>
+        </div>
+      </li>`)}
+    </ul>
+    <${ShowMore} shown=${shown} total=${fits.length} onMore=${() => setShown(shown + ARCHIVE_PAGE)} />`;
+  };
+  return html`<div class="draft-series-add" role="region" aria-label="Game hinzufügen">
+    <div class="draft-series-add-head">
+      <strong>Game aus „Drafts“ hinzufügen</strong>
+      <span class="muted small">${series.games.length} von ${series.maxGames} Games</span>
+      <${Button} icon="x" kind="icon" title="Schließen" onClick=${onClose} />
+    </div>
+    ${body()}
+  </div>`;
+}
+
+function ArchiveEntry({ entry, data, advancedTips, current, onLoad, onRemove, heading = null, badge = null, domId, focus = false, actions = null }) {
   const pick = (slot, team) => {
     const champion = data.championByKey.get(slot.champion);
     if (!champion) {
@@ -1545,7 +2219,7 @@ function ArchiveEntry({ entry, data, advancedTips, current, onLoad, onRemove, he
     </button>`;
   };
   const bans = entry.bans.map((key) => data.championByKey.get(key)).filter(Boolean);
-  return html`<li class=${`draft-archive-entry ${current ? 'current' : ''}`}>
+  return html`<li id=${domId} class=${`draft-archive-entry ${current ? 'current' : ''} ${focus ? 'focus' : ''}`}>
     <div class="draft-archive-meta">
       <strong>${heading || new Date(entry.savedAt).toLocaleString('de-DE', ARCHIVE_DATE)}</strong>
       <span class="muted small">${patchLabel(entry.patch)}</span>
@@ -1561,6 +2235,7 @@ function ArchiveEntry({ entry, data, advancedTips, current, onLoad, onRemove, he
       ${bans.map((champion) => html`<${Img} key=${champion.key} src=${champion.icon} size=${22} alt=${champion.name} />`)}
     </div>
     <div class="draft-archive-actions">
+      ${actions}
       <${Button} icon="download" onClick=${() => onLoad(entry)} tip=${advancedTips ? 'Ganzen Draft aufs Brett laden' : undefined}>Laden<//>
       ${onRemove ? html`<${Button} icon="trash" title="Aus dem Archiv löschen" onClick=${() => onRemove(entry)}
         tip=${advancedTips ? 'Aus dem Archiv löschen' : undefined} />` : null}

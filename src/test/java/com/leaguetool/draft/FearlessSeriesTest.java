@@ -110,4 +110,84 @@ class FearlessSeriesTest {
         assertThrows(IllegalArgumentException.class, () -> FearlessSeries.cleanLabel("a".repeat(61)));
         assertEquals("Scrim", series(Format.BO3).withLabel(" Scrim ").label());
     }
-}
+
+    @Test
+    void gamesCanBeReorderedWithResultsAndLocksFollowing() {
+        FearlessSeries series = series(Format.BO5)
+                .withGame(draft(0), Result.WIN, "", NOW)
+                .withGame(draft(10), Result.LOSS, "", NOW)
+                .withGame(draft(20), null, "", NOW);
+
+        FearlessSeries swapped = series.withOrder(List.of(2, 1, 3));
+        assertEquals(List.of(1, 2, 3), swapped.games().stream().map(FearlessSeries.Game::number).toList(), "Neu durchnummeriert");
+        assertEquals(draft(10), swapped.games().get(0).draft());
+        assertEquals(Result.LOSS, swapped.games().get(0).result(), "Ergebnis bleibt beim Spiel");
+        assertEquals(1, swapped.locked().get(11), "Champions aus dem früheren Spiel 2 gelten jetzt als Spiel 1");
+        assertEquals(10, swapped.lockedBefore(2).size());
+        assertTrue(swapped.lockedBefore(2).containsKey(11) && !swapped.lockedBefore(2).containsKey(1));
+        assertEquals(series.locked().keySet(), swapped.locked().keySet(), "Gesamtmenge der Sperren unverändert");
+
+        assertThrows(IllegalArgumentException.class, () -> series.withOrder(List.of(1, 2)));
+        assertThrows(IllegalArgumentException.class, () -> series.withOrder(List.of(1, 1, 2)));
+        assertThrows(IllegalArgumentException.class, () -> series.withOrder(List.of(1, 2, 4)));
+    }
+
+    @Test
+    void openSeriesCanHaveAChosenNumberOfGames() {
+        FearlessSeries open = new FearlessSeries("id", null, Format.OPEN, 2, NOW, null, List.of());
+        assertEquals(2, open.maxGames());
+        FearlessSeries one = open.withGame(draft(0), null, "", NOW);
+        assertFalse(one.decided());
+        FearlessSeries two = one.withGame(draft(10), Result.WIN, "", NOW);
+        assertTrue(two.decided(), "Nach der gewählten Spielzahl ist die Serie entschieden");
+        assertTrue(two.full());
+        assertThrows(IllegalStateException.class, () -> two.withAddedGame(draft(20), "", NOW, Map.of()));
+        assertEquals(2, two.withLabel("x").endedAt(NOW).withoutGame(1).maxGames(), "Die Spielzahl bleibt bei Änderungen");
+
+        assertEquals(FearlessSeries.MAX_GAMES, new FearlessSeries("id", null, Format.OPEN, 0, NOW, null, List.of()).maxGames());
+        assertEquals(FearlessSeries.MAX_GAMES, new FearlessSeries("id", null, Format.OPEN, 11, NOW, null, List.of()).maxGames());
+        assertEquals(3, new FearlessSeries("id", null, Format.BO3, 7, NOW, null, List.of()).maxGames(), "Bo3/Bo5 nach Format");
+        assertEquals(2, new FearlessSeries("id", null, Format.OPEN, 1, NOW, null, two.games()).maxGames(),
+                "Nie weniger als gespielte Spiele");
+    }
+
+    @Test
+    void numberOfGamesOfAnOpenSeriesCanBeChanged() {
+        FearlessSeries open = series(Format.OPEN).withGame(draft(0), null, "", NOW).withGame(draft(10), null, "", NOW);
+        assertEquals(4, open.withMaxGames(4).maxGames());
+        assertTrue(open.withMaxGames(2).decided(), "So viele wie gespielt: alle Spiele gespielt");
+        assertThrows(IllegalArgumentException.class, () -> open.withMaxGames(1), "Nicht unter gespielten Spielen");
+        assertThrows(IllegalArgumentException.class, () -> open.withMaxGames(11));
+        assertThrows(IllegalArgumentException.class, () -> series(Format.BO3).withMaxGames(2), "Bo3/Bo5 nach Format");
+    }
+
+    /** {@code draft} mit Champion {@code to} statt {@code from}. */
+    static Draft replaced(Draft draft, int from, int to) {
+        java.util.function.UnaryOperator<List<Slot>> swap = team -> team.stream()
+                .map(s -> s.champion() == from ? new Slot(to, s.forcedRole()) : s).toList();
+        return new Draft(swap.apply(draft.ally()), swap.apply(draft.enemy()), draft.bans());
+    }
+
+    @Test
+    void gameDraftCanBeReplacedButNotWithChampionsFromOtherGames() {
+        FearlessSeries series = series(Format.OPEN).withGame(draft(0), null, "", NOW)
+                .withGame(draft(10), Result.LOSS, "16.23.1", NOW).withGame(draft(20), null, "", NOW);
+        Draft changed = replaced(draft(10, 99), 11, 31);
+        FearlessSeries updated = series.withGameDraft(2, changed, Map.of());
+
+        FearlessSeries.Game game = updated.games().get(1);
+        assertEquals(changed, game.draft(), "Champions und Bans ersetzt");
+        assertEquals(Result.LOSS, game.result(), "Ergebnis bleibt");
+        assertEquals("16.23.1", game.patch());
+        assertEquals(2, updated.lockedBefore(3).get(31), "Neuer Champion sperrt ab Spiel 3");
+        assertFalse(updated.lockedBefore(3).containsKey(11), "Der ersetzte ist wieder frei");
+        assertEquals(3, updated.games().size());
+
+        assertThrows(IllegalArgumentException.class, () -> series.withGameDraft(2, replaced(draft(10), 11, 1), Map.of()),
+                "Champion aus Spiel 1");
+        assertThrows(IllegalArgumentException.class, () -> series.withGameDraft(2, replaced(draft(10), 11, 21), Map.of()),
+                "Champion aus dem späteren Spiel 3");
+        assertThrows(IllegalArgumentException.class, () -> series.withGameDraft(4, draft(40), Map.of()));
+        Draft partial = new Draft(draft(40).ally(), List.of(), List.of());
+        assertThrows(IllegalArgumentException.class, () -> series.withGameDraft(2, partial, Map.of()));
+    }}

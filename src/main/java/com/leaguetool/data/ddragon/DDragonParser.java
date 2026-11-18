@@ -1,7 +1,6 @@
 package com.leaguetool.data.ddragon;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leaguetool.model.Ability;
 import com.leaguetool.model.AbilitySlot;
 import com.leaguetool.model.BaseStats;
@@ -14,6 +13,7 @@ import com.leaguetool.model.Rune;
 import com.leaguetool.model.RuneTree;
 import com.leaguetool.model.SummonerSpell;
 import com.leaguetool.util.Text;
+import com.leaguetool.util.Json;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -28,20 +28,13 @@ import java.util.Set;
 /** Wandelt Data-Dragon-JSON in Modell-Records um. Zustandslos und threadsicher. */
 public final class DDragonParser {
 
-    private final ObjectMapper mapper;
-
     public DDragonParser() {
-        this(new ObjectMapper());
-    }
-
-    public DDragonParser(ObjectMapper mapper) {
-        this.mapper = mapper;
     }
 
     /** {@code api/versions.json}: neueste Version zuerst. */
     public List<String> parseVersions(String json) throws IOException {
         List<String> versions = new ArrayList<>();
-        for (JsonNode v : mapper.readTree(json)) {
+        for (JsonNode v : Json.MAPPER.readTree(json)) {
             versions.add(v.asText());
         }
         return versions;
@@ -49,9 +42,9 @@ public final class DDragonParser {
 
     /** {@code champion.json}: alle Champions, nach Name sortiert. */
     public List<Champion> parseChampions(String json) throws IOException {
-        JsonNode data = mapper.readTree(json).path("data");
+        JsonNode data = Json.MAPPER.readTree(json).path("data");
         List<Champion> result = new ArrayList<>();
-        for (JsonNode c : iterable(data.elements())) {
+        for (JsonNode c : data) {
             result.add(parseChampion(c));
         }
         result.sort(Comparator.comparing(Champion::name, String.CASE_INSENSITIVE_ORDER));
@@ -60,7 +53,7 @@ public final class DDragonParser {
 
     /** {@code champion/{id}.json}: Champion mit Passiv und Q/W/E/R. */
     public ChampionDetail parseChampionDetail(String json) throws IOException {
-        JsonNode data = mapper.readTree(json).path("data");
+        JsonNode data = Json.MAPPER.readTree(json).path("data");
         Iterator<JsonNode> it = data.elements();
         if (!it.hasNext()) {
             throw new IOException("Champion-Detail ohne Daten");
@@ -99,16 +92,15 @@ public final class DDragonParser {
         return new ChampionDetail(champion,
                 Text.htmlToPlain(c.path("lore").asText("")),
                 abilities,
-                strings(c.path("allytips")),
-                strings(c.path("enemytips")));
+                Json.strings(c.path("allytips")),
+                Json.strings(c.path("enemytips")));
     }
 
     /** {@code item.json}: alle Items, nach Name sortiert. */
     public List<Item> parseItems(String json) throws IOException {
-        JsonNode data = mapper.readTree(json).path("data");
+        JsonNode data = Json.MAPPER.readTree(json).path("data");
         List<Item> result = new ArrayList<>();
-        for (Iterator<Map.Entry<String, JsonNode>> it = data.fields(); it.hasNext(); ) {
-            Map.Entry<String, JsonNode> e = it.next();
+        for (Map.Entry<String, JsonNode> e : data.properties()) {
             int id;
             try {
                 id = Integer.parseInt(e.getKey());
@@ -124,7 +116,7 @@ public final class DDragonParser {
     /** {@code runesReforged.json}: Runenbäume in Data-Dragon-Reihenfolge. */
     public List<RuneTree> parseRuneTrees(String json) throws IOException {
         List<RuneTree> trees = new ArrayList<>();
-        for (JsonNode t : mapper.readTree(json)) {
+        for (JsonNode t : Json.MAPPER.readTree(json)) {
             int treeId = t.path("id").asInt();
             List<List<Rune>> slots = new ArrayList<>();
             JsonNode slotsNode = t.path("slots");
@@ -145,9 +137,9 @@ public final class DDragonParser {
 
     /** {@code summoner.json}: alle Beschwörerzauber, nach Name sortiert. */
     public List<SummonerSpell> parseSummonerSpells(String json) throws IOException {
-        JsonNode data = mapper.readTree(json).path("data");
+        JsonNode data = Json.MAPPER.readTree(json).path("data");
         List<SummonerSpell> result = new ArrayList<>();
-        for (JsonNode s : iterable(data.elements())) {
+        for (JsonNode s : data) {
             result.add(new SummonerSpell(
                     s.path("id").asText(""),
                     parseIntOr(s.path("key").asText(""), -1),
@@ -155,7 +147,7 @@ public final class DDragonParser {
                     Text.htmlToPlain(s.path("description").asText("")),
                     doubles(s.path("cooldown")),
                     s.path("summonerLevel").asInt(0),
-                    strings(s.path("modes")),
+                    Json.strings(s.path("modes")),
                     doubles(s.path("range")),
                     s.path("image").path("full").asText("")));
         }
@@ -185,7 +177,7 @@ public final class DDragonParser {
                 c.path("name").asText(""),
                 c.path("title").asText(""),
                 Text.htmlToPlain(c.path("blurb").asText("")),
-                strings(c.path("tags")),
+                Json.strings(c.path("tags")),
                 c.path("partype").asText(""),
                 new ChampionInfo(info.path("attack").asInt(), info.path("defense").asInt(),
                         info.path("magic").asInt(), info.path("difficulty").asInt()),
@@ -196,15 +188,13 @@ public final class DDragonParser {
     private Item parseItem(int id, JsonNode i) {
         JsonNode gold = i.path("gold");
         Map<String, Double> stats = new LinkedHashMap<>();
-        for (Iterator<Map.Entry<String, JsonNode>> it = i.path("stats").fields(); it.hasNext(); ) {
-            Map.Entry<String, JsonNode> e = it.next();
+        for (Map.Entry<String, JsonNode> e : i.path("stats").properties()) {
             if (e.getValue().isNumber()) {
                 stats.put(e.getKey(), e.getValue().asDouble());
             }
         }
         Set<Integer> maps = new HashSet<>();
-        for (Iterator<Map.Entry<String, JsonNode>> it = i.path("maps").fields(); it.hasNext(); ) {
-            Map.Entry<String, JsonNode> e = it.next();
+        for (Map.Entry<String, JsonNode> e : i.path("maps").properties()) {
             if (e.getValue().asBoolean(false)) {
                 int mapId = parseIntOr(e.getKey(), -1);
                 if (mapId >= 0) {
@@ -219,7 +209,7 @@ public final class DDragonParser {
                 i.path("description").asText(""),
                 new ItemGold(gold.path("base").asInt(), gold.path("total").asInt(), gold.path("sell").asInt(),
                         gold.path("purchasable").asBoolean(false)),
-                strings(i.path("tags")),
+                Json.strings(i.path("tags")),
                 stats,
                 ints(i.path("from")),
                 ints(i.path("into")),
@@ -275,23 +265,11 @@ public final class DDragonParser {
         return out;
     }
 
-    private static List<String> strings(JsonNode array) {
-        List<String> out = new ArrayList<>();
-        for (JsonNode n : array) {
-            out.add(n.asText());
-        }
-        return out;
-    }
-
     private static int parseIntOr(String s, int fallback) {
         try {
             return Integer.parseInt(s.trim());
         } catch (NumberFormatException e) {
             return fallback;
         }
-    }
-
-    private static <T> Iterable<T> iterable(Iterator<T> it) {
-        return () -> it;
     }
 }

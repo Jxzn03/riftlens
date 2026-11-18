@@ -1,9 +1,9 @@
 package com.leaguetool.web;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leaguetool.data.ddragon.DDragonClient;
 import com.leaguetool.data.ddragon.ImageRef;
 import com.leaguetool.cache.FileCache;
+import com.leaguetool.util.Json;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 
@@ -51,7 +51,6 @@ public final class WebServer implements AutoCloseable {
     private static final List<String> IMAGE_GROUPS = List.of("champion", "item", "spell", "passive", "profileicon");
 
     private final WebContext ctx;
-    private final ObjectMapper json = new ObjectMapper();
     private final ApiRoutes routes;
     private final EventHub events;
     private final HttpServer server;
@@ -63,18 +62,14 @@ public final class WebServer implements AutoCloseable {
 
     private WebServer(WebContext ctx, int port) throws IOException {
         this.ctx = ctx;
-        this.routes = new ApiRoutes(ctx, json);
-        this.events = new EventHub(json);
+        this.routes = new ApiRoutes(ctx, Json.MAPPER);
+        this.events = new EventHub(Json.MAPPER);
         byte[] random = new byte[32];
         new SecureRandom().nextBytes(random);
         this.token = Base64.getUrlEncoder().withoutPadding().encodeToString(random);
         InetAddress loopback = InetAddress.getByAddress(new byte[] {127, 0, 0, 1});
         this.server = HttpServer.create(new InetSocketAddress(loopback, port), 64);
-        this.executor = Executors.newFixedThreadPool(THREADS, r -> {
-            Thread t = new Thread(r, "lt-http");
-            t.setDaemon(true);
-            return t;
-        });
+        this.executor = Executors.newFixedThreadPool(THREADS, Thread.ofPlatform().daemon().name("lt-http").factory());
         this.host = "127.0.0.1:" + server.getAddress().getPort();
         this.cookieName = "lt_session_" + server.getAddress().getPort();
         server.setExecutor(executor);
@@ -198,7 +193,7 @@ public final class WebServer implements AutoCloseable {
             // Fehler beim Abruf externer Daten: Meldung an die Oberfläche statt abgebrochener Verbindung.
             throw new ApiException(502, WebContext.message(e));
         }
-        byte[] bytes = result instanceof byte[] raw ? raw : json.writeValueAsBytes(result);
+        byte[] bytes = result instanceof byte[] raw ? raw : Json.MAPPER.writeValueAsBytes(result);
         ex.getResponseHeaders().set("Cache-Control", "no-store");
         send(ex, 200, "application/json; charset=utf-8", bytes);
     }
@@ -328,7 +323,7 @@ public final class WebServer implements AutoCloseable {
 
     private void sendError(HttpExchange ex, int status, String message) {
         try {
-            send(ex, status, "application/json; charset=utf-8", json.writeValueAsBytes(Map.of("error", message)));
+            send(ex, status, "application/json; charset=utf-8", Json.MAPPER.writeValueAsBytes(Map.of("error", message)));
         } catch (IOException e) {
             ex.close();
         }

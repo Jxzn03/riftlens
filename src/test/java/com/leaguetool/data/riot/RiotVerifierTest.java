@@ -218,12 +218,6 @@ class RiotVerifierTest {
         }
 
         @Override
-        public List<LeagueEntry> leagueEntries(String queue, Tier tier, String division, int page) {
-            calls.add("entries");
-            return List.of();
-        }
-
-        @Override
         public List<LeagueEntry> apexLeague(String queue, Tier tier) {
             calls.add("apex");
             assertEquals(RiotApi.RANKED_SOLO_QUEUE, queue);
@@ -265,12 +259,6 @@ class RiotVerifierTest {
                 throw new RiotApiException(404, "Daten nicht gefunden (HTTP 404): /lol/match/v5/matches/" + matchId);
             }
             return m;
-        }
-
-        @Override
-        public JsonNode timeline(String matchId) {
-            calls.add("timeline:" + matchId);
-            return MAPPER.createObjectNode();
         }
 
         @Override

@@ -64,7 +64,7 @@ class DDragonClientTest {
         GameData online = service.loadLatest();
         assertFalse(online.offline());
         assertEquals(103, online.championById("Ahri").orElseThrow().key());
-        service.championDetail("Ahri");
+        service.championDetail(PATCH, "Ahri");
 
         http.setOffline(true);
         DDragonClient offlineClient = new DDragonClient(http, cache, "en_US", BASE);
@@ -78,7 +78,7 @@ class DDragonClientTest {
         assertEquals(PATCH, data.patch());
         assertTrue(data.offline());
         assertEquals(11, data.items().size());
-        assertEquals("Orb of Deception", offlineService.championDetail("Ahri").abilities().get(1).name());
+        assertEquals("Orb of Deception", offlineService.championDetail(PATCH, "Ahri").abilities().get(1).name());
     }
 
     @Test

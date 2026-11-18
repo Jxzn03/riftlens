@@ -18,7 +18,10 @@ public record TeamProfile(int champions, double physical, double magic, double t
         ratingByLength = List.copyOf(ratingByLength);
     }
 
-    /** @param priorGames Glättung wie in {@link DraftAnalyzer.Risk} */
+    /** Glättung der Spieldauer-Abschnitte (DraftGaps 1000 Spiele). */
+    public static final int PRIOR_GAMES = 1000;
+
+    /** @param priorGames Glättung je Abschnitt, Standard {@link #PRIOR_GAMES} */
     public static TeamProfile of(List<LolalyticsBuild> champions, int priorGames) {
         double physical = 0;
         double magic = 0;

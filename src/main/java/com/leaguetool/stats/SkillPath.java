@@ -14,7 +14,6 @@ import java.util.Map;
 public final class SkillPath {
 
     public static final int LEVELS = 18;
-    private static final int ULTIMATE_LEVEL = 6;
     private static final int MAX_RANK = 5;
 
     private SkillPath() {

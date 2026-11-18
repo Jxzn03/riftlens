@@ -37,7 +37,6 @@ public final class ItemStatParser {
 
     private static final Pattern STATS_BLOCK = Pattern.compile("(?is)<stats>(.*?)</stats>");
     private static final Pattern LINE = Pattern.compile("^([+-]?\\d+(?:\\.\\d+)?)\\s*(%)?\\s*(\\S.*)$");
-    private static final Pattern SPACES = Pattern.compile("\\s+");
 
     /** Englischer Stat-Name (klein, normalisiert) → Typ ohne bzw. mit "%". */
     private static final Map<String, Alias> NAMES = buildNames();
@@ -149,7 +148,7 @@ public final class ItemStatParser {
         }
         List<String> lines = new ArrayList<>();
         for (String line : Text.htmlToPlain(m.group(1)).split("\n")) {
-            String s = SPACES.matcher(line.replace('•', ' ')).replaceAll(" ").strip();
+            String s = Text.collapseSpaces(line.replace('•', ' ')).strip();
             if (!s.isEmpty()) {
                 lines.add(s);
             }

@@ -13,11 +13,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class WikiAbilityParserTest {
 
     private static WikiAbility ahri(String ability) {
-        return WikiAbilityParser.parse(WikiTestPages.page(WikiTestPages.AHRI, "Template:Data Ahri/" + ability));
+        return WikiAbilityParser.parse(WikiTestPages.page(WikiTestPages.AHRI, "Template:Data Ahri/" + ability), null, null, null);
     }
 
     private static WikiAbility aatrox(String ability) {
-        return WikiAbilityParser.parse(WikiTestPages.page(WikiTestPages.AATROX, "Template:Data Aatrox/" + ability));
+        return WikiAbilityParser.parse(WikiTestPages.page(WikiTestPages.AATROX, "Template:Data Aatrox/" + ability), null, null, null);
     }
 
     @Test
@@ -122,7 +122,7 @@ class WikiAbilityParserTest {
         assertEquals(AbilitySlot.W, a.slot());
         assertEquals("Fallback", a.name());
         assertEquals("Text", a.description());
-        assertThrows(IllegalArgumentException.class, () -> WikiAbilityParser.parse("{{X\n|skill = Z\n}}"));
+        assertThrows(IllegalArgumentException.class, () -> WikiAbilityParser.parse("{{X\n|skill = Z\n}}", null, null, null));
         assertEquals(AbilitySlot.P, WikiAbilityParser.slotFromSkill("I").orElseThrow());
         assertTrue(WikiAbilityParser.slotFromSkill("Z").isEmpty());
     }

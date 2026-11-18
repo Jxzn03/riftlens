@@ -20,7 +20,7 @@ const DETAIL_TABS = [
 /** Nachkommastellen der Winrates auf der Champions-Seite. */
 const WR_DECIMALS = 2;
 /** Wartezeit, bevor eine Champion-Seite bei Lolalytics angefragt wird (Durchklicken der Liste). */
-export const REPORT_DELAY = 350;
+const REPORT_DELAY = 350;
 
 /** Mit Rollenfilter fallen Champions weg, deren angezeigte Pickrate (in %) höchstens so hoch ist. */
 const MAX_HIDDEN_ROLE_PICK_RATE = 0.2;
@@ -320,12 +320,12 @@ function SkillPathGrid({ path }) {
   </div>`;
 }
 
-export function SkillOrder({ order, separator }) {
+function SkillOrder({ order, separator }) {
   return html`<span class="skills">${order.map((slot, i) => html`<span key=${i} class="skills-part">${i > 0 ? html`<span class="skills-sep">${separator}</span>` : null}<kbd>${slot}</kbd></span>`)}</span>`;
 }
 
 /** Report des Champions auf seiner Rolle; eine neue Rolle lädt erst dann ihre Daten. */
-export function useChampionReport(champion, role) {
+function useChampionReport(champion, role) {
   const url = useChampionStatsUrl(`/api/stats/report/${champion.key}`, role);
   const deferred = useDeferredUrl(url, REPORT_DELAY);
   return { ...useFetch(deferred), pending: !deferred };
@@ -335,7 +335,7 @@ export function useChampionReport(champion, role) {
  * Rollenwahl eines Champions für alle Reiter. „Auto“ nennt die gerade verwendete Rolle: den Rollenfilter oder die
  * häufigste Rolle laut Lolalytics (aus dem geladenen Report).
  */
-export function ChampionRoleSelect({ champion, roleState, report }) {
+function ChampionRoleSelect({ champion, roleState, report }) {
   const meta = useFetch(useStatsUrl('/api/stats/meta'), { keep: true });
   const advancedTips = useAdvancedTips();
   const roles = meta.data ? meta.data.roles : [];

@@ -1,7 +1,7 @@
 package com.leaguetool.data.itempassives;
 
+import com.leaguetool.data.UpdateReport;
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.leaguetool.cache.FileCache;
@@ -13,6 +13,7 @@ import com.leaguetool.data.GameData;
 import com.leaguetool.data.wiki.WikiClient;
 import com.leaguetool.data.wiki.WikiItems;
 import com.leaguetool.model.Item;
+import com.leaguetool.util.Json;
 
 import java.io.IOException;
 import java.time.LocalDate;
@@ -37,23 +38,6 @@ import java.util.regex.Pattern;
  */
 public final class ItemPassiveUpdater {
 
-    /**
-     * Ergebnis einer Prüfung.
-     *
-     * @param patch     geprüfter Patch, leer vor der ersten Prüfung
-     * @param checkedAt Datum der Prüfung (ISO)
-     * @param count     Anzahl der aktiven Effekte
-     * @param changes   automatisch übernommene Änderungen dieses Patches
-     * @param review    dauerhaft wirkende Texte, die nicht ausgewertet werden konnten
-     * @param notes     Hinweise zur Prüfung (Quellen, Abweichungen)
-     */
-    public record Report(String patch, String checkedAt, int count, List<String> changes, List<String> review,
-                         List<String> notes) {
-        static Report none() {
-            return new Report("", "", ItemPassives.baseline().size(), List.of(), List.of(), List.of());
-        }
-    }
-
     /** Text einer Quelle zu einem Item: Name der Passive → Zeilen. */
     record SourceItem(String name, Map<String, List<String>> passives) {
     }
@@ -70,21 +54,20 @@ public final class ItemPassiveUpdater {
     private static final double MAX_PLAUSIBLE_VALUE = 200;
     private static final double EPSILON = 1e-9;
 
-    private static final ObjectMapper MAPPER = new ObjectMapper();
     private static final Pattern STATS_BLOCK = Pattern.compile("(?is)<stats>.*?</stats>");
     private static final Pattern PASSIVE_SEGMENT = Pattern.compile("(?is)<passive>(.*?)</passive>(.*?)(?=<passive>|<active>|</mainText>|$)");
     private static final Pattern BR = Pattern.compile("(?i)<br\\s*/?>");
     private static final Pattern TAG = Pattern.compile("<[^>]+>");
 
     private final FileCache cache;
-    private volatile Report latest = Report.none();
+    private volatile UpdateReport latest = UpdateReport.none(ItemPassives.baseline().size());
 
     public ItemPassiveUpdater(FileCache cache) {
         this.cache = cache;
     }
 
     /** Ergebnis der letzten Prüfung. */
-    public Report latest() {
+    public UpdateReport latest() {
         return latest;
     }
 
@@ -94,7 +77,7 @@ public final class ItemPassiveUpdater {
      *
      * @param wiki Wiki-Client oder {@code null}, wenn das Wiki deaktiviert ist
      */
-    public Report update(GameData data, WikiClient wiki) {
+    public UpdateReport update(GameData data, WikiClient wiki) {
         List<String> sourceNotes = new ArrayList<>();
         List<ItemPassive> previous = ItemPassives.baseline();
         String previousPatch = "";
@@ -110,10 +93,10 @@ public final class ItemPassiveUpdater {
             List<String> notes = new ArrayList<>(sourceNotes);
             notes.addAll(merge.notes());
             List<String> changes = persist(data.patch(), previousPatch, merge);
-            latest = new Report(data.patch(), LocalDate.now().toString(), merge.passives().size(), changes, merge.review(), notes);
+            latest = new UpdateReport(data.patch(), LocalDate.now().toString(), merge.passives().size(), changes, merge.review(), notes);
         } catch (IOException | RuntimeException e) {
             ItemPassives.install(previous);
-            latest = new Report(data.patch(), LocalDate.now().toString(), previous.size(), List.of(), List.of(),
+            latest = new UpdateReport(data.patch(), LocalDate.now().toString(), previous.size(), List.of(), List.of(),
                     List.of("Prüfung fehlgeschlagen, letzter Stand bleibt aktiv: " + e.getMessage()));
         }
         return latest;
@@ -270,17 +253,9 @@ public final class ItemPassiveUpdater {
 
     private JsonNode readState() {
         try {
-            return cache.readText(FileCache.GLOBAL, STATE_KEY).map(ItemPassiveUpdater::parse).orElse(null);
+            return cache.readText(FileCache.GLOBAL, STATE_KEY).map(Json::parseOrThrow).orElse(null);
         } catch (IOException | RuntimeException e) {
             return null;
-        }
-    }
-
-    private static JsonNode parse(String json) {
-        try {
-            return MAPPER.readTree(json);
-        } catch (IOException e) {
-            throw new IllegalStateException(e);
         }
     }
 
@@ -299,14 +274,14 @@ public final class ItemPassiveUpdater {
 
     /** Speichert Stand und Änderungsverlauf; liefert die Änderungen des aktuellen Patches. */
     private List<String> persist(String patch, String previousPatch, Merge merge) throws IOException {
-        ObjectNode state = MAPPER.createObjectNode();
+        ObjectNode state = Json.MAPPER.createObjectNode();
         state.put("patch", patch);
         ArrayNode array = state.putArray("passives");
         for (ItemPassive p : merge.passives()) {
             array.addObject().put("itemId", p.itemId()).put("itemName", p.itemName()).put("passive", p.passive())
                     .put("type", p.type().name()).put("value", p.value());
         }
-        cache.writeText(FileCache.GLOBAL, STATE_KEY, MAPPER.writerWithDefaultPrettyPrinter().writeValueAsString(state));
+        cache.writeText(FileCache.GLOBAL, STATE_KEY, Json.pretty(state));
 
         ArrayNode history = readHistory();
         if (!merge.changes().isEmpty()) {
@@ -316,7 +291,7 @@ public final class ItemPassiveUpdater {
             while (history.size() > MAX_HISTORY) {
                 history.remove(0);
             }
-            cache.writeText(FileCache.GLOBAL, HISTORY_KEY, MAPPER.writerWithDefaultPrettyPrinter().writeValueAsString(history));
+            cache.writeText(FileCache.GLOBAL, HISTORY_KEY, Json.pretty(history));
         }
         List<String> changes = new ArrayList<>();
         for (JsonNode entry : history) {
@@ -329,10 +304,10 @@ public final class ItemPassiveUpdater {
 
     private ArrayNode readHistory() {
         try {
-            JsonNode node = cache.readText(FileCache.GLOBAL, HISTORY_KEY).map(ItemPassiveUpdater::parse).orElse(null);
-            return node instanceof ArrayNode array ? array : MAPPER.createArrayNode();
+            JsonNode node = cache.readText(FileCache.GLOBAL, HISTORY_KEY).map(Json::parseOrThrow).orElse(null);
+            return node instanceof ArrayNode array ? array : Json.MAPPER.createArrayNode();
         } catch (IOException | RuntimeException e) {
-            return MAPPER.createArrayNode();
+            return Json.MAPPER.createArrayNode();
         }
     }
 }

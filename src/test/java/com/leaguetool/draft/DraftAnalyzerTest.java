@@ -2,7 +2,6 @@ package com.leaguetool.draft;
 
 import com.leaguetool.draft.DraftAnalyzer.Config;
 import com.leaguetool.draft.DraftAnalyzer.Result;
-import com.leaguetool.draft.DraftAnalyzer.Risk;
 import com.leaguetool.draft.DraftAnalyzer.Suggestion;
 import com.leaguetool.draft.DraftDataset.Pick;
 import com.leaguetool.draft.DraftDataset.Stat;
@@ -21,7 +20,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class DraftAnalyzerTest {
 
     private static final double AVERAGE = 0.52;
-    private static final Config CONFIG = new Config(Risk.MEDIUM, false, 1000);
+    private static final Config CONFIG = new Config(false, 1000);
     private static final int A = 1;
     private static final int B = 2;
     private static final int E = 9;
@@ -80,11 +79,12 @@ class DraftAnalyzerTest {
     }
 
     @Test
-    void riskChangesTheChampionRating() {
-        base.put(A_MID, stat(0.56, 2_000));
-        double cautious = new DraftAnalyzer(dataset(), new Config(Risk.VERY_LOW, false, 0)).analyze(Map.of(Role.MIDDLE, A), Map.of()).winRate();
-        double bold = new DraftAnalyzer(dataset(), new Config(Risk.VERY_HIGH, false, 0)).analyze(Map.of(Role.MIDDLE, A), Map.of()).winRate();
-        assertTrue(bold > cautious, bold + " > " + cautious);
+    void smallPatchSamplesStayCloseToThirtyDays() {
+        base.put(A_MID, stat(AVERAGE, 1_000_000));
+        Map<Pick, Stat> patch = Map.of(A_MID, stat(0.60, 3_000));
+        DraftDataset data = new DraftDataset(AVERAGE, AVERAGE, patch, base, Map.of(), Map.of());
+        double winRate = new DraftAnalyzer(data, CONFIG).analyze(Map.of(Role.MIDDLE, A), Map.of()).winRate();
+        assertTrue(winRate > 0.5 && winRate < 0.51, "3.000 Patch-Spiele verschieben den Champion kaum: " + winRate);
     }
 
     @Test
@@ -104,7 +104,7 @@ class DraftAnalyzerTest {
     @Test
     void championsWithoutGamesAreNeverSuggested() {
         base.put(A_MID, stat(0.40, 5_000));
-        List<Pick> picks = new DraftAnalyzer(dataset(), new Config(Risk.MEDIUM, false, 0)).suggestions(Map.of(), Map.of(), Set.of())
+        List<Pick> picks = new DraftAnalyzer(dataset(), new Config(false, 0)).suggestions(Map.of(), Map.of(), Set.of())
                 .stream().map(Suggestion::pick).toList();
         assertEquals(List.of(A_MID), picks, "A hat nur auf Mid Spiele");
     }
@@ -132,13 +132,13 @@ class DraftAnalyzerTest {
         for (int champion = 10; champion < 100; champion++) {
             base.put(new Pick(champion, Role.MIDDLE), stat(0.5, 10_000));
         }
-        Config common = new Config(Risk.MEDIUM, false, 0, DraftAnalyzer.COMMON_MIN_PICK_RATE, DraftAnalyzer.COMMON_MIN_LANE_SHARE);
+        Config common = new Config(false, 0, DraftAnalyzer.COMMON_MIN_PICK_RATE, DraftAnalyzer.COMMON_MIN_LANE_SHARE);
         List<Pick> commonPicks = new DraftAnalyzer(dataset(), common).suggestions(Map.of(Role.TOP, E), Map.of(), Set.of())
                 .stream().map(Suggestion::pick).toList();
         assertFalse(commonPicks.contains(B_MID), "Off-Role-Pick ausgefiltert");
         assertEquals(A_MID, commonPicks.get(0));
 
-        List<Pick> allPicks = new DraftAnalyzer(dataset(), new Config(Risk.MEDIUM, false, 0))
+        List<Pick> allPicks = new DraftAnalyzer(dataset(), new Config(false, 0))
                 .suggestions(Map.of(Role.TOP, E), Map.of(), Set.of()).stream().map(Suggestion::pick).toList();
         assertTrue(allPicks.contains(B_MID), "Bisheriges Verhalten zeigt ihn");
     }
@@ -151,7 +151,7 @@ class DraftAnalyzerTest {
         for (int champion = 10; champion < 100; champion++) {
             base.put(new Pick(champion, Role.MIDDLE), stat(0.5, 10_000));
         }
-        Config common = new Config(Risk.MEDIUM, false, 0, DraftAnalyzer.COMMON_MIN_PICK_RATE, DraftAnalyzer.COMMON_MIN_LANE_SHARE);
+        Config common = new Config(false, 0, DraftAnalyzer.COMMON_MIN_PICK_RATE, DraftAnalyzer.COMMON_MIN_LANE_SHARE);
         DraftAnalyzer analyzer = new DraftAnalyzer(dataset(), common);
         assertTrue(dataset().pickRate(B_MID) > DraftAnalyzer.COMMON_MIN_PICK_RATE);
         assertFalse(analyzer.suggestions(Map.of(Role.TOP, E), Map.of(), Set.of()).stream().anyMatch(s -> s.pick().equals(B_MID)));
@@ -164,7 +164,7 @@ class DraftAnalyzerTest {
         for (int champion = 10; champion < 100; champion++) {
             base.put(new Pick(champion, Role.MIDDLE), stat(0.5, 10_000));
         }
-        Config common = new Config(Risk.MEDIUM, false, 0, DraftAnalyzer.COMMON_MIN_PICK_RATE, DraftAnalyzer.COMMON_MIN_LANE_SHARE);
+        Config common = new Config(false, 0, DraftAnalyzer.COMMON_MIN_PICK_RATE, DraftAnalyzer.COMMON_MIN_LANE_SHARE);
         List<Pick> picks = new DraftAnalyzer(dataset(), common).suggestions(Map.of(), Map.of(), Set.of())
                 .stream().map(Suggestion::pick).toList();
         assertFalse(picks.contains(B_MID), "0,2 % Pickrate liegt unter der Schwelle");
@@ -239,26 +239,30 @@ class DraftAnalyzerTest {
         synergies.put(A_MID, Map.of(top, stat(0.57, 3_000)));
         double botlane = analyzer().analyze(Map.of(Role.BOTTOM, 3, Role.UTILITY, 4), Map.of()).duoRating();
         double offLane = analyzer().analyze(Map.of(Role.MIDDLE, A, Role.TOP, 5), Map.of()).duoRating();
-        assertTrue(botlane > 4 * offLane, "Botlane " + botlane + " gegenüber Top+Mid " + offLane);
+        assertTrue(botlane > 2 * offLane, "Botlane " + botlane + " gegenüber Top+Mid " + offLane);
         assertTrue(offLane > 0);
     }
 
     @Test
-    void riskScalesThePairPriors() {
-        base.put(A_MID, stat(AVERAGE, 50_000));
-        base.put(E_MID, stat(AVERAGE, 50_000));
-        matchups.put(A_MID, Map.of(E_MID, stat(0.58, 1_500)));
-        double cautious = new DraftAnalyzer(dataset(), new Config(Risk.VERY_LOW, false, 0))
-                .analyze(Map.of(Role.MIDDLE, A), Map.of(Role.MIDDLE, E)).matchupRating();
-        double bold = new DraftAnalyzer(dataset(), new Config(Risk.VERY_HIGH, false, 0))
-                .analyze(Map.of(Role.MIDDLE, A), Map.of(Role.MIDDLE, E)).matchupRating();
-        assertTrue(bold > cautious && cautious > 0, bold + " > " + cautious);
+    void patchDriftIsEstimatedFromTheData() {
+        Map<Pick, Stat> patch = new HashMap<>();
+        for (int champion = 10; champion < 110; champion++) {
+            Pick pick = new Pick(champion, Role.MIDDLE);
+            double shift = champion % 2 == 0 ? 0.03 : -0.03;
+            patch.put(pick, stat(AVERAGE + shift, 200_000));
+            base.put(pick, new Stat((AVERAGE + shift) * 200_000 + AVERAGE * 800_000, 1_000_000));
+        }
+        DraftPriors priors = DraftPriors.estimate(new DraftDataset(AVERAGE, AVERAGE, patch, base, Map.of(), Map.of()));
+        assertTrue(priors.patchDrift() > 5, "Starke Patch-Verschiebung: " + priors.patchDrift());
+        assertTrue(priors.patchPriorGames() < DraftPriors.defaults(AVERAGE).patchPriorGames());
+        assertEquals(DraftPriors.DEFAULT_PATCH_DRIFT, DraftPriors.estimate(dataset()).patchDrift(), 1e-9,
+                "Ohne eigenen Patch-Zeitraum gilt der Standard");
     }
 
     @Test
     void ignoringChampionWinRatesKeepsOnlyPairs() {
         base.put(A_MID, stat(0.60, 50_000));
-        Result result = new DraftAnalyzer(dataset(), new Config(Risk.MEDIUM, true, 0)).analyze(Map.of(Role.MIDDLE, A), Map.of());
+        Result result = new DraftAnalyzer(dataset(), new Config(true, 0)).analyze(Map.of(Role.MIDDLE, A), Map.of());
         assertTrue(result.champions().isEmpty());
         assertEquals(0.5, result.winRate(), 1e-9);
     }

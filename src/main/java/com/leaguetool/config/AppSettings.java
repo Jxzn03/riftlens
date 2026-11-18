@@ -21,8 +21,17 @@ public final class AppSettings {
 
     public static final String ENV_RIOT_KEY = "RIOT_API_KEY";
     public static final String FILE_NAME = "settings.properties";
-    /** Wählbare Größen des Draft-Archivs, die erste ist der Standard. */
-    public static final java.util.List<Integer> DRAFT_ARCHIVE_LIMITS = java.util.List.of(10, 25, 50, 100);
+    /** Wählbare Größen des Draft-Archivs. */
+    public static final java.util.List<Integer> DRAFT_ARCHIVE_LIMITS = java.util.List.of(10, 25, 50, 100, 250, 500, 1000);
+    /** Standardgröße des Draft-Archivs ohne gespeicherte Einstellung oder bei unbekanntem Wert. */
+    public static final int DRAFT_ARCHIVE_DEFAULT = 100;
+    /**
+     * Wählbare Zahl beendeter Fearless-Serien. Eigene Grenze, weil jede Fearless-Aktion den ganzen Serienstand überträgt
+     * (eine Serie wiegt 3 bis 11 KB); die Games bleiben zusätzlich als Drafts im Archiv.
+     */
+    public static final java.util.List<Integer> FEARLESS_SERIES_LIMITS = java.util.List.of(10, 25, 50, 100);
+    /** Standardzahl beendeter Fearless-Serien. */
+    public static final int FEARLESS_SERIES_DEFAULT = 50;
 
     private static final String KEY_LOCALE = "ddragon.locale";
     private static final String KEY_OFFLINE = "offline";
@@ -128,12 +137,12 @@ public final class AppSettings {
         props.setProperty("lcu.sync", Boolean.toString(enabled));
     }
 
-    /** Wie viele vollständige Drafts das Archiv behält (10, 25, 50 oder 100). */
+    /** Wie viele vollständige Drafts das Archiv behält (10, 25, 50, 100, 250, 500 oder 1000; Standard 100). */
     public synchronized int draftArchiveLimit() {
         try {
             return draftArchiveLimit(Integer.parseInt(props.getProperty("draft.archive.limit", "")));
         } catch (NumberFormatException e) {
-            return DRAFT_ARCHIVE_LIMITS.get(0);
+            return DRAFT_ARCHIVE_DEFAULT;
         }
     }
 
@@ -141,9 +150,27 @@ public final class AppSettings {
         props.setProperty("draft.archive.limit", Integer.toString(draftArchiveLimit(limit)));
     }
 
-    /** Erlaubte Archivgröße; unbekannte Werte ergeben den Standard. */
+    /** Erlaubte Archivgröße; unbekannte Werte ergeben den Standard ({@link #DRAFT_ARCHIVE_DEFAULT}). */
     public static int draftArchiveLimit(int requested) {
-        return DRAFT_ARCHIVE_LIMITS.contains(requested) ? requested : DRAFT_ARCHIVE_LIMITS.get(0);
+        return DRAFT_ARCHIVE_LIMITS.contains(requested) ? requested : DRAFT_ARCHIVE_DEFAULT;
+    }
+
+    /** Wie viele beendete Fearless-Serien behalten werden (10, 25, 50 oder 100; Standard 50). */
+    public synchronized int fearlessSeriesLimit() {
+        try {
+            return fearlessSeriesLimit(Integer.parseInt(props.getProperty("fearless.series.limit", "")));
+        } catch (NumberFormatException e) {
+            return FEARLESS_SERIES_DEFAULT;
+        }
+    }
+
+    public synchronized void setFearlessSeriesLimit(int limit) {
+        props.setProperty("fearless.series.limit", Integer.toString(fearlessSeriesLimit(limit)));
+    }
+
+    /** Erlaubte Zahl beendeter Serien; unbekannte Werte ergeben den Standard ({@link #FEARLESS_SERIES_DEFAULT}). */
+    public static int fearlessSeriesLimit(int requested) {
+        return FEARLESS_SERIES_LIMITS.contains(requested) ? requested : FEARLESS_SERIES_DEFAULT;
     }
 
     /** Von Hand gewählter League-Ordner für den Client-Abgleich; leer = automatisch suchen. */

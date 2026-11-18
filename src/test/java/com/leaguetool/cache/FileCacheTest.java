@@ -37,7 +37,7 @@ class FileCacheTest {
                 java.nio.file.attribute.FileTime.from(java.time.Instant.now().minusSeconds(3600)));
         java.time.Instant patchChange = java.time.Instant.now().minusSeconds(60);
 
-        assertTrue(cache.isFresh(FileCache.GLOBAL, "wiki/x.json", Duration.ofDays(3)));
+        assertTrue(cache.isFresh(FileCache.GLOBAL, "wiki/x.json", Duration.ofDays(3), null));
         assertFalse(cache.isFresh(FileCache.GLOBAL, "wiki/x.json", Duration.ofDays(3), patchChange));
 
         FileCache.CacheResult offline = cache.getFreshOrStale(FileCache.GLOBAL, "wiki/x.json", Duration.ofDays(3), patchChange,
@@ -49,19 +49,6 @@ class FileCacheTest {
                 () -> "neu");
         assertEquals("neu", online.content());
         assertTrue(cache.isFresh(FileCache.GLOBAL, "wiki/x.json", Duration.ofDays(3), patchChange));
-    }
-
-    @Test
-    void getOrFetchCallsFetcherOnlyOnce() throws IOException {
-        FileCache cache = new FileCache(tmp);
-        int[] calls = {0};
-        FileCache.IoSupplier<String> fetcher = () -> {
-            calls[0]++;
-            return "value";
-        };
-        assertEquals("value", cache.getOrFetch("16.22.1", "a.json", fetcher));
-        assertEquals("value", cache.getOrFetch("16.22.1", "a.json", fetcher));
-        assertEquals(1, calls[0]);
     }
 
     @Test

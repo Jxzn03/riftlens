@@ -174,6 +174,18 @@ class DraftArchiveTest {
     }
 
     @Test
+    void validJsonOfTheWrongShapeIsKeptAsideToo() throws IOException {
+        for (String content : List.of("[]", "\"x\"", "null", "")) {
+            Files.deleteIfExists(tmp.resolve("draft-archive.json.bad"));
+            Files.writeString(file(), content);
+            DraftArchive archive = archive();
+            assertTrue(archive.entries(LIMIT).isEmpty());
+            archive.record(numbered(0), "16.22.1", LIMIT);
+            assertEquals(content, Files.readString(tmp.resolve("draft-archive.json.bad")));
+        }
+    }
+
+    @Test
     void damagedEntriesAreSkipped() throws IOException {
         Files.writeString(file(), """
                 {"version":1,"entries":[
@@ -189,4 +201,214 @@ class DraftArchiveTest {
         assertEquals("b", entries.get(0).id());
         assertNull(entries.get(0).draft().ally().get(0).forcedRole());
     }
-}
+
+    /** Uhr, die sich von Hand vorstellen lässt. */
+    private static final class MovableClock extends Clock {
+        private Instant now = Instant.parse("2026-11-14T12:00:00Z");
+
+        void advance(java.time.Duration duration) {
+            now = now.plus(duration);
+        }
+
+        @Override
+        public java.time.ZoneId getZone() {
+            return ZoneOffset.UTC;
+        }
+
+        @Override
+        public Clock withZone(java.time.ZoneId zone) {
+            return this;
+        }
+
+        @Override
+        public Instant instant() {
+            return now;
+        }
+    }
+
+    @Test
+    void deletedEntryGoesToTrashAndCanBeRestoredInItsPlace() throws IOException {
+        MovableClock clock = new MovableClock();
+        DraftArchive archive = new DraftArchive(file(), clock);
+        String older = archive.record(numbered(0), "16.22.1", LIMIT).entry().id();
+        clock.advance(java.time.Duration.ofMinutes(5));
+        String newer = archive.record(numbered(20), "16.22.1", LIMIT).entry().id();
+
+        assertTrue(archive.delete(older));
+        assertEquals(1, archive.entries(LIMIT).size());
+        List<DraftArchive.TrashEntry> trash = new DraftArchive(file(), clock).trash();
+        assertEquals(1, trash.size(), "Papierkorb steht in der Datei");
+        assertEquals(older, trash.get(0).entry().id());
+        assertEquals(clock.instant().plus(DraftArchive.TRASH_RETENTION), trash.get(0).expiresAt());
+
+        assertTrue(archive.restore(older));
+        assertFalse(archive.restore(older), "Nur einmal wiederherstellbar");
+        assertEquals(List.of(newer, older), archive.entries(LIMIT).stream().map(DraftArchive.Entry::id).toList(),
+                "Wieder nach Speicherzeitpunkt einsortiert");
+        assertTrue(archive.trash().isEmpty());
+    }
+
+    @Test
+    void trashIsPurgedAfterSevenDays() throws IOException {
+        MovableClock clock = new MovableClock();
+        DraftArchive archive = new DraftArchive(file(), clock);
+        String id = archive.record(numbered(0), "16.22.1", LIMIT).entry().id();
+        archive.delete(id);
+
+        clock.advance(DraftArchive.TRASH_RETENTION.minusMinutes(1));
+        assertEquals(1, new DraftArchive(file(), clock).trash().size(), "Kurz vor Ablauf noch da");
+        clock.advance(java.time.Duration.ofMinutes(1));
+        assertTrue(new DraftArchive(file(), clock).trash().isEmpty(), "Nach 7 Tagen weg");
+        assertFalse(Files.readString(file()).contains(id), "Auch aus der Datei entfernt");
+        assertFalse(new DraftArchive(file(), clock).restore(id));
+    }
+
+    @Test
+    void trashCanBePurgedSinglyOrEmptiedAndSurvivesNewDrafts() throws IOException {
+        DraftArchive archive = archive();
+        String a = archive.record(numbered(0), "", LIMIT).entry().id();
+        String b = archive.record(numbered(20), "", LIMIT).entry().id();
+        archive.delete(a);
+        archive.delete(b);
+
+        archive.record(numbered(40), "", LIMIT);
+        assertEquals(2, archive.trash().size(), "Neue Drafts lassen den Papierkorb in Ruhe");
+        assertEquals(b, archive.trash().get(0).entry().id(), "Zuletzt gelöschter zuerst");
+        assertTrue(archive.purge(b));
+        assertFalse(archive.purge(b));
+        assertEquals(1, archive.emptyTrash());
+        assertTrue(new DraftArchive(file()).trash().isEmpty());
+    }
+
+    @Test
+    void draftInTrashDoesNotBlockTheSameDraftAsNew() throws IOException {
+        DraftArchive archive = archive();
+        String id = archive.record(numbered(0), "", LIMIT).entry().id();
+        archive.delete(id);
+        assertTrue(archive.record(numbered(0), "", LIMIT).saved(), "Der Papierkorb zählt nicht für die Varianten-Regel");
+    }
+
+    @Test
+    void matchingDraftsMoveToTrashAndBackTogether() throws IOException {
+        DraftArchive archive = archive();
+        String game = archive.record(numbered(0), "", LIMIT).entry().id();
+        String other = archive.record(numbered(20), "", LIMIT).entry().id();
+        Draft swapped = draft(6, 7, 8, 9, 10, 1, 2, 3, 4, 5);
+
+        assertEquals(1, archive.deleteMatching(List.of(swapped, numbered(40))), "Auch mit vertauschten Seiten, nur exakt gleiche");
+        assertEquals(List.of(other), archive.entries(LIMIT).stream().map(DraftArchive.Entry::id).toList());
+        assertEquals(game, archive.trash().get(0).entry().id());
+        assertEquals(0, archive.deleteMatching(List.of(numbered(40))));
+
+        assertEquals(1, archive.restoreMatching(List.of(numbered(0))));
+        assertEquals(2, archive.entries(LIMIT).size());
+        assertTrue(archive.trash().isEmpty());
+    }
+
+    @Test
+    void rolesOfAStoredDraftCanBeOverwrittenButNotItsChampions() throws IOException {
+        DraftArchive archive = archive();
+        Draft original = new Draft(numbered(0).ally(), numbered(0).enemy(), List.of(20));
+        String id = archive.record(original, "16.22.1", LIMIT).entry().id();
+
+        // Zeitpunkt, Patch und Bans bleiben, die Reihenfolge kommt vom Brett.
+        List<Slot> ally = List.of(new Slot(5, Role.UTILITY), new Slot(1, Role.TOP), new Slot(2, null), new Slot(3, null), new Slot(4, null));
+        DraftArchive.Entry updated = archive.updateRoles(id, ally, numbered(0).enemy());
+        assertEquals(ally, updated.draft().ally(), "Reihenfolge und Rollen wie auf dem Brett");
+        assertEquals(numbered(0).enemy(), updated.draft().enemy());
+        assertEquals(List.of(20), updated.draft().bans());
+
+        DraftArchive.Entry reloaded = archive().entries(LIMIT).get(0);
+        assertEquals(id, reloaded.id());
+        assertEquals("16.22.1", reloaded.patch());
+        assertEquals(ally, reloaded.draft().ally(), "Übersteht einen Neustart");
+        assertEquals(1, archive().entries(LIMIT).size(), "Kein neuer Eintrag");
+
+        List<Slot> otherChampion = List.of(new Slot(99, null), new Slot(2, null), new Slot(3, null), new Slot(4, null), new Slot(5, null));
+        assertThrows(IllegalArgumentException.class, () -> archive.updateRoles(id, otherChampion, numbered(0).enemy()));
+        assertThrows(IllegalArgumentException.class, () -> archive.updateRoles(id, numbered(0).enemy(), numbered(0).ally()),
+                "Vertauschte Seiten sind keine Rollenänderung");
+        List<Slot> doubleRole = List.of(new Slot(1, Role.TOP), new Slot(2, Role.TOP), new Slot(3, null), new Slot(4, null), new Slot(5, null));
+        assertThrows(IllegalArgumentException.class, () -> archive.updateRoles(id, doubleRole, numbered(0).enemy()));
+        assertNull(archive.updateRoles("unbekannt", ally, numbered(0).enemy()));
+    }
+
+    @Test
+    void rolesOfAChangedSeriesGameReachTheSameDraftEvenWithSwappedSides() throws IOException {
+        DraftArchive archive = archive();
+        archive.record(numbered(0), "", LIMIT);
+        archive.record(numbered(20), "", LIMIT);
+
+        // Das Spiel hat die Seiten vertauscht: dort ist 6..10 das eigene Team.
+        List<Slot> gameAlly = List.of(new Slot(6, Role.TOP), new Slot(7, null), new Slot(8, null), new Slot(9, null), new Slot(10, null));
+        Draft game = new Draft(gameAlly, numbered(0).ally(), List.of());
+        assertEquals(1, archive.updateRolesMatching(game));
+        DraftArchive.Entry entry = archive().entries(LIMIT).stream()
+                .filter(e -> e.draft().ally().get(0).champion() == 1).findFirst().orElseThrow();
+        assertEquals(Role.TOP, entry.draft().enemy().get(0).forcedRole(), "Rolle landet auf der richtigen Seite");
+        assertEquals(0, archive.updateRolesMatching(game), "Schon gleich: nichts zu schreiben");
+        assertEquals(0, archive.updateRolesMatching(numbered(40)));
+    }
+
+    @Test
+    void missingSeriesGameIsReconstructedOnlyWhenNoEqualDraftExistsAnywhere() throws IOException {
+        DraftArchive archive = archive();
+        archive.record(numbered(0), "", LIMIT);
+        Instant played = Instant.parse("2026-11-10T20:00:00Z");
+
+        assertNull(archive.reconstruct(numbered(0), played, "16.22.1"), "Gleicher Eintrag vorhanden");
+        String id = archive.entries(LIMIT).get(0).id();
+        archive.delete(id);
+        assertNull(archive.reconstruct(numbered(0), played, "16.22.1"), "Liegt im Papierkorb: dort wiederherstellen");
+        archive.purge(id);
+
+        DraftArchive.Entry rebuilt = archive.reconstruct(numbered(0), played, "16.22.1");
+        assertEquals(played, rebuilt.savedAt(), "Zeitpunkt des Spiels");
+        assertEquals("16.22.1", rebuilt.patch());
+        archive.record(numbered(20), "", LIMIT);
+        assertEquals(List.of(numbered(20), numbered(0)), archive().entries(LIMIT).stream().map(DraftArchive.Entry::draft).toList(),
+                "Nach Zeitpunkt einsortiert");
+        assertThrows(IllegalArgumentException.class, () -> archive.reconstruct(new Draft(List.of(), List.of(), List.of()), played, ""));
+    }
+
+    @Test
+    void shownAutoRolesAreStoredOnlyForOpenChampionsAndFollowEveryChange() throws IOException {
+        DraftArchive archive = archive();
+        Draft draft = new Draft(
+                List.of(new Slot(1, Role.TOP), new Slot(2, null), new Slot(3, null), new Slot(4, null), new Slot(5, null)),
+                numbered(0).enemy(), List.of());
+        // Für Champion 1 (fest) wird die Auto-Rolle verworfen, 99 steht nicht im Draft.
+        java.util.Map<Integer, Role> shown = java.util.Map.of(1, Role.JUNGLE, 2, Role.JUNGLE, 6, Role.TOP, 99, Role.MIDDLE);
+        String id = archive.record(draft, "16.22.1", shown, LIMIT).entry().id();
+
+        DraftArchive.Entry reloaded = archive().entries(LIMIT).get(0);
+        assertEquals(java.util.Map.of(2, Role.JUNGLE, 6, Role.TOP), reloaded.shownRoles(), "Nur Champions ohne feste Rolle");
+        assertEquals(draft, reloaded.draft(), "Gespeicherte Reihenfolge unverändert");
+        assertTrue(Files.readString(file()).contains("shownRoles"));
+
+        // Alte Dateien ohne das Feld bleiben lesbar.
+        archive.record(numbered(20), "", LIMIT);
+        assertTrue(archive().entries(LIMIT).stream().anyMatch(e -> e.shownRoles().isEmpty()));
+
+        // Rollen überschreiben: die jetzt angezeigten Auto-Rollen ersetzen die gespeicherten.
+        List<Slot> ally = List.of(new Slot(1, Role.TOP), new Slot(2, Role.JUNGLE), new Slot(3, null), new Slot(4, null), new Slot(5, null));
+        DraftArchive.Entry updated = archive.updateRoles(id, ally, draft.enemy(), java.util.Map.of(3, Role.MIDDLE, 2, Role.TOP));
+        assertEquals(java.util.Map.of(3, Role.MIDDLE), updated.shownRoles(), "2 ist jetzt fest, seine Auto-Rolle fällt weg");
+        assertTrue(archive.updateRoles(id, ally, draft.enemy()).shownRoles().isEmpty(), "Ohne Angabe: keine veralteten Rollen");
+    }
+
+    @Test
+    void matchingDraftIsReplacedWithItsIdAndDate() throws IOException {
+        DraftArchive archive = archive();
+        archive.record(numbered(0), "16.22.1", LIMIT);
+        archive.record(numbered(20), "", LIMIT);
+        String id = archive.entries(LIMIT).stream().filter(e -> e.draft().ally().get(0).champion() == 1).findFirst().orElseThrow().id();
+
+        Draft changed = draft(31, 2, 3, 4, 5, 6, 7, 8, 9, 10);
+        assertEquals(1, archive.replaceMatching(numbered(0), changed, java.util.Map.of()));
+        DraftArchive.Entry entry = archive().entries(LIMIT).stream().filter(e -> e.id().equals(id)).findFirst().orElseThrow();
+        assertEquals(changed, entry.draft());
+        assertEquals("16.22.1", entry.patch(), "Patch und ID bleiben");
+        assertEquals(2, archive().entries(LIMIT).size());
+        assertEquals(0, archive.replaceMatching(numbered(0), changed, java.util.Map.of()), "Alter Stand nicht mehr da");
+    }}

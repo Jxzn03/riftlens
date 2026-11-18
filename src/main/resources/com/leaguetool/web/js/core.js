@@ -125,7 +125,7 @@ export const api = {
 const responseCache = new Map();
 const CACHE_LIMIT = 300;
 
-export function clearResponseCache() {
+function clearResponseCache() {
   responseCache.clear();
 }
 
@@ -363,7 +363,7 @@ export function runePageRunes(page) {
 }
 
 /** Entfernt nach einem Patch unbekannte Runen und unpassende Shards; ältere oder kaputte Stände werden geleert. */
-export function sanitizeRunePage(page, data) {
+function sanitizeRunePage(page, data) {
   if (!page || typeof page !== 'object') {
     return EMPTY_RUNE_PAGE;
   }
@@ -569,7 +569,8 @@ export async function loadUiState() {
     }
     store.set(patch);
   } catch {
-    // Ohne gespeicherten Zustand starten
+    // Ladefehler (z. B. beschädigte Datei): nichts speichern, sonst würde der Standardzustand die Datei überschreiben
+    return;
   }
   lastSaved = snapshot();
   store.subscribe(scheduleSave);

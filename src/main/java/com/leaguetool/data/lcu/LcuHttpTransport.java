@@ -1,7 +1,9 @@
 package com.leaguetool.data.lcu;
 
+import com.leaguetool.data.http.Interrupts;
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+
+import com.leaguetool.util.Json;
 
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLEngine;
@@ -11,7 +13,6 @@ import javax.net.ssl.X509ExtendedTrustManager;
 import javax.net.ssl.X509TrustManager;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.InterruptedIOException;
 import java.net.Socket;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -36,7 +37,6 @@ public final class LcuHttpTransport implements LcuTransport {
 
     private static final Duration TIMEOUT = Duration.ofSeconds(3);
     private static final String CERTIFICATE = "riotgames.pem";
-    private static final ObjectMapper JSON = new ObjectMapper();
     private static volatile SSLContext riotContext;
 
     private final HttpClient http;
@@ -72,8 +72,7 @@ public final class LcuHttpTransport implements LcuTransport {
         try {
             response = http.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
         } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new InterruptedIOException("Abfrage des League-Clients abgebrochen");
+            throw Interrupts.toIo(e, "Abfrage des League-Clients abgebrochen");
         }
         int status = response.statusCode();
         // 404 bzw. 403: Der Endpunkt ist außerhalb der Champion-Auswahl nicht verfügbar.
@@ -87,7 +86,7 @@ public final class LcuHttpTransport implements LcuTransport {
             throw new IOException("Der League-Client antwortet mit HTTP " + status);
         }
         String body = response.body();
-        return body == null || body.isBlank() ? Optional.empty() : Optional.of(JSON.readTree(body));
+        return body == null || body.isBlank() ? Optional.empty() : Optional.of(Json.MAPPER.readTree(body));
     }
 
     /** TLS-Kontext, der nur Riots CA vertraut. */

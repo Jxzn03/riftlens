@@ -1,10 +1,11 @@
 package com.leaguetool.data.riot;
 
+import com.leaguetool.data.http.Interrupts;
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leaguetool.data.http.HttpFetcher;
 import com.leaguetool.data.http.HttpResult;
 import com.leaguetool.model.Tier;
+import com.leaguetool.util.Json;
 
 import java.io.IOException;
 import java.io.InterruptedIOException;
@@ -39,14 +40,12 @@ public final class RiotApiClient implements RiotApi {
     private static final long NANOS_PER_SECOND = 1_000_000_000L;
     private static final long MAX_RETRY_AFTER_SECONDS = 600;
     private static final Set<Integer> RETRYABLE_SERVER_STATUS = Set.of(500, 502, 503, 504);
-    private static final Set<String> DIVISIONS = Set.of("I", "II", "III", "IV");
 
     private final HttpFetcher http;
     private final Supplier<Optional<String>> apiKey;
     private final Platform platform;
     private final RateLimiter limiter;
     private final RateLimiter.TimeSource time;
-    private static final ObjectMapper MAPPER = new ObjectMapper();
 
     public RiotApiClient(HttpFetcher http, Supplier<Optional<String>> apiKey, Platform platform, RateLimiter limiter) {
         this(http, apiKey, platform, limiter, limiter.timeSource());
@@ -65,27 +64,6 @@ public final class RiotApiClient implements RiotApi {
     @Override
     public Platform platform() {
         return platform;
-    }
-
-    @Override
-    public List<LeagueEntry> leagueEntries(String queue, Tier tier, String division, int page) throws IOException {
-        if (tier.isApex()) {
-            throw new IllegalArgumentException("Für " + tier.label() + " apexLeague(...) verwenden");
-        }
-        if (division == null || !DIVISIONS.contains(division)) {
-            throw new IllegalArgumentException("Ungültige Division: " + division + " (erlaubt: I, II, III, IV)");
-        }
-        if (page < 1) {
-            throw new IllegalArgumentException("Seite muss mindestens 1 sein: " + page);
-        }
-        String url = platform.platformBaseUrl() + "/lol/league/v4/entries/" + segment(queue) + "/"
-                + tier.name() + "/" + division + "?page=" + page;
-        JsonNode root = getJson(url);
-        List<LeagueEntry> result = new ArrayList<>();
-        for (JsonNode e : root) {
-            result.add(parseEntry(e, queue, tier));
-        }
-        return result;
     }
 
     /** Einträge sind nach League Points absteigend sortiert. */
@@ -133,37 +111,13 @@ public final class RiotApiClient implements RiotApi {
     @Override
     public List<String> matchIdsByPuuid(String puuid, int queueId, int start, int count, Long startTimeEpochSec)
             throws IOException {
-        if (count < 1 || count > 100) {
-            throw new IllegalArgumentException("count muss zwischen 1 und 100 liegen: " + count);
-        }
-        if (start < 0) {
-            throw new IllegalArgumentException("start darf nicht negativ sein: " + start);
-        }
-        StringBuilder url = new StringBuilder(platform.matchBaseUrl())
-                .append("/lol/match/v5/matches/by-puuid/").append(segment(puuid)).append("/ids")
-                .append("?queue=").append(queueId)
-                .append("&start=").append(start)
-                .append("&count=").append(count);
-        if (startTimeEpochSec != null) {
-            url.append("&startTime=").append(startTimeEpochSec);
-        }
-        List<String> ids = new ArrayList<>();
-        for (JsonNode id : getJson(url.toString())) {
-            if (id.isTextual()) {
-                ids.add(id.asText());
-            }
-        }
-        return ids;
+        return matchIds(puuid, "?queue=" + queueId + "&start=" + start + "&count=" + count
+                + (startTimeEpochSec != null ? "&startTime=" + startTimeEpochSec : ""), start, count);
     }
 
     @Override
     public JsonNode match(String matchId) throws IOException {
         return getJson(platform.matchBaseUrl() + "/lol/match/v5/matches/" + segment(matchId));
-    }
-
-    @Override
-    public JsonNode timeline(String matchId) throws IOException {
-        return getJson(platform.matchBaseUrl() + "/lol/match/v5/matches/" + segment(matchId) + "/timeline");
     }
 
     @Override
@@ -204,6 +158,10 @@ public final class RiotApiClient implements RiotApi {
      * folgen über {@code start}.
      */
     public List<String> recentMatchIds(String puuid, int start, int count) throws IOException {
+        return matchIds(puuid, "?start=" + start + "&count=" + count, start, count);
+    }
+
+    private List<String> matchIds(String puuid, String query, int start, int count) throws IOException {
         if (count < 1 || count > 100) {
             throw new IllegalArgumentException("count muss zwischen 1 und 100 liegen: " + count);
         }
@@ -211,8 +169,7 @@ public final class RiotApiClient implements RiotApi {
             throw new IllegalArgumentException("start darf nicht negativ sein: " + start);
         }
         List<String> ids = new ArrayList<>();
-        for (JsonNode id : getJson(platform.matchBaseUrl() + "/lol/match/v5/matches/by-puuid/" + segment(puuid)
-                + "/ids?start=" + start + "&count=" + count)) {
+        for (JsonNode id : getJson(platform.matchBaseUrl() + "/lol/match/v5/matches/by-puuid/" + segment(puuid) + "/ids" + query)) {
             if (id.isTextual()) {
                 ids.add(id.asText());
             }
@@ -235,7 +192,7 @@ public final class RiotApiClient implements RiotApi {
             HttpResult r = http.get(url, headers);
             if (r.isSuccess()) {
                 try {
-                    return MAPPER.readTree(r.body());
+                    return Json.MAPPER.readTree(r.body());
                 } catch (IOException e) {
                     throw new IOException("Ungültige JSON-Antwort der Riot-API für " + path(url), e);
                 }
@@ -268,10 +225,7 @@ public final class RiotApiClient implements RiotApi {
         try {
             limiter.acquire();
         } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            InterruptedIOException ex = new InterruptedIOException("Abgebrochen: " + path(url));
-            ex.initCause(e);
-            throw ex;
+            throw Interrupts.toIo(e, "Abgebrochen: " + path(url));
         }
     }
 
@@ -279,10 +233,7 @@ public final class RiotApiClient implements RiotApi {
         try {
             time.sleepNanos(nanos);
         } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            InterruptedIOException ex = new InterruptedIOException("Abgebrochen: " + path(url));
-            ex.initCause(e);
-            throw ex;
+            throw Interrupts.toIo(e, "Abgebrochen: " + path(url));
         }
     }
 

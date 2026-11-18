@@ -1,12 +1,12 @@
 package com.leaguetool.data.wiki;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.leaguetool.cache.FileCache;
 import com.leaguetool.data.http.HttpFetcher;
 import com.leaguetool.model.AbilitySlot;
+import com.leaguetool.util.Json;
 
 import java.io.IOException;
 import java.net.URLEncoder;
@@ -59,7 +59,6 @@ public final class WikiClient {
     private final FileCache cache;
     private final String apiUrl;
     private final Supplier<Instant> notBefore;
-    private static final ObjectMapper MAPPER = new ObjectMapper();
 
     private final Object championLock = new Object();
     private volatile Map<String, WikiChampionData> championData;
@@ -268,7 +267,7 @@ public final class WikiClient {
 
     /** Holt alle Titel (in Blöcken zu max. 50) und fasst die Antworten zu einer zusammen. */
     private String fetchPages(List<String> titles) throws IOException {
-        ObjectNode merged = MAPPER.createObjectNode();
+        ObjectNode merged = Json.MAPPER.createObjectNode();
         ObjectNode query = merged.putObject("query");
         ArrayNode normalized = query.putArray("normalized");
         ArrayNode redirects = query.putArray("redirects");
@@ -280,7 +279,7 @@ public final class WikiClient {
             q.path("redirects").forEach(redirects::add);
             q.path("pages").forEach(pages::add);
         }
-        return MAPPER.writeValueAsString(merged);
+        return Json.MAPPER.writeValueAsString(merged);
     }
 
     private ParsedAbilities parseAbilities(WikiChampionData champion, List<Request> requests, String json)
@@ -338,7 +337,7 @@ public final class WikiClient {
     private JsonNode queryNode(String json) throws IOException {
         JsonNode root;
         try {
-            root = MAPPER.readTree(json);
+            root = Json.MAPPER.readTree(json);
         } catch (IOException e) {
             throw new IOException("Ungültige Wiki-Antwort (kein JSON): " + e.getMessage(), e);
         }

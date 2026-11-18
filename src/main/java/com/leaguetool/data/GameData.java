@@ -89,6 +89,11 @@ public final class GameData {
         return Optional.ofNullable(championsByKey.get(key));
     }
 
+    /** Name zum Champion-Key, sonst {@code "Champion <key>"}. */
+    public String championName(int key) {
+        return championByKey(key).map(Champion::name).orElse("Champion " + key);
+    }
+
     public Optional<Item> item(int id) {
         return Optional.ofNullable(itemsById.get(id));
     }

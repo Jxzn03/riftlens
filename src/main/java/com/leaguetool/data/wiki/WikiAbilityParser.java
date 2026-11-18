@@ -20,11 +20,6 @@ public final class WikiAbilityParser {
     private WikiAbilityParser() {
     }
 
-    /** Wie {@link #parse(String, String, AbilitySlot, String)} ohne Ersatzwerte. */
-    public static WikiAbility parse(String wikitext) {
-        return parse(wikitext, null, null, null);
-    }
-
     /**
      * Parst eine Ability-Seite.
      *

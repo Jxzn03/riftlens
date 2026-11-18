@@ -56,6 +56,11 @@ public record Item(
         return tags.contains("Boots");
     }
 
+    /** Fertige Boots (zweite Stufe oder höher), nicht die Basis-Boots. */
+    public boolean isFinalBoots() {
+        return isBoots() && depth >= 2;
+    }
+
     public boolean isTrinket() {
         return tags.contains("Trinket");
     }

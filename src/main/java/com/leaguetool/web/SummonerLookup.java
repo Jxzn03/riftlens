@@ -1,12 +1,12 @@
 package com.leaguetool.web;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leaguetool.cache.FileCache;
 import com.leaguetool.data.riot.LeagueEntry;
 import com.leaguetool.data.riot.RiotAccount;
 import com.leaguetool.data.riot.RiotApiClient;
 import com.leaguetool.data.riot.RiotApiException;
+import com.leaguetool.util.Json;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -48,7 +48,6 @@ final class SummonerLookup {
     private static final int MASTERY_COUNT = 10;
     private static final int PARALLEL_DOWNLOADS = 4;
     private static final int PRACTICE_TOOL_QUEUE = 3140;
-    private static final ObjectMapper JSON = new ObjectMapper();
     /** Nach Riots offizieller Liste (static.developer.riotgames.com/docs/lol/queues.json). */
     private static final Map<Integer, String> QUEUES = Map.ofEntries(
             Map.entry(0, "Custom Games"), Map.entry(1710, "Arena"), Map.entry(400, "Normal Draft"), Map.entry(420, "Ranked Solo/Duo"), Map.entry(430, "Normal Blind"),
@@ -91,7 +90,7 @@ final class SummonerLookup {
             return Dto.obj(
                     "gameName", account.gameName(), "tagLine", account.tagLine(), "platform", api.platform().id(),
                     "level", summoner.path("summonerLevel").asInt(),
-                    "icon", "/img/" + patch + "/profileicon/" + summoner.path("profileIconId").asInt() + ".png",
+                    "icon", Dto.patchIcon(patch, "profileicon", summoner.path("profileIconId").asInt() + ".png"),
                     "ranked", ranked.stream().filter(e -> RANKED_QUEUES.containsKey(e.queueType())).map(SummonerLookup::ranked).toList(),
                     "mastery", mastery(masteries),
                     "matches", matches.rows(), "mates", matches.mates(), "minSharedGames", MIN_SHARED_GAMES);
@@ -239,7 +238,7 @@ final class SummonerLookup {
     private boolean adoptLegacy(SummonerHistory history, String id) {
         try {
             Optional<String> legacy = cache.readText(FileCache.GLOBAL, SummonerHistory.LEGACY_PREFIX + id + ".json");
-            return legacy.isPresent() && history.add(id, JSON.readTree(legacy.get()));
+            return legacy.isPresent() && history.add(id, Json.MAPPER.readTree(legacy.get()));
         } catch (IOException e) {
             return false;
         }
@@ -252,11 +251,7 @@ final class SummonerLookup {
         if (missing.isEmpty()) {
             return;
         }
-        ExecutorService pool = Executors.newFixedThreadPool(PARALLEL_DOWNLOADS, r -> {
-            Thread t = new Thread(r, "lt-summoner");
-            t.setDaemon(true);
-            return t;
-        });
+        ExecutorService pool = Executors.newFixedThreadPool(PARALLEL_DOWNLOADS, Thread.ofPlatform().daemon().name("lt-summoner").factory());
         try {
             List<Future<?>> downloads = new ArrayList<>();
             for (String id : missing) {

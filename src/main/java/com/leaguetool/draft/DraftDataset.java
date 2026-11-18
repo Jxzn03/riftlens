@@ -104,6 +104,11 @@ public final class DraftDataset {
         return full;
     }
 
+    /** Werte je Champion und Rolle im gewählten Zeitraum. */
+    Map<Pick, Stat> selectedStats() {
+        return selected;
+    }
+
     /** Quelle → Gegner → Werte der Quelle gegen diesen Gegner. */
     Map<Pick, Map<Pick, Stat>> matchups() {
         return matchups;

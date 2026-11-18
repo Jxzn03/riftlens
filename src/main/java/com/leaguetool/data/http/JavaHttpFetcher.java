@@ -1,7 +1,6 @@
 package com.leaguetool.data.http;
 
 import java.io.IOException;
-import java.io.InterruptedIOException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -40,10 +39,7 @@ public final class JavaHttpFetcher implements HttpFetcher {
             HttpResponse<byte[]> response = client.send(builder.build(), HttpResponse.BodyHandlers.ofByteArray());
             return new HttpResult(response.statusCode(), response.body(), response.headers().map());
         } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            InterruptedIOException ex = new InterruptedIOException("Abgebrochen: " + url);
-            ex.initCause(e);
-            throw ex;
+            throw Interrupts.toIo(e, "Abgebrochen: " + url);
         }
     }
 }

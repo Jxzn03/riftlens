@@ -32,6 +32,14 @@ public final class DraftPriors {
     /** So viele Paarungen wiegt ein Standardwert; erst darüber bestimmen die geladenen Daten das Ergebnis. */
     static final int DEFAULT_PAIR_WEIGHT = 200;
     static final int DEFAULT_CHAMPION_WEIGHT = 40;
+    /**
+     * Standard-Verschiebung eines Champions zwischen aktuellem Patch und älteren Spielen der 30 Tage (gemessen All Ranks,
+     * Patch 16.22: 2,0 bis 2,1 Punkte, also rund 28.000 Prior-Spiele statt DraftGaps 1000).
+     */
+    static final double DEFAULT_PATCH_DRIFT = 2.0;
+    static final int DEFAULT_PATCH_WEIGHT = 40;
+    static final int MIN_PATCH_GAMES_FOR_ESTIMATE = 200;
+    static final int MIN_OLDER_GAMES_FOR_ESTIMATE = 1000;
     /** Paarungen mit weniger Spielen tragen zur Schätzung kaum bei und verrauschen sie nur. */
     static final int MIN_GAMES_FOR_ESTIMATE = 30;
     static final int MIN_CHAMPION_GAMES_FOR_ESTIMATE = 200;
@@ -43,14 +51,19 @@ public final class DraftPriors {
     private final Map<String, Spread> pairSpreads;
     private final Map<Role, Spread> championSpreads;
     private final double average;
+    private final Spread patchDrift;
 
-    private DraftPriors(Map<String, Spread> pairSpreads, Map<Role, Spread> championSpreads, double average) {
+    private DraftPriors(Map<String, Spread> pairSpreads, Map<Role, Spread> championSpreads, double average, Spread patchDrift) {
         this.pairSpreads = Map.copyOf(pairSpreads);
         this.championSpreads = Map.copyOf(championSpreads);
         this.average = average;
+        this.patchDrift = patchDrift;
     }
 
-    /** Gemessen in Emerald+ über 30 Tage; Botlane-Matchups ohne eigene Messung sind geschätzt. */
+    /**
+     * Gemessen in Emerald+ über 30 Tage, nachgezogen mit All bis Diamond+ (Nov. 2026): Botlane-Duo, Top/Mid gegen Support
+     * und Top+Mid als Duo. Das Botlane-Duo streut laut Schätzung um 7 bis 8 Punkte, für gängige Paare ist aber 10 genauer.
+     */
     private static Map<String, Double> defaults() {
         Map<String, Double> d = new HashMap<>();
         Role top = Role.TOP, jungle = Role.JUNGLE, mid = Role.MIDDLE, bot = Role.BOTTOM, sup = Role.UTILITY;
@@ -63,13 +76,13 @@ public final class DraftPriors {
         d.put(key(Kind.MATCHUP, top, jungle), 6.7);
         d.put(key(Kind.MATCHUP, top, mid), 7.1);
         d.put(key(Kind.MATCHUP, top, bot), 6.9);
-        d.put(key(Kind.MATCHUP, top, sup), 8.5);
+        d.put(key(Kind.MATCHUP, top, sup), 6.0);
         d.put(key(Kind.MATCHUP, jungle, mid), 7.8);
         d.put(key(Kind.MATCHUP, jungle, bot), 8.4);
         d.put(key(Kind.MATCHUP, jungle, sup), 7.5);
         d.put(key(Kind.MATCHUP, mid, bot), 4.8);
-        d.put(key(Kind.MATCHUP, mid, sup), 8.7);
-        d.put(key(Kind.DUO, bot, sup), 14.3);
+        d.put(key(Kind.MATCHUP, mid, sup), 7.0);
+        d.put(key(Kind.DUO, bot, sup), 10.0);
         d.put(key(Kind.DUO, jungle, mid), 5.2);
         d.put(key(Kind.DUO, jungle, top), 4.6);
         d.put(key(Kind.DUO, jungle, sup), 4.6);
@@ -77,7 +90,7 @@ public final class DraftPriors {
         d.put(key(Kind.DUO, mid, sup), 4.2);
         d.put(key(Kind.DUO, mid, bot), 4.5);
         d.put(key(Kind.DUO, top, bot), 3.6);
-        d.put(key(Kind.DUO, top, mid), 2.9);
+        d.put(key(Kind.DUO, top, mid), 3.8);
         d.put(key(Kind.DUO, top, sup), 3.2);
         return Map.copyOf(d);
     }
@@ -95,7 +108,7 @@ public final class DraftPriors {
 
     /** Nur die Standardwerte, ohne geladene Daten. */
     public static DraftPriors defaults(double average) {
-        return new DraftPriors(Map.of(), Map.of(), average);
+        return new DraftPriors(Map.of(), Map.of(), average, new Spread(DEFAULT_PATCH_DRIFT, 0));
     }
 
     /** Schätzt die Streuungen aus allen Paarungen und Champion-Werten (30 Tage) des Datensatzes. */
@@ -120,7 +133,48 @@ public final class DraftPriors {
         Map<Role, Spread> championSpreads = new EnumMap<>(Role.class);
         champions.forEach((role, observations) -> championSpreads.put(role,
                 pooled(observations, DEFAULT_CHAMPION_SPREAD, DEFAULT_CHAMPION_WEIGHT)));
-        return new DraftPriors(pairSpreads, championSpreads, average);
+        return new DraftPriors(pairSpreads, championSpreads, average, patchDrift(data));
+    }
+
+    /**
+     * Wie stark sich Champions zwischen dem gewählten Zeitraum (Patch) und den älteren Spielen der 30 Tage verschieben.
+     * Der Patch steckt in den 30 Tagen; verglichen wird mit dem Rest. Ohne eigenen Patch-Zeitraum gilt der Standard.
+     */
+    private static Spread patchDrift(DraftDataset data) {
+        Map<Pick, Stat> selected = data.selectedStats();
+        Map<Pick, Stat> full = data.fullStats();
+        if (selected.equals(full)) {
+            return new Spread(DEFAULT_PATCH_DRIFT, 0);
+        }
+        double olderWins = 0;
+        double olderGames = 0;
+        for (Map.Entry<Pick, Stat> e : full.entrySet()) {
+            Stat patch = selected.getOrDefault(e.getKey(), Stat.NONE);
+            olderWins += e.getValue().wins() - patch.wins();
+            olderGames += e.getValue().games() - patch.games();
+        }
+        if (olderGames <= 0) {
+            return new Spread(DEFAULT_PATCH_DRIFT, 0);
+        }
+        double patchAverage = DraftAnalyzer.rating(data.selectedAverage());
+        double olderAverage = DraftAnalyzer.rating(olderWins / olderGames);
+        List<double[]> observations = new ArrayList<>();
+        selected.forEach((pick, patch) -> {
+            Stat all = full.get(pick);
+            if (all == null || patch.games() < MIN_PATCH_GAMES_FOR_ESTIMATE) {
+                return;
+            }
+            double games = all.games() - patch.games();
+            double wins = all.wins() - patch.wins();
+            if (games < MIN_OLDER_GAMES_FOR_ESTIMATE || wins <= 0 || wins >= games) {
+                return;
+            }
+            double deviation = (DraftAnalyzer.rating(patch.wins() / patch.games()) - patchAverage)
+                    - (DraftAnalyzer.rating(wins / games) - olderAverage);
+            double noise = (1 / (patch.games() * 0.25) + 1 / (games * 0.25)) / (LOGIT_PER_RATING * LOGIT_PER_RATING);
+            observations.add(new double[]{deviation, noise});
+        });
+        return pooled(observations, DEFAULT_PATCH_DRIFT, DEFAULT_PATCH_WEIGHT);
     }
 
     private static void collect(DraftDataset data, Map<Pick, Map<Pick, Stat>> source, Kind kind,
@@ -211,6 +265,16 @@ public final class DraftPriors {
         return priorGames(championSpread(role), average);
     }
 
+    /** Verschiebung der Champion-Stärke zwischen Patch und älteren Spielen in Rating-Punkten. */
+    public double patchDrift() {
+        return patchDrift.rating();
+    }
+
+    /** Prior-Spiele, mit denen der Patch-Wert eines Champions zu seinem 30-Tage-Wert gezogen wird. */
+    public double patchPriorGames() {
+        return priorGames(patchDrift.rating(), average);
+    }
+
     /**
      * Prior-Spiele, bei denen eine Stichprobe halb zählt: Dort ist ihr Zufallsrauschen so groß wie die echte Streuung.
      */
@@ -218,12 +282,5 @@ public final class DraftPriors {
         double logit = spreadRating * LOGIT_PER_RATING;
         double p = Math.max(0.01, Math.min(0.99, winRate));
         return 1 / (logit * logit * p * (1 - p));
-    }
-
-    /** Alle Streuungen für die Anzeige: Schlüssel wie {@code DUO:BOTTOM:UTILITY}. */
-    public Map<String, Spread> pairSpreads() {
-        Map<String, Spread> all = new HashMap<>();
-        DEFAULT_PAIR_SPREADS.forEach((key, value) -> all.put(key, pairSpreads.getOrDefault(key, new Spread(value, 0))));
-        return all;
     }
 }

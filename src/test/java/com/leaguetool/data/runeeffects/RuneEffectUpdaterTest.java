@@ -1,5 +1,6 @@
 package com.leaguetool.data.runeeffects;
 
+import com.leaguetool.data.UpdateReport;
 import com.leaguetool.cache.FileCache;
 import com.leaguetool.calc.RuneEffects;
 import com.leaguetool.calc.StatType;
@@ -103,15 +104,29 @@ class RuneEffectUpdaterTest {
         Map<Integer, String> changed = new HashMap<>(TEXTS_16_22);
         changed.put(9105, "Gain 2 basic ability haste for every Legend stack (max 10 stacks).");
 
-        RuneEffectUpdater.Report first = new RuneEffectUpdater(cache).update(data("16.23.1", changed), null, true);
+        UpdateReport first = new RuneEffectUpdater(cache).update(data("16.23.1", changed), null, true);
         assertEquals(List.of("Legend: Haste: +1.5 Fähigkeitstempo für Grundfähigkeiten je Stapel → +2 Fähigkeitstempo für Grundfähigkeiten je Stapel"),
                 first.changes());
         assertEquals(20, RuneEffects.stats(List.of(9105), List.of(), Map.of(9105, 10), 11).get(StatType.BASIC_ABILITY_HASTE), 1e-9);
 
         // Zweiter Start, gleicher Patch: Texte werden nicht erneut ausgewertet, der gespeicherte Stand gilt.
         resetRunes();
-        RuneEffectUpdater.Report again = new RuneEffectUpdater(cache).update(data("16.23.1", TEXTS_16_22), null, false);
+        UpdateReport again = new RuneEffectUpdater(cache).update(data("16.23.1", TEXTS_16_22), null, false);
         assertEquals(first.changes(), again.changes());
         assertEquals(20, RuneEffects.stats(List.of(9105), List.of(), Map.of(9105, 10), 11).get(StatType.BASIC_ABILITY_HASTE), 1e-9);
+    }
+
+    @Test
+    void aBrokenHistoryFileDoesNotFailTheUpdate() throws Exception {
+        FileCache cache = new FileCache(dir);
+        cache.writeText(FileCache.GLOBAL, "rune-effects/history.json", "{ kaputt");
+        Map<Integer, String> changed = new HashMap<>(TEXTS_16_22);
+        changed.put(9105, "Gain 2 basic ability haste for every Legend stack (max 10 stacks).");
+
+        UpdateReport report = new RuneEffectUpdater(cache).update(data("16.23.1", changed), null, true);
+
+        assertEquals(1, report.changes().size());
+        assertEquals(20, RuneEffects.stats(List.of(9105), List.of(), Map.of(9105, 10), 11).get(StatType.BASIC_ABILITY_HASTE), 1e-9);
+        assertTrue(cache.readText(FileCache.GLOBAL, "rune-effects/history.json").orElseThrow().contains("16.23.1"));
     }
 }

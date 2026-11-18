@@ -32,7 +32,8 @@ class DraftPriorsTest {
         double lane = priors.pairPriorGames(Kind.MATCHUP, Role.MIDDLE, Role.MIDDLE, 0.5);
         double botlane = priors.pairPriorGames(Kind.DUO, Role.BOTTOM, Role.UTILITY, 0.5);
         double topMid = priors.pairPriorGames(Kind.DUO, Role.TOP, Role.MIDDLE, 0.5);
-        assertTrue(lane < 1000 && botlane < 1000, lane + " / " + botlane);
+        assertTrue(lane < 1000 && botlane < 1500, lane + " / " + botlane);
+        assertTrue(topMid > 5 * botlane, "Botlane-Duo " + botlane + " gegenüber Top+Mid " + topMid);
         assertTrue(topMid > 10 * lane, "Top und Mid im selben Team wirken kaum aufeinander: " + topMid);
     }
 

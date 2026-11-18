@@ -1,6 +1,5 @@
 package com.leaguetool.calc;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -51,13 +50,6 @@ public final class ItemPassives {
     /** Mitgelieferter Stand (Rückfall ohne gespeicherten oder abrufbaren Patch-Stand). */
     public static List<ItemPassive> baseline() {
         return BASELINE;
-    }
-
-    /** Aktuell verwendete Passiven. */
-    public static List<ItemPassive> current() {
-        List<ItemPassive> all = new ArrayList<>();
-        current.values().forEach(all::addAll);
-        return all;
     }
 
     /** Ersetzt die verwendeten Passiven. */

@@ -465,7 +465,7 @@ class WebServerTest {
                 .formatted(ARCHIVE_ID));
 
         JsonNode list = json.readTree(get("/api/draft-archive", true).body());
-        assertEquals(10, list.path("limit").asInt());
+        assertEquals(100, list.path("limit").asInt(), "Standardgröße");
         assertEquals(3, list.path("minChanges").asInt());
         JsonNode entry = list.path("entries").get(0);
         assertEquals(ARCHIVE_ID, entry.path("id").asText());
@@ -480,6 +480,32 @@ class WebServerTest {
     }
 
     @Test
+    void deletedArchiveDraftCanBeRestoredOrPurgedFromTrash() throws Exception {
+        java.nio.file.Files.writeString(home.resolve("draft-archive.json"), """
+                {"version":1,"entries":[{"id":"%s","savedAt":"2026-11-14T12:00:00Z","patch":"16.22.1",
+                 "ally":[{"champion":1},{"champion":2},{"champion":3},{"champion":4},{"champion":5}],
+                 "enemy":[{"champion":6},{"champion":7},{"champion":8},{"champion":9},{"champion":10}],"bans":[]}]}"""
+                .formatted(ARCHIVE_ID));
+
+        JsonNode deleted = json.readTree(send("DELETE", "/api/draft-archive/" + ARCHIVE_ID, null).body());
+        assertEquals(0, deleted.path("entries").size());
+        assertEquals(7, deleted.path("trashDays").asInt());
+        assertEquals(ARCHIVE_ID, deleted.path("trash").get(0).path("id").asText());
+        assertTrue(deleted.path("trash").get(0).path("expiresAt").isTextual());
+
+        assertEquals(404, send("POST", "/api/draft-archive/" + ARCHIVE_ID + "/foo", null).statusCode());
+        JsonNode restored = json.readTree(send("POST", "/api/draft-archive/" + ARCHIVE_ID + "/restore", null).body());
+        assertEquals(1, restored.path("entries").size());
+        assertEquals(0, restored.path("trash").size());
+        assertEquals(404, send("POST", "/api/draft-archive/" + ARCHIVE_ID + "/restore", null).statusCode());
+
+        send("DELETE", "/api/draft-archive/" + ARCHIVE_ID, null);
+        assertEquals(200, send("DELETE", "/api/draft-archive/trash/" + ARCHIVE_ID, null).statusCode());
+        assertEquals(404, send("DELETE", "/api/draft-archive/trash/" + ARCHIVE_ID, null).statusCode());
+        assertEquals(0, json.readTree(send("DELETE", "/api/draft-archive/trash", null).body()).path("trash").size());
+    }
+
+    @Test
     void draftArchiveTakesOnlyCompleteDrafts() throws Exception {
         assertEquals(400, send("POST", "/api/draft-archive", "{\"ally\":[{\"champion\":103}],\"enemy\":[]}").statusCode(),
                 "Unvollständig, ohne Lolalytics trotzdem kein 412");
@@ -489,11 +515,83 @@ class WebServerTest {
 
     @Test
     void draftArchiveLimitIsASetting() throws Exception {
+        JsonNode defaults = json.readTree(get("/api/settings", true).body());
+        assertEquals(100, defaults.path("draftArchiveLimit").asInt(), "Ohne Einstellung 100 Drafts");
+        assertEquals(100, defaults.path("draftArchiveDefault").asInt());
+        assertEquals("[10,25,50,100,250,500,1000]", defaults.path("draftArchiveLimits").toString(), "Wählbare Größen");
         assertEquals(200, send("POST", "/api/settings", "{\"draftArchiveLimit\":50}").statusCode());
         assertEquals(50, json.readTree(get("/api/settings", true).body()).path("draftArchiveLimit").asInt());
         assertEquals(50, json.readTree(get("/api/draft-archive", true).body()).path("limit").asInt());
+        assertEquals(200, send("POST", "/api/settings", "{\"draftArchiveLimit\":1000}").statusCode());
+        assertEquals(1000, json.readTree(get("/api/draft-archive", true).body()).path("limit").asInt());
         assertEquals(200, send("POST", "/api/settings", "{\"draftArchiveLimit\":7}").statusCode());
-        assertEquals(10, AppSettings.load(home).draftArchiveLimit(), "Unbekannte Größe ergibt den Standard");
+        assertEquals(100, AppSettings.load(home).draftArchiveLimit(), "Unbekannte Größe ergibt den Standard");
+    }
+
+    @Test
+    void finishedFearlessSeriesHaveTheirOwnLimit() throws Exception {
+        JsonNode defaults = json.readTree(get("/api/settings", true).body());
+        assertEquals(50, defaults.path("fearlessSeriesLimit").asInt(), "Ohne Einstellung 50 beendete Serien");
+        assertEquals("[10,25,50,100]", defaults.path("fearlessSeriesLimits").toString());
+
+        StringBuilder finished = new StringBuilder();
+        for (int i = 0; i < 12; i++) {
+            finished.append(i == 0 ? "" : ",").append("""
+                    {"id":"%08d-6f3c-4d39-9a52-3d2f4f0e8a11","label":"Serie %d","format":"BO3","startedAt":"2026-11-%02dT18:00:00Z",
+                     "endedAt":"2026-11-%02dT19:00:00Z","games":[{"number":1,"playedAt":"2026-11-%02dT18:40:00Z","patch":"","result":null,
+                     "ally":[{"champion":1},{"champion":2},{"champion":3},{"champion":4},{"champion":5}],
+                     "enemy":[{"champion":6},{"champion":7},{"champion":8},{"champion":9},{"champion":10}],"bans":[]}]}"""
+                    .formatted(i, i, 28 - i, 28 - i, 28 - i));
+        }
+        java.nio.file.Files.writeString(home.resolve("fearless-series.json"),
+                "{\"version\":2,\"active\":null,\"finished\":[" + finished + "]}");
+        assertEquals(12, json.readTree(get("/api/fearless", true).body()).path("finished").size());
+
+        assertEquals(200, send("POST", "/api/settings", "{\"fearlessSeriesLimit\":10,\"draftArchiveLimit\":250}").statusCode());
+        assertEquals(10, json.readTree(get("/api/fearless", true).body()).path("finished").size(), "Eigene Grenze für Serien");
+        assertEquals(250, json.readTree(get("/api/draft-archive", true).body()).path("limit").asInt(), "Draft-Archiv unabhängig");
+        assertEquals(200, send("POST", "/api/settings", "{\"fearlessSeriesLimit\":7}").statusCode());
+        assertEquals(50, AppSettings.load(home).fearlessSeriesLimit(), "Unbekannte Zahl ergibt den Standard");
+    }
+
+    @Test
+    void runningOpenSeriesEndsEarlyWhenItsNumberOfGamesIsSetToThePlayedOnes() throws Exception {
+        java.nio.file.Files.writeString(home.resolve("fearless-series.json"), """
+                {"version":2,"active":{"id":"%s","label":"Scrim","format":"OPEN","maxGames":5,"startedAt":"2026-11-16T18:00:00Z",
+                 "endedAt":null,"games":[{"number":1,"playedAt":"2026-11-16T18:40:00Z","patch":"","result":null,
+                 "ally":[{"champion":1},{"champion":2},{"champion":3},{"champion":4},{"champion":5}],
+                 "enemy":[{"champion":6},{"champion":7},{"champion":8},{"champion":9},{"champion":10}],"bans":[]}]},
+                 "finished":[]}""".formatted(ARCHIVE_ID));
+
+        JsonNode ended = json.readTree(send("PUT", "/api/fearless/" + ARCHIVE_ID, "{\"label\":\"Scrim\",\"maxGames\":1}").body());
+        assertTrue(ended.path("ended").asBoolean(), "„Jetzt beenden“: Anzahl Games = gespielte");
+        assertTrue(ended.path("active").isNull());
+        assertEquals(1, ended.path("finished").get(0).path("maxGames").asInt());
+        assertEquals(0, ended.path("locked").size(), "Keine Sperren mehr");
+
+        JsonNode reopened = json.readTree(send("PUT", "/api/fearless/" + ARCHIVE_ID, "{\"maxGames\":3}").body());
+        assertTrue(reopened.path("reopened").asBoolean(), "Mehr Games öffnen sie wieder");
+    }
+
+    @Test
+    void seriesGamesOfOlderFilesAppearUnderDraftsAndFullSeriesReopensWithMoreGames() throws Exception {
+        java.nio.file.Files.writeString(home.resolve("fearless-series.json"), """
+                {"version":1,"active":null,"finished":[{"id":"%s","label":"Scrim","format":"OPEN","maxGames":1,
+                 "startedAt":"2026-11-16T18:00:00Z","endedAt":"2026-11-16T19:00:00Z",
+                 "games":[{"number":1,"playedAt":"2026-11-16T18:40:00Z","patch":"16.22.1","result":"WIN",
+                 "ally":[{"champion":1},{"champion":2},{"champion":3},{"champion":4},{"champion":5}],
+                 "enemy":[{"champion":6},{"champion":7},{"champion":8},{"champion":9},{"champion":10}],"bans":[]}]}]}""".formatted(ARCHIVE_ID));
+
+        JsonNode drafts = json.readTree(get("/api/draft-archive", true).body());
+        assertEquals(1, drafts.path("entries").size(), "Das Serienspiel steht unter „Drafts“");
+        assertEquals("2026-11-16T18:40:00Z", drafts.path("entries").get(0).path("savedAt").asText(), "Mit dem Spielzeitpunkt");
+        get("/api/fearless", true);
+        assertEquals(1, json.readTree(get("/api/draft-archive", true).body()).path("entries").size(), "Nur einmal nachgetragen");
+
+        JsonNode reopened = json.readTree(send("PUT", "/api/fearless/" + ARCHIVE_ID, "{\"maxGames\":3}").body());
+        assertTrue(reopened.path("reopened").asBoolean(), "Volle Serie läuft mit mehr Platz wieder");
+        assertEquals(ARCHIVE_ID, reopened.path("active").path("id").asText());
+        assertEquals(3, reopened.path("active").path("maxGames").asInt());
     }
 
     @Test
@@ -523,6 +621,28 @@ class WebServerTest {
         JsonNode ended = json.readTree(send("POST", "/api/fearless/end", null).body());
         assertTrue(ended.path("active").isNull());
         assertEquals(0, ended.path("finished").size(), "Ohne Spiel wird die Serie verworfen");
+
+        assertEquals(400, send("POST", "/api/fearless", "{\"format\":\"OPEN\",\"maxGames\":11}").statusCode());
+        assertEquals(400, send("POST", "/api/fearless", "{\"format\":\"OPEN\",\"maxGames\":\"4\"}").statusCode());
+        JsonNode open = json.readTree(send("POST", "/api/fearless", "{\"format\":\"OPEN\",\"maxGames\":4}").body()).path("active");
+        assertEquals(4, open.path("maxGames").asInt(), "Gewählte Spielzahl bei „Offen“");
+        String openId = open.path("id").asText();
+        assertEquals(400, send("PUT", "/api/fearless/" + openId, "{\"maxGames\":\"6\"}").statusCode());
+        assertEquals(400, send("PUT", "/api/fearless/" + openId, "{\"maxGames\":0,\"label\":\"x\"}").statusCode());
+        assertTrue(json.readTree(get("/api/fearless", true).body()).path("active").path("label").isNull(),
+                "Ungültige Spielzahl ändert auch die Bezeichnung nicht");
+        assertEquals(400, send("PUT", "/api/fearless/" + openId, "{\"maxGames\":6,\"label\":\"" + "x".repeat(61) + "\"}").statusCode());
+        assertEquals(4, json.readTree(get("/api/fearless", true).body()).path("active").path("maxGames").asInt(),
+                "Ungültige Bezeichnung ändert auch die Spielzahl nicht");
+        JsonNode changed = json.readTree(send("PUT", "/api/fearless/" + openId, "{\"maxGames\":6,\"label\":\"Scrim\"}").body());
+        assertEquals(6, changed.path("active").path("maxGames").asInt());
+        assertEquals("Scrim", changed.path("active").path("label").asText());
+        assertFalse(changed.path("ended").asBoolean());
+        JsonNode deleted = json.readTree(send("DELETE", "/api/fearless/" + open.path("id").asText(), null).body());
+        assertTrue(deleted.path("active").isNull(), "Laufende Serie lässt sich löschen");
+        assertEquals(0, deleted.path("trash").size(), "Ohne Spiel ohne Papierkorb");
+        JsonNode bo3 = json.readTree(send("POST", "/api/fearless", "{\"format\":\"BO3\",\"maxGames\":7}").body()).path("active");
+        assertEquals(3, bo3.path("maxGames").asInt(), "Bo3 ignoriert die Spielzahl");
     }
 
     @Test
@@ -540,10 +660,257 @@ class WebServerTest {
         assertEquals(1, state.path("active").path("wins").asInt());
         assertEquals(2, state.path("active").path("nextGame").asInt());
 
+        assertEquals(400, send("PUT", "/api/fearless/" + ARCHIVE_ID, "{\"order\":[1,1]}").statusCode());
+        assertEquals(400, send("PUT", "/api/fearless/" + ARCHIVE_ID, "{\"order\":\"1\"}").statusCode());
+        assertEquals(400, send("PUT", "/api/fearless/" + ARCHIVE_ID, "{}").statusCode());
+        assertEquals(200, send("PUT", "/api/fearless/" + ARCHIVE_ID, "{\"order\":[1]}").statusCode());
+        assertEquals("Scrim", json.readTree(get("/api/fearless", true).body()).path("active").path("label").asText(),
+                "Nur die Reihenfolge, Bezeichnung bleibt");
+
         JsonNode undone = json.readTree(send("DELETE", "/api/fearless/game", null).body());
         assertEquals("TOP", undone.path("undone").path("ally").get(0).path("role").asText(), "Der Draft geht zurück aufs Brett");
         assertEquals(0, undone.path("locked").size());
         assertEquals(409, send("DELETE", "/api/fearless/game", null).statusCode(), "Kein Spiel mehr übrig");
+    }
+
+    @Test
+    void rolesOfStoredDraftsAndSeriesGamesCanBeOverwritten() throws Exception {
+        java.nio.file.Files.writeString(home.resolve("draft-archive.json"), """
+                {"version":1,"entries":[{"id":"aaaaaaaa-6f3c-4d39-9a52-3d2f4f0e8a11","savedAt":"2026-11-16T17:00:00Z","patch":"16.22.1",
+                 "ally":[{"champion":1},{"champion":2},{"champion":3},{"champion":4},{"champion":5}],
+                 "enemy":[{"champion":6},{"champion":7},{"champion":8},{"champion":9},{"champion":10}],"bans":[11]}]}""");
+        java.nio.file.Files.writeString(home.resolve("fearless-series.json"), """
+                {"version":1,"active":{"id":"%s","label":null,"format":"BO3","startedAt":"2026-11-16T18:00:00Z",
+                 "endedAt":null,"games":[{"number":1,"playedAt":"2026-11-16T18:40:00Z","patch":"","result":null,
+                 "ally":[{"champion":1},{"champion":2},{"champion":3},{"champion":4},{"champion":5}],
+                 "enemy":[{"champion":6},{"champion":7},{"champion":8},{"champion":9},{"champion":10}],"bans":[]}]},
+                 "finished":[]}""".formatted(ARCHIVE_ID));
+        String roles = """
+                {"ally":[{"champion":2,"role":"JUNGLE"},{"champion":1},{"champion":3},{"champion":4},{"champion":5}],
+                 "enemy":[{"champion":6},{"champion":7},{"champion":8},{"champion":9},{"champion":10}]}""";
+        String otherChampion = roles.replace("\"champion\":10", "\"champion\":12");
+
+        JsonNode updated = json.readTree(send("PUT", "/api/draft-archive/aaaaaaaa-6f3c-4d39-9a52-3d2f4f0e8a11", roles).body());
+        assertEquals("JUNGLE", updated.path("entry").path("ally").get(0).path("role").asText(), "Reihenfolge wie auf dem Brett");
+        assertEquals(2, updated.path("entry").path("ally").get(0).path("champion").asInt());
+        assertEquals(1, updated.path("seriesUpdated").asInt(), "Gleiches Fearless-Spiel geht mit");
+        assertEquals(1, updated.path("entries").size());
+        assertEquals("2026-11-16T17:00:00Z", updated.path("entries").get(0).path("savedAt").asText());
+        assertEquals(11, updated.path("entries").get(0).path("bans").get(0).asInt());
+        assertEquals(400, send("PUT", "/api/draft-archive/aaaaaaaa-6f3c-4d39-9a52-3d2f4f0e8a11", otherChampion).statusCode(),
+                "Andere Champions überschreiben nichts");
+        assertEquals(404, send("PUT", "/api/draft-archive/bbbbbbbb-6f3c-4d39-9a52-3d2f4f0e8a11", roles).statusCode());
+
+        JsonNode series = json.readTree(send("PUT", "/api/fearless/" + ARCHIVE_ID + "/game/1", roles).body());
+        assertEquals("JUNGLE", series.path("active").path("games").get(0).path("ally").get(0).path("role").asText());
+        assertEquals(0, series.path("draftsUpdated").asInt(), "Der gleiche Draft hatte diese Rollen schon");
+        JsonNode coupled = json.readTree(send("PUT", "/api/fearless/" + ARCHIVE_ID + "/game/1",
+                roles.replace("{\"champion\":1}", "{\"champion\":1,\"role\":\"TOP\"}")).body());
+        assertEquals(1, coupled.path("draftsUpdated").asInt(), "Gleicher Draft unter „Drafts“ geht mit");
+        JsonNode archived = json.readTree(get("/api/draft-archive", true).body()).path("entries").get(0);
+        assertEquals("JUNGLE", archived.path("ally").get(0).path("role").asText());
+        assertEquals("TOP", archived.path("ally").get(1).path("role").asText());
+        assertEquals(400, send("PUT", "/api/fearless/" + ARCHIVE_ID + "/game/1", otherChampion).statusCode());
+        assertEquals(400, send("PUT", "/api/fearless/" + ARCHIVE_ID + "/game/2", roles).statusCode());
+
+        // Draft eines Spiels ersetzen (geladenes Serienspiel geändert): nur vollständige Bretter mit bekannten Champions.
+        assertEquals(400, send("PUT", "/api/fearless/" + ARCHIVE_ID + "/game/1",
+                "{\"replace\":true,\"ally\":[{\"champion\":103}],\"enemy\":[]}").statusCode());
+        assertEquals(400, send("PUT", "/api/fearless/" + ARCHIVE_ID + "/game/1", otherChampion.replaceFirst("\\{","{\"replace\":true,")).statusCode(),
+                "Unbekannter Champion");
+        assertEquals(1, json.readTree(get("/api/fearless", true).body()).path("active").path("games").size(), "Nichts geändert, kein neues Spiel");
+    }
+
+    @Test
+    void savingRolesOfASeriesGameRebuildsItsDraftWhenItIsGoneFromDrafts() throws Exception {
+        java.nio.file.Files.writeString(home.resolve("fearless-series.json"), """
+                {"version":2,"active":null,"finished":[{"id":"%s","label":null,"format":"BO3","startedAt":"2026-11-16T18:00:00Z",
+                 "endedAt":"2026-11-16T19:00:00Z","games":[{"number":1,"playedAt":"2026-11-16T18:40:00Z","patch":"16.22.1","result":null,
+                 "ally":[{"champion":1},{"champion":2},{"champion":3},{"champion":4},{"champion":5}],
+                 "enemy":[{"champion":6},{"champion":7},{"champion":8},{"champion":9},{"champion":10}],"bans":[11]}]}]}"""
+                .formatted(ARCHIVE_ID));
+        String roles = """
+                {"ally":[{"champion":1,"role":"TOP"},{"champion":2},{"champion":3},{"champion":4},{"champion":5}],
+                 "enemy":[{"champion":6},{"champion":7},{"champion":8},{"champion":9},{"champion":10}]}""";
+
+        JsonNode saved = json.readTree(send("PUT", "/api/fearless/" + ARCHIVE_ID + "/game/1", roles).body());
+        assertTrue(saved.path("draftsRecreated").asBoolean(), "Unter „Drafts“ fehlte er ganz");
+        JsonNode entry = json.readTree(get("/api/draft-archive", true).body()).path("entries").get(0);
+        assertEquals("TOP", entry.path("ally").get(0).path("role").asText());
+        assertEquals("2026-11-16T18:40:00Z", entry.path("savedAt").asText(), "Zeitpunkt des Spiels");
+        assertEquals(11, entry.path("bans").get(0).asInt());
+
+        assertFalse(json.readTree(send("PUT", "/api/fearless/" + ARCHIVE_ID + "/game/1", roles).body())
+                .path("draftsRecreated").asBoolean(), "Jetzt vorhanden: kein zweiter Eintrag");
+        send("DELETE", "/api/draft-archive/" + entry.path("id").asText(), null);
+        assertFalse(json.readTree(send("PUT", "/api/fearless/" + ARCHIVE_ID + "/game/1", roles).body())
+                .path("draftsRecreated").asBoolean(), "Im Papierkorb: nicht neu anlegen");
+        assertEquals(0, json.readTree(get("/api/draft-archive", true).body()).path("entries").size());
+    }
+
+    @Test
+    void correctedFearlessResultReopensTheSeries() throws Exception {
+        java.nio.file.Files.writeString(home.resolve("fearless-series.json"), """
+                {"version":1,"active":null,"finished":[{"id":"%s","label":null,"format":"BO3","startedAt":"2026-11-16T18:00:00Z",
+                 "endedAt":"2026-11-16T19:00:00Z","games":[{"number":1,"playedAt":"2026-11-16T18:40:00Z","patch":"","result":"WIN",
+                 "ally":[{"champion":1},{"champion":2},{"champion":3},{"champion":4},{"champion":5}],
+                 "enemy":[{"champion":6},{"champion":7},{"champion":8},{"champion":9},{"champion":10}],"bans":[]},
+                 {"number":2,"playedAt":"2026-11-16T19:00:00Z","patch":"","result":"WIN",
+                 "ally":[{"champion":11},{"champion":12},{"champion":13},{"champion":14},{"champion":15}],
+                 "enemy":[{"champion":16},{"champion":17},{"champion":18},{"champion":19},{"champion":20}],"bans":[]}]}]}"""
+                .formatted(ARCHIVE_ID));
+
+        assertEquals(400, send("PUT", "/api/fearless/" + ARCHIVE_ID + "/game/2", "{\"result\":\"DRAW\"}").statusCode());
+        JsonNode changed = json.readTree(send("PUT", "/api/fearless/" + ARCHIVE_ID + "/game/2", "{\"result\":\"LOSS\"}").body());
+        assertTrue(changed.path("reopened").asBoolean(), "2:0 → 1:1 im Best-of-3");
+        assertEquals(ARCHIVE_ID, changed.path("active").path("id").asText());
+        assertEquals(3, changed.path("active").path("nextGame").asInt(), "Ein drittes Spiel kann folgen");
+        assertEquals(0, changed.path("finished").size());
+        JsonNode cleared = json.readTree(send("PUT", "/api/fearless/" + ARCHIVE_ID + "/game/1", "{\"result\":null}").body());
+        assertTrue(cleared.path("active").path("games").get(0).path("result").isNull());
+        assertEquals(400, send("PUT", "/api/fearless/" + ARCHIVE_ID + "/game/9", "{\"result\":\"WIN\"}").statusCode(), "Spiel gibt es nicht");
+    }
+
+    @Test
+    void archivedDraftsAreShownTopToSupportWithoutChangingTheFile() throws Exception {
+        String stored = """
+                {"version":1,"entries":[{"id":"aaaaaaaa-6f3c-4d39-9a52-3d2f4f0e8a11","savedAt":"2026-11-16T17:00:00Z","patch":"",
+                 "ally":[{"champion":5,"role":"UTILITY"},{"champion":3,"role":"MIDDLE"},{"champion":1,"role":"TOP"},
+                         {"champion":4,"role":"BOTTOM"},{"champion":2,"role":"JUNGLE"}],
+                 "enemy":[{"champion":9,"role":"BOTTOM"},{"champion":6},{"champion":7},{"champion":8},{"champion":10}],"bans":[]}]}""";
+        java.nio.file.Files.writeString(home.resolve("draft-archive.json"), stored);
+
+        JsonNode entry = json.readTree(get("/api/draft-archive", true).body()).path("entries").get(0);
+        assertEquals(List.of(1, 2, 3, 4, 5), json.convertValue(entry.path("ally").findValues("champion"), new com.fasterxml.jackson.core.type.TypeReference<List<Integer>>() { }),
+                "Alle fünf fest: Top bis Support");
+        assertEquals(List.of(9, 6, 7, 8, 10), json.convertValue(entry.path("enemy").findValues("champion"), new com.fasterxml.jackson.core.type.TypeReference<List<Integer>>() { }),
+                "Nicht alle fest: gespeicherte Reihenfolge");
+        assertEquals(stored, java.nio.file.Files.readString(home.resolve("draft-archive.json")), "Nur Anzeige");
+    }
+
+    @Test
+    void archivedDraftsUseShownAutoRolesForOrderingWithoutAnyLookup() throws Exception {
+        java.nio.file.Files.writeString(home.resolve("draft-archive.json"), """
+                {"version":1,"entries":[{"id":"aaaaaaaa-6f3c-4d39-9a52-3d2f4f0e8a11","savedAt":"2026-11-16T17:00:00Z","patch":"",
+                 "ally":[{"champion":5,"role":"UTILITY"},{"champion":3,"role":"MIDDLE"},{"champion":1,"role":"TOP"},
+                         {"champion":4,"role":"BOTTOM"},{"champion":2,"role":"JUNGLE"}],
+                 "enemy":[{"champion":9},{"champion":6},{"champion":7},{"champion":8},{"champion":10}],"bans":[],
+                 "shownRoles":{"9":"BOTTOM","6":"TOP","7":"JUNGLE","8":"MIDDLE","10":"UTILITY"}}]}""");
+
+        JsonNode entry = json.readTree(get("/api/draft-archive", true).body()).path("entries").get(0);
+        assertEquals(List.of(6, 7, 8, 9, 10), json.convertValue(entry.path("enemy").findValues("champion"),
+                new com.fasterxml.jackson.core.type.TypeReference<List<Integer>>() { }), "Gegner nach angezeigten Auto-Rollen");
+        assertTrue(entry.path("enemy").get(0).path("role").isNull(), "Nur zum Ordnen, keine feste Rolle");
+    }
+
+    @Test
+    void removedFearlessGameLeavesSeriesButKeepsItsDraft() throws Exception {
+        java.nio.file.Files.writeString(home.resolve("fearless-series.json"), """
+                {"version":2,"active":{"id":"%s","label":"Scrim","format":"BO5","startedAt":"2026-11-16T18:00:00Z",
+                 "endedAt":null,"games":[{"number":1,"playedAt":"2026-11-16T18:40:00Z","patch":"","result":"WIN",
+                 "ally":[{"champion":1},{"champion":2},{"champion":3},{"champion":4},{"champion":5}],
+                 "enemy":[{"champion":6},{"champion":7},{"champion":8},{"champion":9},{"champion":10}],"bans":[]},
+                 {"number":2,"playedAt":"2026-11-16T19:20:00Z","patch":"","result":null,
+                 "ally":[{"champion":11},{"champion":12},{"champion":13},{"champion":14},{"champion":15}],
+                 "enemy":[{"champion":16},{"champion":17},{"champion":18},{"champion":19},{"champion":20}],"bans":[]}]},
+                 "finished":[]}""".formatted(ARCHIVE_ID));
+        java.nio.file.Files.writeString(home.resolve("draft-archive.json"), """
+                {"version":1,"entries":[{"id":"aaaaaaaa-6f3c-4d39-9a52-3d2f4f0e8a11","savedAt":"2026-11-16T17:00:00Z","patch":"",
+                 "ally":[{"champion":1},{"champion":2},{"champion":3},{"champion":4},{"champion":5}],
+                 "enemy":[{"champion":6},{"champion":7},{"champion":8},{"champion":9},{"champion":10}],"bans":[]}]}""");
+
+        assertEquals(404, send("DELETE", "/api/fearless/" + ARCHIVE_ID + "/game/3", null).statusCode());
+        assertEquals(404, send("DELETE", "/api/fearless/" + ARCHIVE_ID + "/game/x", null).statusCode());
+        JsonNode removed = json.readTree(send("DELETE", "/api/fearless/" + ARCHIVE_ID + "/game/1", null).body());
+        assertEquals(1, removed.path("active").path("games").size());
+        assertEquals(11, removed.path("active").path("games").get(0).path("ally").get(0).path("champion").asInt(),
+                "Spiel 2 rückt nach vorn");
+        assertEquals(10, removed.path("locked").size(), "Nur noch die Sperren des nachgerückten Spiels");
+        removed.path("locked").forEach(lock -> assertTrue(lock.path("champion").asInt() > 10, "Sperren des entfernten Spiels fallen weg"));
+        assertFalse(removed.path("draftRecreated").asBoolean(), "Der Draft steht schon unter „Drafts“");
+        assertEquals(0, removed.path("trash").size(), "Kein Papierkorb");
+        JsonNode archive = json.readTree(get("/api/draft-archive", true).body());
+        assertEquals(1, archive.path("entries").size(), "Der Draft bleibt");
+        assertEquals(0, archive.path("trash").size());
+
+        String draftId = "{\"draftId\":\"aaaaaaaa-6f3c-4d39-9a52-3d2f4f0e8a11\"}";
+        JsonNode readded = json.readTree(send("POST", "/api/fearless/" + ARCHIVE_ID + "/game", draftId).body());
+        assertEquals(2, readded.path("game").asInt(), "Als nächstes Spiel wieder angehängt");
+        JsonNode game = readded.path("active").path("games").get(1);
+        assertEquals(1, game.path("ally").get(0).path("champion").asInt());
+        assertEquals("2026-11-16T17:00:00Z", game.path("playedAt").asText(), "Mit dem Speicherdatum des Drafts");
+        assertTrue(game.path("result").isNull(), "Ohne Ergebnis");
+        assertEquals(20, readded.path("locked").size());
+        assertEquals(400, send("POST", "/api/fearless/" + ARCHIVE_ID + "/game", draftId).statusCode(), "Champions schon in der Serie");
+        assertEquals(404, send("POST", "/api/fearless/" + ARCHIVE_ID + "/game", "{\"draftId\":\"unbekannt\"}").statusCode());
+        assertEquals(404, send("POST", "/api/fearless/aaaaaaaa-6f3c-4d39-9a52-3d2f4f0e8a11/game", draftId).statusCode(), "Unbekannte Serie");
+        assertEquals(1, json.readTree(get("/api/draft-archive", true).body()).path("entries").size(), "Kein neuer Draft");
+
+        JsonNode recreated = json.readTree(send("DELETE", "/api/fearless/" + ARCHIVE_ID + "/game/1", null).body());
+        assertTrue(recreated.path("draftRecreated").asBoolean(), "Fehlt er unter „Drafts“, wird er neu angelegt");
+        assertEquals(2, json.readTree(get("/api/draft-archive", true).body()).path("entries").size());
+    }
+
+    @Test
+    void deletedFearlessSeriesCanBeRestoredOrPurgedFromTrash() throws Exception {
+        java.nio.file.Files.writeString(home.resolve("fearless-series.json"), """
+                {"version":1,"active":null,"finished":[{"id":"%s","label":"Scrim","format":"BO3","startedAt":"2026-11-16T18:00:00Z",
+                 "endedAt":"2026-11-16T19:00:00Z","games":[{"number":1,"playedAt":"2026-11-16T18:40:00Z","patch":"","result":null,
+                 "ally":[{"champion":1},{"champion":2},{"champion":3},{"champion":4},{"champion":5}],
+                 "enemy":[{"champion":6},{"champion":7},{"champion":8},{"champion":9},{"champion":10}],"bans":[]}]}]}"""
+                .formatted(ARCHIVE_ID));
+
+        java.nio.file.Files.writeString(home.resolve("draft-archive.json"), """
+                {"version":1,"entries":[{"id":"aaaaaaaa-6f3c-4d39-9a52-3d2f4f0e8a11","savedAt":"2026-11-16T17:00:00Z","patch":"",
+                 "ally":[{"champion":6},{"champion":7},{"champion":8},{"champion":9},{"champion":10}],
+                 "enemy":[{"champion":1},{"champion":2},{"champion":3},{"champion":4},{"champion":5}],"bans":[]},
+                 {"id":"bbbbbbbb-6f3c-4d39-9a52-3d2f4f0e8a11","savedAt":"2026-11-15T17:00:00Z","patch":"",
+                 "ally":[{"champion":11},{"champion":12},{"champion":13},{"champion":14},{"champion":15}],
+                 "enemy":[{"champion":16},{"champion":17},{"champion":18},{"champion":19},{"champion":20}],"bans":[]}]}""");
+
+        JsonNode deleted = json.readTree(send("DELETE", "/api/fearless/" + ARCHIVE_ID, null).body());
+        assertEquals(0, deleted.path("finished").size());
+        assertEquals(1, deleted.path("draftsMoved").asInt(), "Das gleiche Spiel unter Drafts geht mit");
+        JsonNode archive = json.readTree(get("/api/draft-archive", true).body());
+        assertEquals(1, archive.path("entries").size());
+        assertEquals("aaaaaaaa-6f3c-4d39-9a52-3d2f4f0e8a11", archive.path("trash").get(0).path("id").asText());
+        assertEquals(7, deleted.path("trashDays").asInt());
+        assertEquals("Scrim", deleted.path("trash").get(0).path("label").asText());
+        assertTrue(deleted.path("trash").get(0).path("expiresAt").isTextual());
+
+        assertEquals(404, send("POST", "/api/fearless/" + ARCHIVE_ID + "/foo", null).statusCode());
+        JsonNode restored = json.readTree(send("POST", "/api/fearless/" + ARCHIVE_ID + "/restore", null).body());
+        assertEquals(1, restored.path("finished").size());
+        assertEquals(1, restored.path("draftsRestored").asInt(), "Und kommt mit zurück");
+        assertEquals(2, json.readTree(get("/api/draft-archive", true).body()).path("entries").size());
+        assertEquals(0, restored.path("trash").size());
+        assertEquals(404, send("POST", "/api/fearless/" + ARCHIVE_ID + "/restore", null).statusCode());
+
+        assertEquals(409, send("DELETE", "/api/fearless/" + ARCHIVE_ID + "/game/1", null).statusCode(),
+                "Einziges Spiel einer beendeten Serie: die Serie löschen");
+        send("DELETE", "/api/fearless/" + ARCHIVE_ID, null);
+        assertEquals(200, send("DELETE", "/api/fearless/trash/" + ARCHIVE_ID, null).statusCode());
+        assertEquals(404, send("DELETE", "/api/fearless/trash/" + ARCHIVE_ID, null).statusCode());
+        assertEquals(0, json.readTree(send("DELETE", "/api/fearless/trash", null).body()).path("trash").size());
+    }
+
+    @Test
+    void fearlessGamesAreShownTopToSupportWithoutChangingStoredRoles() throws Exception {
+        java.nio.file.Files.writeString(home.resolve("fearless-series.json"), """
+                {"version":1,"active":{"id":"%s","label":null,"format":"BO3","startedAt":"2026-11-16T18:00:00Z","endedAt":null,
+                 "games":[{"number":1,"playedAt":"2026-11-16T18:40:00Z","patch":"","result":null,
+                 "ally":[{"champion":1,"role":"UTILITY"},{"champion":2,"role":"TOP"},{"champion":3,"role":"MIDDLE"},
+                         {"champion":4,"role":"BOTTOM"},{"champion":5,"role":"JUNGLE"}],
+                 "enemy":[{"champion":6},{"champion":7},{"champion":8},{"champion":9},{"champion":10}],"bans":[]}]},
+                 "finished":[]}""".formatted(ARCHIVE_ID));
+
+        JsonNode state = json.readTree(get("/api/fearless", true).body());
+        assertEquals("[2, 5, 3, 4, 1, 6, 7, 8, 9, 10]", state.path("locked").findValuesAsText("champion").toString(),
+                "Ohne Lolalytics nach festen Rollen, Gegner ohne Rolle in bisheriger Reihenfolge");
+        JsonNode ally = state.path("active").path("games").get(0).path("ally");
+        assertEquals("TOP", ally.get(0).path("role").asText());
+        assertTrue(java.nio.file.Files.readString(home.resolve("fearless-series.json")).indexOf("\"UTILITY\"")
+                < java.nio.file.Files.readString(home.resolve("fearless-series.json")).indexOf("\"TOP\""), "Datei unverändert");
     }
 
     @Test
@@ -605,7 +972,6 @@ class WebServerTest {
         assertEquals(400, postDraft("{\"ally\":[{\"champion\":999999}]}").statusCode());
         assertEquals(400, postDraft("{\"ally\":[{\"champion\":103}],\"enemy\":[{\"champion\":103}]}").statusCode());
         assertEquals(400, postDraft("{\"ally\":[{\"champion\":103,\"role\":\"FOO\"}]}").statusCode());
-        assertEquals(400, postDraft("{\"risk\":\"FOO\"}").statusCode());
         assertEquals(before, fake.requests().size());
     }
 

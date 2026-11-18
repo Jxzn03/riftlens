@@ -1,7 +1,8 @@
 package com.leaguetool.web;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+
+import com.leaguetool.util.Json;
 
 import java.awt.Desktop;
 import java.awt.GraphicsDevice;
@@ -25,8 +26,8 @@ public final class AppWindow {
     }
 
     /** Kleinere gespeicherte Fenster gelten als unbrauchbar; dann startet das Fenster maximiert. */
-    static final int MIN_WIDTH = 640;
-    static final int MIN_HEIGHT = 420;
+    private static final int MIN_WIDTH = 640;
+    private static final int MIN_HEIGHT = 420;
     private static final String MAXIMIZED = "--start-maximized";
 
     /**
@@ -100,7 +101,7 @@ public final class AppWindow {
 
     private static JsonNode readWindow(Path uiState) {
         try {
-            return Files.isRegularFile(uiState) ? new ObjectMapper().readTree(uiState.toFile()).get("window") : null;
+            return Files.isRegularFile(uiState) ? Json.MAPPER.readTree(uiState.toFile()).get("window") : null;
         } catch (IOException e) {
             return null;
         }

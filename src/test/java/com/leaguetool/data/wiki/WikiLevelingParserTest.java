@@ -167,8 +167,6 @@ class WikiLevelingParserTest {
     void defaultRanksAndDetection() {
         assertEquals(3, WikiLevelingParser.defaultRanks(AbilitySlot.R));
         assertEquals(5, WikiLevelingParser.defaultRanks(AbilitySlot.Q));
-        assertEquals(3, WikiLevelingParser.defaultRanks("R"));
-        assertEquals(5, WikiLevelingParser.defaultRanks("E"));
         assertEquals(6, WikiLevelingParser.detectRanks("{{st|X|{{ap|80 to 285 6}}}}").orElseThrow());
         assertEquals(4, WikiLevelingParser.detectRanks("{{ap|1|2|3|4}}").orElseThrow());
         assertTrue(WikiLevelingParser.detectRanks("{{ap|35 to 135}}").isEmpty());

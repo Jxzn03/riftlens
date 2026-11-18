@@ -14,11 +14,6 @@ public enum AbilitySlot {
         return label;
     }
 
-    /** Index in der Data-Dragon-{@code spells}-Liste (Q=0 ... R=3); für P {@code -1}. */
-    public int spellIndex() {
-        return ordinal() - 1;
-    }
-
     /** Riot-Timeline {@code skillSlot} (1=Q, 2=W, 3=E, 4=R). */
     public static AbilitySlot fromSkillSlot(int skillSlot) {
         return switch (skillSlot) {
