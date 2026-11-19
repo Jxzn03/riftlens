@@ -40,7 +40,8 @@ einer davon ist an:
 Über dem Build lässt sich der Champion wählen, auf den der Build angewendet wird. Seine Rolle (von Hand gewählt, sonst
 die häufigste Rolle aus bereits geladener, notfalls älterer Statistik; es wird dafür nichts abgerufen) stellt den
 passenden Schalter ein. Bleibt die Rolle unbekannt, gehen alle Schalter aus. „In Build-Rechner“ bei einer Runenseite
-im Champions-Tab übernimmt auch den Champion, „Champion entfernen“ neben „Leeren“ setzt ihn zurück; beide Knöpfe stellen alle Rollen-Schalter auf aus. Mit Champion
+im Champions-Tab übernimmt auch den Champion, „Champion entfernen“ neben „Leeren“ setzt ihn zurück; beide Knöpfe und die Auswahl „Kein Champion“ stellen alle
+Rollen-Schalter auf aus. Mit Champion
 lassen sich Support-Items nur in der Rolle Support hinzufügen, bei einer anderen Rolle werden sie entfernt.
 
 ## Baupfad, Goldwert und Goldeffizienz

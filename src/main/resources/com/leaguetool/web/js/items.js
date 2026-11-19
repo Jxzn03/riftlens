@@ -271,12 +271,19 @@ function BuildChampion({ data }) {
   const roleLabel = (value) => (BUILD_ROLES.find((r) => r.value === value) || {}).label;
   const autoLabel = roleState.chosen ? 'Auto'
     : `Auto (${roleState.role ? roleLabel(roleState.role) : !auto.known ? '…' : auto.role ? roleLabel(auto.role) : 'unbekannt'})`;
+  // „Kein Champion“ wirkt wie „Champion entfernen“: alle Rollen-Schalter aus.
+  const chooseChampion = (value) => {
+    store.set({ buildChampion: value || null });
+    if (!value) {
+      setBuildMode('');
+    }
+  };
   return html`<div class="build-champion">
     ${champion ? html`<button type="button" class="icon-link" onClick=${() => go('champions', champion.id)}>
         <${Img} src=${champion.icon} size=${28} /></button>`
       : html`<span class="build-champion-empty"><${Icon} name="user" size=${14} /></span>`}
     <${Select} label="Champion für den Build" value=${championKey} cls="build-champion-select"
-      onChange=${(value) => store.set({ buildChampion: value || null })}
+      onChange=${chooseChampion}
       options=${[{ value: '', label: 'Kein Champion' }, ...champions.map((c) => ({ value: String(c.key), label: c.name }))]} />
     ${champion ? html`<${Select} label=${`Rolle von ${champion.name}`} value=${roleState.chosen} onChange=${roleState.setRole}
       options=${[{ value: '', label: autoLabel }, ...BUILD_ROLES]} />` : null}  </div>`;
