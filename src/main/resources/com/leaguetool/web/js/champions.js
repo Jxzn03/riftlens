@@ -2,7 +2,7 @@
 import { html, useMemo, useEffect } from '/vendor/htm-preact.js';
 import {
   useStore, useViewState, useFetch, useStatsUrl, useSourceLabel, useDeferredUrl, useWinRateClass, select, go, normalize,
-  sortRows, activeSort, percent, winRateText, summary, setPref, useChampionRole, useChampionStatsUrl,
+  sortRows, activeSort, percent, setPref, useChampionRole, useChampionStatsUrl,
   useBuildQuery, runePageRunes, importRunePage, useFavorites,
 } from './core.js';
 import {
@@ -19,6 +19,12 @@ const DETAIL_TABS = [
 ];
 /** Nachkommastellen der Winrates auf der Champions-Seite. */
 const WR_DECIMALS = 2;
+
+/** Konfidenzintervall der Winrate, z. B. „(KI 49.10–52.30 %)“. */
+const ciText = (stats, decimals) => `(KI ${(stats.lower * 100).toFixed(decimals)}–${percent(stats.upper, decimals)})`;
+const winRateText = (stats, decimals = 1) => `${percent(stats.winRate, decimals)} ${ciText(stats, decimals)}`;
+const summary = (line, decimals = 1) =>
+  `${winRateText(line, decimals)} WR · ${percent(line.pickRate)} PR · ${line.games.toLocaleString('de-DE')} Spiele`;
 /** Wartezeit, bevor eine Champion-Seite bei Lolalytics angefragt wird (Durchklicken der Liste). */
 const REPORT_DELAY = 350;
 
@@ -181,10 +187,7 @@ function ChampionDetail({ champion, tab, onTab }) {
         <div class="hero-text">
           <h1>${champion.name}</h1>
           <p class="hero-sub">${champion.title}</p>
-          <div class="tags">
-            ${champion.resource ? html`<${Tag} kind="soft">${champion.resource}<//>` : null}
-            <${FavoriteToggle} championKey=${champion.key} name=${champion.name} size=${14} label />
-          </div>
+          ${champion.resource ? html`<div class="tags"><${Tag} kind="soft">${champion.resource}<//></div>` : null}
         </div>
       </div>
     </header>
@@ -277,31 +280,42 @@ function WikiCompare({ wiki }) {
   return html`<${Card} title="Zusatzdaten" aside=${html`<span class="muted">LoL-Wiki</span>`}>${body}<//>`;
 }
 
+/** So viele Einträge zeigt eine Rangliste mit {@code withMostPlayed} neben dem meistgespielten. */
+const MOST_PLAYED_TOP = 3;
+
 /** Rangliste: beste nach Bayes-Untergrenze, sonst häufigste. */
 /**
  * @param withMostPlayed zeigt unter den besten zusätzlich den meistgespielten Eintrag, kompakt im selben Platz; steht
- *                       er schon unter den besten, wird nur diese Zeile markiert
+ *                       er schon unter den besten, wird nur diese Zeile markiert und ein weiterer Eintrag rückt nach,
+ *                       sodass immer drei Einträge plus der meistgespielte erscheinen (Backend liefert dafür vier); die
+ *                       Zeilen verteilen sich auf die Höhe des Nachbarn (bündig mit „Items nach dem Core-Build (Itemplatz 3–5)“)
+ * @param columns      zwei Spalten mit je halb so vielen Zeilen (z. B. Boots: sechs Einträge in der Höhe von dreien);
+ *                       die Spielzahl steht dann ohne „Spiele“, der Kartenkopf nennt die Einheit
+ * Zeilen mit {@code belowMin} (Auffüller unter der Mindest-Stichprobe) sind deutlich ausgegraut, ohne Winrate-Farbe.
  */
-function Ranking({ title, ranking, render, children, withMostPlayed = false }) {
+function Ranking({ title, ranking, render, children, withMostPlayed = false, columns = false }) {
   const winRateClass = useWinRateClass();
   const advancedTips = useAdvancedTips();
   const hasLines = ranking && ranking.lines.length > 0;
   const mostPlayed = withMostPlayed && ranking ? ranking.mostPlayed : null;
   const sameKey = (a, b) => JSON.stringify(a) === JSON.stringify(b);
-  const mostPlayedListed = Boolean(mostPlayed) && ranking.lines.some((line) => sameKey(line.key, mostPlayed.key));
-  const row = (line, key, label) => html`<div class=${`rank-line ${label ? 'most-played' : ''}`} key=${key}>
+  const top = mostPlayed ? ranking.lines.slice(0, MOST_PLAYED_TOP) : (ranking ? ranking.lines : []);
+  const mostPlayedListed = Boolean(mostPlayed) && top.some((line) => sameKey(line.key, mostPlayed.key));
+  // Steht der meistgespielte unter den ersten drei, rückt der vierte nach; die Reihenfolge bleibt die der Rangliste.
+  const lines = mostPlayedListed ? ranking.lines.slice(0, MOST_PLAYED_TOP + 1) : top;
+  const row = (line, key, label) => html`<div class=${`rank-line ${label ? 'most-played' : ''} ${line.belowMin ? 'below-min' : ''}`} key=${key}>
     <div class="rank-key">${render(line.key)}${label ? html`<${Tag} kind="soft">${label}<//>` : null}</div>
     <div class="rank-stats" data-tip=${advancedTips ? summary(line, WR_DECIMALS) : undefined}>
-      <span class=${winRateClass(line.winRate)}>${percent(line.winRate, WR_DECIMALS)}</span>
-      <small>${percent(line.pickRate)} PR · ${line.games.toLocaleString('de-DE')} Spiele</small>
+      <span class=${line.belowMin ? '' : winRateClass(line.winRate)}>${percent(line.winRate, WR_DECIMALS)}</span>
+      <small>${percent(line.pickRate)} PR · ${line.games.toLocaleString('de-DE')}${columns ? '' : ' Spiele'}</small>
     </div>
   </div>`;
-  return html`<div class=${`ranking ${withMostPlayed ? 'compact' : ''}`}>
+  return html`<div class=${`ranking ${withMostPlayed ? 'compact' : ''} ${columns ? 'columns' : ''}`}>
     <h4>${title}</h4>
     ${!hasLines ? html`<p class="muted small">keine Daten</p>` : html`
-      <p class="muted small">${ranking.best ? `beste nach Bayes-Untergrenze (≥ ${ranking.minGames.toLocaleString('de-DE')} Spiele)` : 'häufigste (zu wenige Spiele für ein Wilson-Ranking)'}</p>
-      ${ranking.lines.map((line, i) => row(line, i, mostPlayedListed && sameKey(line.key, mostPlayed.key) ? 'Meistgespielt' : null))}
-      ${mostPlayed && !mostPlayedListed ? row(mostPlayed, 'most-played', 'Meistgespielt') : null}`}
+      ${ranking.best ? null : html`<p class="muted small">häufigste (zu wenige Spiele für ein Wilson-Ranking)</p>`}
+      <div class="rank-lines">${lines.map((line, i) => row(line, i, mostPlayedListed && sameKey(line.key, mostPlayed.key) ? 'Meistgespielt' : null))}
+        ${mostPlayed && !mostPlayedListed ? row(mostPlayed, 'most-played', 'Meistgespielt') : null}</div>`}
     ${children}
   </div>`;
 }
@@ -327,7 +341,8 @@ function SkillOrder({ order, separator }) {
 /** Report des Champions auf seiner Rolle; eine neue Rolle lädt erst dann ihre Daten. */
 function useChampionReport(champion, role) {
   const url = useChampionStatsUrl(`/api/stats/report/${champion.key}`, role);
-  const deferred = useDeferredUrl(url, REPORT_DELAY);
+  // Liegt die Seite frisch im Cache des Backends, erscheint sie sofort; sonst bleibt es bei Wartezeit und Abruf.
+  const deferred = useDeferredUrl(url, REPORT_DELAY, url && `${url}&cachedOnly=1`);
   return { ...useFetch(deferred), pending: !deferred };
 }
 
@@ -374,9 +389,8 @@ function lateItemTip(line) {
 function LateItems({ lines, data }) {
   const advancedTips = useAdvancedTips();
   return html`<div class="ranking">
-    <h4 data-tip=${advancedTips ? LATE_ITEMS_TIP : undefined}>Items nach dem Core-Build</h4>
+    <h4 data-tip=${advancedTips ? LATE_ITEMS_TIP : undefined}>Items nach dem Core-Build (Itemplatz 3–5)</h4>
     ${lines.length === 0 ? html`<p class="muted small">keine Daten</p>` : html`
-      <p class="muted small">häufigste auf Itemplatz 3–5</p>
       <div class="late-items">${lines.map((line) => html`<div class="late-item" key=${line.item}>
         <${ItemIcons} data=${data} ids=${[line.item]} />
         <div class="late-item-stats" data-tip=${advancedTips ? lateItemTip(line) : undefined}>
@@ -394,19 +408,19 @@ function MatchReport({ report, data }) {
   if (!body && report.data) {
     const r = report.data;
     const items = (ids) => html`<${ItemIcons} data=${data} ids=${ids} />`;
-    // Kleinere Icons: Core-Build zeigt vier Zeilen im Platz von dreien.
-    const coreItems = (ids) => html`<${ItemIcons} data=${data} ids=${ids} size=${24} />`;
+    // Icons fast so groß wie bei „Items nach dem Core-Build“; die vier Zeilen verteilen sich auf dessen Höhe.
+    const coreItems = (ids) => html`<${ItemIcons} data=${data} ids=${ids} size=${28} />`;
     body = html`
       <div class="report-head">
         <div class="kpi"><strong>${r.games.toLocaleString('de-DE')}</strong><span>Spiele</span></div>
-        <div class="kpi"><strong class=${winRateClass(r.winRate)}>${percent(r.winRate, WR_DECIMALS)}</strong><span>${winRateText(r, WR_DECIMALS).replace(/^[^(]*/, '')}</span></div>
+        <div class="kpi"><strong class=${winRateClass(r.winRate)}>${percent(r.winRate, WR_DECIMALS)}</strong><span>${ciText(r, WR_DECIMALS)}</span></div>
         <div class="kpi"><strong>${percent(r.pickRate)}</strong><span>Pickrate</span></div>
         <div class="kpi"><strong>${percent(r.banRate)}</strong><span>Banrate</span></div>
       </div>
       <div class="rankings">
         <${Ranking} title="Core-Build (erste 3 Items inkl. Boots)" ranking=${r.coreBuilds} render=${coreItems} withMostPlayed />
         <${LateItems} lines=${r.lateItems} data=${data} />
-        <${Ranking} title="Boots" ranking=${r.boots} render=${items} />
+        <${Ranking} title="Boots" ranking=${r.boots} render=${items} columns />
         <${Ranking} title="Startitems" ranking=${r.starters} render=${items} />
         <${Ranking} title="Runenseite" ranking=${r.runePages} render=${(page) => html`<span class="rune-page"><${RuneIcons} data=${data} ids=${page.primary} size=${26} /><${RuneIcons} data=${data} ids=${page.sub} size=${26} /><small class="muted">${page.shards}</small>
           <button type="button" class="chip-link import" onClick=${() => importRunePage(page)}>In Build-Rechner</button></span>`} />
@@ -416,7 +430,9 @@ function MatchReport({ report, data }) {
         <${Ranking} title="Beschwörerzauber" ranking=${r.spellCombos} render=${(keys) => html`<${SpellIcons} data=${data} keys=${keys} />`} />
       </div>`;
   }
-  return html`<${Card} title="Match-Statistik" aside=${html`<span class="muted">${sourceLabel}</span>`}>${body}<//>`;
+  // Mindest-Stichprobe der Ranglisten (Bayes-Grenze) steht ohne Erklärung neben dem Zeitraum.
+  const minGames = report.data && report.data.minGames;
+  return html`<${Card} title="Match-Statistik" aside=${html`${minGames ? html`<span class="muted">≥ ${minGames.toLocaleString('de-DE')} Spiele</span>` : null}<span class="muted">${sourceLabel}</span>`}>${body}<//>`;
 }
 
 function StatsTab({ champion, report, data }) {

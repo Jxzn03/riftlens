@@ -6,7 +6,6 @@ import com.leaguetool.data.http.HttpFetcher;
 import com.leaguetool.model.Role;
 
 import java.io.IOException;
-import java.io.InterruptedIOException;
 import java.time.Duration;
 import java.util.Locale;
 import java.util.Objects;
@@ -27,6 +26,8 @@ public final class LolalyticsClient {
     public static final Duration MAX_AGE = Duration.ofHours(12);
     /** Pause nach einer fehlgeschlagenen Erneuerung im Hintergrund. */
     static final Duration REFRESH_PAUSE = Duration.ofMinutes(10);
+    /** So oft prüft die wartende Erneuerung im Hintergrund, ob ein Abruf Vorrang braucht. */
+    private static final long BACKGROUND_POLL_MS = 100;
     /** Datenschnittstelle der Website; liefert die Team-Werte, die nicht in der Seite stehen. Nicht dokumentiert. */
     static final String TEAM_API_URL = "https://a1.lolalytics.com/mega/";
 
@@ -40,6 +41,8 @@ public final class LolalyticsClient {
     private final java.util.concurrent.atomic.AtomicInteger foreground = new java.util.concurrent.atomic.AtomicInteger();
     private final java.util.Set<String> refreshing = java.util.concurrent.ConcurrentHashMap.newKeySet();
     private final java.util.Map<String, Long> refreshPausedUntil = new java.util.concurrent.ConcurrentHashMap<>();
+    /** Zuletzt geparste Cache-Inhalte; spart nur das erneute Parsen, an Lesen und Abrufen ändert sich nichts. */
+    private final ParsedMemo parsed = new ParsedMemo(ParsedMemo.DEFAULT_CAPACITY);
     private java.util.concurrent.Executor refreshExecutor;
     private long lastRequestNanos;
     private boolean requestedBefore;
@@ -86,12 +89,28 @@ public final class LolalyticsClient {
     /** @param staleOk ein veralteter Eintrag wird sofort geliefert und im Hintergrund erneuert ({@link #load}) */
     public LolalyticsFullTierList fullTierList(String tier, String lane, LolalyticsPeriod period, boolean staleOk)
             throws IOException {
+        Source source = tierListSource(tier, lane, period);
+        return parsed.parse(source.key(), load(source, staleOk), LolalyticsState::parseTierList);
+    }
+
+    /**
+     * Wie {@link #fullTierList(String, String, LolalyticsPeriod)}, aber ohne Abruf und ohne Erneuerung im Hintergrund:
+     * nur ein frischer Eintrag, sonst {@code null}. Liefert genau dann etwas, wenn der normale Aufruf ohne Abruf
+     * auskäme.
+     */
+    public LolalyticsFullTierList fullTierListIfCached(String tier, String lane, LolalyticsPeriod period) throws IOException {
+        Source source = tierListSource(tier, lane, period);
+        String json = cachedOnly(source, false);
+        return json == null ? null : parsed.parse(source.key(), json, LolalyticsState::parseTierList);
+    }
+
+    private Source tierListSource(String tier, String lane, LolalyticsPeriod period) {
         String t = safe(tier, DEFAULT_TIER);
         String l = safe(lane, "all");
         // "v4": enthält PBI und Lane-Anteil; ältere Cache-Einträge ohne diese Felder dürfen nicht weiterverwendet werden.
         String key = "lolalytics/full_v4_" + t + "_" + l + "_" + period.cacheSuffix() + ".json";
         String url = BASE_URL + "?tier=" + t + "&lane=" + l + patchQuery(period);
-        return LolalyticsState.parseTierList(load(new Source(key, url, notBefore.get(), LolalyticsState::extractTierList), staleOk));
+        return new Source(key, url, notBefore.get(), LolalyticsState::extractTierList);
     }
 
     /**
@@ -107,7 +126,8 @@ public final class LolalyticsClient {
     /** @param staleOk ein veralteter Eintrag wird sofort geliefert und im Hintergrund erneuert ({@link #load}) */
     public LolalyticsBuild build(String slug, String tier, String lane, LolalyticsPeriod period, boolean staleOk)
             throws IOException {
-        return LolalyticsState.parseBuild(load(buildSource(slug, tier, lane, period), staleOk));
+        Source source = buildSource(slug, tier, lane, period);
+        return parsed.parse(source.key(), load(source, staleOk), LolalyticsState::parseBuild);
     }
 
     /**
@@ -117,8 +137,9 @@ public final class LolalyticsClient {
      */
     public LolalyticsBuild buildIfCached(String slug, String tier, String lane, LolalyticsPeriod period, boolean staleOk)
             throws IOException {
-        String json = cachedOnly(buildSource(slug, tier, lane, period), staleOk);
-        return json == null ? null : LolalyticsState.parseBuild(json);
+        Source source = buildSource(slug, tier, lane, period);
+        String json = cachedOnly(source, staleOk);
+        return json == null ? null : parsed.parse(source.key(), json, LolalyticsState::parseBuild);
     }
 
     private Source buildSource(String slug, String tier, String lane, LolalyticsPeriod period) {
@@ -142,13 +163,15 @@ public final class LolalyticsClient {
 
     /** @param staleOk ein veralteter Eintrag wird sofort geliefert und im Hintergrund erneuert ({@link #load}) */
     public LolalyticsPairs teammates(String slug, String tier, String lane, boolean staleOk) throws IOException {
-        return LolalyticsState.parseTeam(load(teamSource(slug, tier, lane), staleOk));
+        Source source = teamSource(slug, tier, lane);
+        return parsed.parse(source.key(), load(source, staleOk), LolalyticsState::parseTeam);
     }
 
     /** Wie {@link #buildIfCached}, für die Team-Werte. */
     public LolalyticsPairs teammatesIfCached(String slug, String tier, String lane, boolean staleOk) throws IOException {
-        String json = cachedOnly(teamSource(slug, tier, lane), staleOk);
-        return json == null ? null : LolalyticsState.parseTeam(json);
+        Source source = teamSource(slug, tier, lane);
+        String json = cachedOnly(source, staleOk);
+        return json == null ? null : parsed.parse(source.key(), json, LolalyticsState::parseTeam);
     }
 
     private static Source teamSource(String slug, String tier, String lane) {
@@ -214,7 +237,7 @@ public final class LolalyticsClient {
         try {
             synchronized (lock(source.key())) {
                 return cache.getFreshOrStale(FileCache.GLOBAL, source.key(), MAX_AGE, source.notBefore(), () -> {
-                    throttle();
+                    throttle(false);
                     return source.extractor().extract(http.getText(source.url()));
                 }).content();
             }
@@ -260,10 +283,13 @@ public final class LolalyticsClient {
         }
         refreshExecutor().execute(() -> {
             try {
-                awaitIdleForeground();
+                // Den Platz in der Drosselung außerhalb der Sperre des Eintrags reservieren: Ein wartender Abruf
+                // desselben Eintrags hängt so nie hinter der Erneuerung.
+                if (!cache.isFresh(FileCache.GLOBAL, key, MAX_AGE, source.notBefore())) {
+                    throttle(true);
+                }
                 synchronized (lock(key)) {
                     if (!cache.isFresh(FileCache.GLOBAL, key, MAX_AGE, source.notBefore())) {
-                        throttle();
                         cache.writeText(FileCache.GLOBAL, key, source.extractor().extract(http.getText(source.url())));
                     }
                 }
@@ -276,35 +302,36 @@ public final class LolalyticsClient {
         });
     }
 
-    /** Abrufe, auf die jemand wartet, haben Vorrang: Die Erneuerung wartet, bis keiner mehr läuft. */
-    private void awaitIdleForeground() throws InterruptedIOException {
-        while (foreground.get() > 0) {
-            try {
-                Thread.sleep(100);
-            } catch (InterruptedException e) {
-                throw Interrupts.toIo(e, "Abgebrochen");
-            }
-        }
-    }
-
     @FunctionalInterface
     private interface Extractor {
         String extract(String html) throws IOException;
     }
 
-    private synchronized void throttle() throws IOException {
-        if (requestedBefore) {
-            long waitMs = minInterval.toMillis() - (System.nanoTime() - lastRequestNanos) / 1_000_000;
-            if (waitMs > 0) {
-                try {
-                    Thread.sleep(waitMs);
-                } catch (InterruptedException e) {
-                    throw Interrupts.toIo(e, "Abgebrochen");
+    /**
+     * Reserviert den nächsten Platz: mindestens {@link #minInterval} nach dem Start der vorigen Anfrage. Gewartet wird
+     * außerhalb der Sperre, damit ein Abruf, auf den jemand wartet, den frei werdenden Platz sofort bekommt.
+     *
+     * @param background Erneuerung im Hintergrund: reserviert nur, solange kein solcher Abruf läuft, und prüft das beim
+     *                   Warten laufend. Die Abstände zwischen zwei Anfragen bleiben dieselben.
+     */
+    private void throttle(boolean background) throws IOException {
+        while (true) {
+            long waitMs;
+            synchronized (this) {
+                waitMs = background && foreground.get() > 0 ? BACKGROUND_POLL_MS
+                        : requestedBefore ? minInterval.toMillis() - (System.nanoTime() - lastRequestNanos) / 1_000_000 : 0;
+                if (waitMs <= 0) {
+                    requestedBefore = true;
+                    lastRequestNanos = System.nanoTime();
+                    return;
                 }
             }
+            try {
+                Thread.sleep(background ? Math.min(waitMs, BACKGROUND_POLL_MS) : waitMs);
+            } catch (InterruptedException e) {
+                throw Interrupts.toIo(e, "Abgebrochen");
+            }
         }
-        requestedBefore = true;
-        lastRequestNanos = System.nanoTime();
     }
 
     private static String safe(String v, String fallback) {

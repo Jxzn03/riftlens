@@ -184,8 +184,11 @@ public final class RuneEffects {
     private static final Map<Integer, Definition> BY_ID =
             DEFINITIONS.stream().collect(Collectors.toUnmodifiableMap(Definition::id, Function.identity()));
 
-    private static volatile Map<Integer, double[]> current = defaults();
-    private static volatile List<List<Integer>> shardRows = DEFAULT_SHARD_ROWS;
+    /** Gültige Zahlen je ID und Shard-Reihen; ein Objekt, damit Leser nie eine halb ersetzte Mischung sehen. */
+    private record State(Map<Integer, double[]> params, List<List<Integer>> shardRows) {
+    }
+
+    private static volatile State state = new State(defaults(), DEFAULT_SHARD_ROWS);
 
     private RuneEffects() {
     }
@@ -207,7 +210,7 @@ public final class RuneEffects {
 
     /** Aktuelle Shard-Reihen. */
     public static List<List<Integer>> shardRows() {
-        return shardRows;
+        return state.shardRows();
     }
 
     /**
@@ -222,13 +225,12 @@ public final class RuneEffects {
                 next.put(id, p.clone());
             }
         });
-        current = next;
-        shardRows = rows == null || rows.size() != 3 ? DEFAULT_SHARD_ROWS : rows.stream().map(List::copyOf).toList();
+        state = new State(next, rows == null || rows.size() != 3 ? DEFAULT_SHARD_ROWS : rows.stream().map(List::copyOf).toList());
     }
 
     /** Alle Runen und Shards mit den aktuell gültigen Zahlen. */
     public static List<Entry> all() {
-        Map<Integer, double[]> params = current;
+        Map<Integer, double[]> params = state.params();
         return DEFINITIONS.stream().map(d -> entry(d, params.get(d.id()))).toList();
     }
 
@@ -250,8 +252,9 @@ public final class RuneEffects {
      */
     public static StatBlock stats(List<Integer> runes, List<Integer> shards, Map<Integer, Integer> stacks, int level) {
         int lvl = StatCalculator.clampLevel(level);
-        Map<Integer, double[]> params = current;
-        List<List<Integer>> rows = shardRows;
+        State current = state;
+        Map<Integer, double[]> params = current.params();
+        List<List<Integer>> rows = current.shardRows();
         StatBlock block = StatBlock.EMPTY;
         for (int id : new LinkedHashSet<>(runes)) {
             Definition d = BY_ID.get(id);

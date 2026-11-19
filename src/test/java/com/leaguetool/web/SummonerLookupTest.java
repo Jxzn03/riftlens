@@ -16,6 +16,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -39,7 +40,8 @@ class SummonerLookupTest {
     Path home;
 
     private final FakeHttpFetcher http = new FakeHttpFetcher();
-    private final List<int[]> progress = new ArrayList<>();
+    // Fortschritt kommt aus mehreren Download-Threads gleichzeitig.
+    private final List<int[]> progress = Collections.synchronizedList(new ArrayList<>());
 
     private SummonerLookup lookup() {
         // Ohne Drosselung: das echte Rate-Limit testet RiotApiClientTest.

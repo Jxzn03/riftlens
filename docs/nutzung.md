@@ -38,7 +38,9 @@ Champion-Seite Builds, Runen, Spells und Skill-Reihenfolgen. Der Core-Build enth
 Rollenfilter und ohne Filter die häufigste Rolle. Eine andere Rolle lädt ihre Daten erst bei Auswahl und gilt für
 Match-Statistik und Counters. Die Wahl bleibt je Champion gespeichert.
 
-**Abrufregeln:** höchstens ein Abruf alle 2 Sekunden, 12 Stunden Cache, nur für privaten Eigengebrauch.
+**Abrufregeln:** höchstens ein Abruf alle 2 Sekunden, 12 Stunden Cache, nur für privaten Eigengebrauch. Ältere
+30-Tage-Statistik erscheint sofort und wird im Hintergrund einmal erneuert (wie im Draft); „Letzter Patch“ wird nach
+Ablauf frisch geholt. Abrufe, auf die du wartest, haben dabei Vorrang.
 
 **Ranglisten und Farben**
 
@@ -66,7 +68,9 @@ Optionen ist nötig, und die Riot-Abfragen müssen in den Einstellungen aktivier
 standardmäßig `EUW1`. Schlägt eine Abfrage fehl, steht unter dem Fehler eine Anleitung für einen neuen Dev-Key.
 
 **Anzeige:** Ränge, meistgespielte Champions mit Winrate, KDA und CS/Min, häufige Mitspieler, Spielmodi, Rollen,
-Meisterschaft und Match-Verlauf. Ein Klick auf einen Spielmodus filtert die Auswertung.
+Meisterschaft und Match-Verlauf. Ein Klick auf einen Spielmodus filtert die Auswertung. Der Match-Verlauf zeigt zuerst
+50 Spiele, darunter laden „weitere anzeigen“ und „Alle anzeigen“ den Rest. Die Auswertung zählt immer alle abgerufenen
+Matches.
 
 **Häufige Mitspieler (Duo):** Riot meldet keine Premades. Als Mitspieler gilt, wer in der Auswahl mindestens dreimal im
 eigenen Team war (Arena: im selben Zweierteam). Angezeigt werden Spiele und Winrate zusammen, die eigene Winrate in den

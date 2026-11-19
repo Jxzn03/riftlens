@@ -5,6 +5,11 @@ import { Icon, Img, Button, Select, Card, Spinner, Empty, Tag, DataGrid, ItemIco
 
 const TOP_N = 5; // Standardansicht Mitspieler: nur die ersten 5 Einträge
 const TOP_CHAMPS = 5; // Standardansicht Champions
+/**
+ * Match-Liste schrittweise: Jede Zeile hat rund zehn Bilder, 1000 Matches auf einmal kosteten eine halbe Sekunde beim
+ * Anzeigen und bei jedem Moduswechsel. Statistik, Champions und Mitspieler zählen weiter alle Matches.
+ */
+const MATCH_PAGE = 50;
 const DEFAULTS = { query: '', platform: '', count: '50', result: null, error: null, loading: false, mode: '' };
 const COUNTS = [20, 50, 100, 200, 300, 500, 1000].map((n) => ({ value: String(n), label: `${n} Matches` }));
 const MAX_RECENT = 8;
@@ -216,6 +221,19 @@ function Result({ result, data, mode, onMode, onSearch }) {
   const stats = useMemo(() => aggregate(matches), [matches]);
   const minShared = result.minSharedGames || 3;
   const mates = useMemo(() => matesOf(result.mates || [], matches, minShared), [result, matches]);
+  // Angezeigte Matches je Modus; ein Moduswechsel beginnt wieder mit der ersten Seite.
+  const [paging, setPaging] = useState({ mode, shown: MATCH_PAGE });
+  const shown = paging.mode === mode ? paging.shown : MATCH_PAGE;
+  // Auch zurück zum vorigen Modus nur die erste Seite, sonst stünden nach „Alle“ wieder alle Zeilen da.
+  useEffect(() => {
+    if (paging.mode !== mode) {
+      setPaging({ mode, shown: MATCH_PAGE });
+    }
+  }, [mode]);
+  // Gemerkt: Tippen im Suchfeld rendert die Seite neu, die Zeilen bleiben dabei unberührt.
+  const matchRows = useMemo(() => matches.slice(0, shown).map((m) => html`<${MatchRow} key=${m.id} match=${m} data=${data} />`),
+    [matches, shown, data]);
+  const hiddenMatches = matches.length - matchRows.length;
   const allGames = modes.reduce((sum, m) => sum + m.games, 0);
   const allWins = modes.reduce((sum, m) => sum + m.wins, 0);
   const { total } = stats;
@@ -290,8 +308,15 @@ function Result({ result, data, mode, onMode, onSearch }) {
         ${mates.length > TOP_N ? html`<${MoreToggle} open=${matesOpen} total=${mates.length} top=${TOP_N} onToggle=${() => setMatesOpen(!matesOpen)} />` : null}
         <p class="muted small">Riot meldet keine Premades. Als Mitspieler zählt, wer in dieser Auswahl mehrfach im eigenen Team war; „WR ohne“ ist deine Winrate in den übrigen Spielen.</p>
       <//>
-      <${Card} title="Letzte Matches" aside=${html`<span class="muted">${matches.length} angezeigt</span>`}>
-        <div class="match-list">${matches.map((m) => html`<${MatchRow} key=${m.id} match=${m} data=${data} />`)}</div>
+      <${Card} title="Letzte Matches" aside=${html`<span class="muted">${hiddenMatches > 0 ? `${matchRows.length} von ${matches.length}` : matches.length} angezeigt</span>`}>
+        <div class="match-list">${matchRows}</div>
+        ${hiddenMatches > 0 ? html`<div class="more-row">
+          <button type="button" class="more-toggle" onClick=${() => setPaging({ mode, shown: shown + MATCH_PAGE })}>
+            ${Math.min(MATCH_PAGE, hiddenMatches)} weitere anzeigen<span class="more-arrow" aria-hidden="true">▼</span>
+          </button>
+          ${hiddenMatches > MATCH_PAGE ? html`<button type="button" class="more-toggle" onClick=${() => setPaging({ mode, shown: matches.length })}>
+            Alle ${matches.length} anzeigen</button>` : null}
+        </div>` : null}
         ${matches.length === 0 ? html`<p class="muted">Keine Matches in dieser Auswahl.</p>` : null}
       <//>
       </div>

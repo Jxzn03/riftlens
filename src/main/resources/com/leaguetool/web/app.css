@@ -330,6 +330,8 @@ kbd {
 .hero-text h1, .rune-detail h2 { font-size: 27px; font-weight: 700; line-height: 1.12; letter-spacing: -.01em; }
 .rune-detail h2 { font-size: 21px; }
 .hero-sub { color: var(--accent); font-size: 14px; font-weight: 500; }
+.hero-text .tags { align-items: flex-start; }
+.hero-text .tag { display: inline-flex; align-items: center; justify-content: center; text-align: center; }
 .plain-hero { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
 .plain-hero .hero-text { flex: 1; min-width: 200px; }
 .lore { color: var(--text-2); line-height: 1.55; }
@@ -374,19 +376,31 @@ table.data.compact td { padding: 3px 10px 3px 0; font-size: 12.5px; }
 .rankings { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
 .ranking { min-width: 0; display: flex; flex-direction: column; gap: 5px; }
 .ranking h4, .wiki-box h4 { font-size: 12.5px; font-weight: 700; }
+/* Einzeilige Überschriften, damit die Trennlinien benachbarter Ranglisten auf einer Höhe liegen. */
+.ranking h4 { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .rank-line { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 4px 0; border-top: 1px solid var(--line); min-height: 42px; }
 .rank-key { min-width: 0; }
 /* Vier Zeilen im Platz von dreien (3 × 42 px): drei beste und der meistgespielte Eintrag. */
 .ranking.compact .rank-line { min-height: 30px; padding: 1px 0; }
-.ranking.compact .rank-stats { line-height: 1.15; }
-.ranking.compact .rank-stats small { font-size: 11px; }
+.ranking.compact .rank-stats { line-height: 1.3; gap: 2px; }
 .ranking.compact .rank-key { display: flex; align-items: center; gap: 6px; }
 .ranking.compact .rank-key .tag { flex: none; }
+/* Core-Build: Zeilen füllen die Höhe des Nachbarn, damit beide Blöcke bündig enden. */
+.ranking.compact .rank-lines { flex: 1; display: flex; flex-direction: column; }
+.ranking.compact .rank-line { flex: 1; }
+/* Zwei Spalten (Boots): doppelt so viele Einträge in derselben Höhe, Plätze 1–3 links. */
+.ranking.columns .rank-lines { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: repeat(3, auto); grid-auto-flow: column; column-gap: 14px; }
+.ranking.columns .rank-line { gap: 6px; }
+.ranking.columns .rank-stats small { font-size: 11px; }
+/* Auffüller unter der Mindest-Stichprobe: deutlich ausgegraut. */
+.rank-line.below-min { opacity: 0.35; filter: grayscale(1); }
+.rank-line.below-min:hover { opacity: 0.6; }
 .rank-stats { text-align: right; flex: none; display: flex; flex-direction: column; font-variant-numeric: tabular-nums; }
 .rank-stats span { font-weight: 650; }
 .rank-stats small { color: var(--text-3); }
-.late-items { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px 4px; padding-top: 4px; border-top: 1px solid var(--line); }
-.late-item { display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 0; text-align: center; }
+/* Füllt die Höhe des Core-Builds daneben, damit beide Blöcke bündig enden. */
+.late-items { flex: 1; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); grid-auto-rows: 1fr; border-top: 1px solid var(--line); }
+.late-item { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-width: 0; padding: 4px 0; text-align: center; }
 .late-item-stats { display: flex; flex-direction: column; font-variant-numeric: tabular-nums; }
 .late-item-stats span { font-weight: 650; }
 .late-item-stats small { color: var(--text-3); white-space: nowrap; }
@@ -405,7 +419,7 @@ table.data.compact td { padding: 3px 10px 3px 0; font-size: 12.5px; }
 .skill-path-grid > div { display: flex; flex-direction: column; align-items: center; gap: 3px; }
 .skill-path-grid kbd { padding: 2px 0; width: 100%; box-sizing: border-box; text-align: center; font-size: 11px; }
 .skill-path-grid small { color: var(--text-3); font-variant-numeric: tabular-nums; }
-.sort-head { display: inline-flex; align-items: center; gap: 3px; color: inherit; font: inherit; }
+.sort-head { display: inline-flex; align-items: center; gap: 3px; }
 .sort-head:hover { color: var(--text); }
 .sort-head.active { color: var(--accent); }
 
@@ -432,7 +446,6 @@ table.data.compact td { padding: 3px 10px 3px 0; font-size: 12.5px; }
 .rune-row-items { display: flex; flex-wrap: wrap; gap: 7px; }
 .rune-btn { width: 112px; display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 9px 5px; border-radius: 10px; border: 1px solid transparent; font-size: 12px; text-align: center; transition: background var(--ease), border-color var(--ease); }
 .rune-btn.keystone { width: 128px; font-weight: 600; }
-.rune-btn .img { background: transparent; }
 .rune-btn:hover { background: var(--row-hover); }
 .rune-btn.selected { background: var(--accent-soft); border-color: var(--accent); }
 .rune-detail { display: flex; align-items: center; gap: 13px; }
@@ -440,7 +453,6 @@ table.data.compact td { padding: 3px 10px 3px 0; font-size: 12.5px; }
 .rune-page-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 12px; align-items: start; }
 .tree-picker { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
 .tree-btn { display: flex; align-items: center; gap: 6px; padding: 5px 10px 5px 6px; border-radius: 999px; border: 1px solid var(--line); font-size: 12.5px; transition: background var(--ease), border-color var(--ease); }
-.tree-btn .img { background: transparent; }
 .tree-btn:hover:not(:disabled) { background: var(--row-hover); }
 .tree-btn.selected { background: var(--accent-soft); border-color: var(--accent); font-weight: 600; }
 .tree-btn:disabled { opacity: .35; cursor: not-allowed; }
@@ -455,13 +467,12 @@ table.data.compact td { padding: 3px 10px 3px 0; font-size: 12.5px; }
 .rune-effects { display: flex; flex-direction: column; gap: 6px; }
 .rune-effect { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-top: 1px solid var(--line); flex-wrap: wrap; }
 .rune-effect:first-child { border-top: 0; }
-.rune-effect .img { background: transparent; }
 .rune-effect.none { opacity: .7; }
 .rune-effect-text { flex: 1; min-width: 200px; display: flex; flex-direction: column; }
 .rune-effect-control { min-width: 220px; display: flex; flex-direction: column; gap: 2px; }
 .shard-dot { width: 32px; height: 32px; display: grid; place-items: center; border-radius: 50%; background: var(--accent-soft); color: var(--accent); font-weight: 700; flex: none; }
 .build-runes { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
-.rune-detail .img { background: transparent; }
+.rune-btn .img, .tree-btn .img, .rune-effect .img, .rune-detail .img { background: transparent; }
 
 /* Abilities */
 .control-bar { display: flex; gap: 22px; align-items: flex-start; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; flex-wrap: wrap; }
@@ -494,7 +505,7 @@ table.data.compact td { padding: 3px 10px 3px 0; font-size: 12.5px; }
 .legal-note + .legal-note { margin-top: 6px; padding-top: 0; border-top: 0; }
 .legal-note a { color: inherit; }
 .huge-hint ul { margin: 0; padding-left: 20px; display: grid; gap: 2px; }
-.mate-link { background: none; border: 0; padding: 0; color: inherit; font: inherit; cursor: pointer; text-align: left; }
+.mate-link { text-align: left; }
 .mate-link:hover { text-decoration: underline; }
 .summoner-result { display: flex; flex-direction: column; gap: 12px; }
 .rank-cards { display: flex; gap: 10px; flex-wrap: wrap; }
@@ -771,7 +782,8 @@ table.data.compact td { padding: 3px 10px 3px 0; font-size: 12.5px; }
 .spell-cd strong { color: var(--text); }
 
 .detail > .empty { height: auto; min-height: 0; padding: 20px 28px 12px; }
-.more-toggle { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; margin-top: 8px; padding: 8px; background: var(--surface); border: 1px dashed var(--line); border-radius: var(--radius); color: var(--muted); font: inherit; cursor: pointer; }
+.more-toggle { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; margin-top: 8px; padding: 8px; background: var(--surface); border: 1px dashed var(--line); border-radius: var(--radius); color: var(--muted); }
+.more-row { display: flex; gap: 8px; }
 .more-arrow { font-size: 12px; }
 
 /* Draft-Archiv */

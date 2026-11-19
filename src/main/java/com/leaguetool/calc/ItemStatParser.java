@@ -130,7 +130,7 @@ public final class ItemStatParser {
      * @param percent ob der Wert mit "%" angegeben ist
      */
     static StatType typeFor(String name, boolean percent) {
-        Alias alias = NAMES.get(normalize(name));
+        Alias alias = NAMES.get(Text.normalizeName(name));
         if (alias == null) {
             return null;
         }
@@ -154,10 +154,6 @@ public final class ItemStatParser {
             }
         }
         return lines;
-    }
-
-    private static String normalize(String name) {
-        return Text.normalizeName(name);
     }
 
     private static StatType findCovering(UnknownLine line, List<StatType> candidates,

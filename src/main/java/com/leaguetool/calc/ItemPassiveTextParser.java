@@ -41,6 +41,13 @@ public final class ItemPassiveTextParser {
             "abilities with immobilizing effects have their cooldown reduced equivalent to " + N + " ability haste");
     private static final Pattern IMMOBILIZE_HASTE_GAIN = Pattern.compile("gain " + N + " ability haste for abilities with immobilizing effects");
     private static final Pattern SUMMONER_HASTE = Pattern.compile("gain " + N + " summoner spell haste");
+    /** Einfache Haste-Zeilen; die Muster schließen sich gegenseitig aus, die Reihenfolge ist daher egal. */
+    private static final List<Map.Entry<Pattern, StatType>> HASTE_PATTERNS = List.of(
+            Map.entry(BASIC_HASTE, StatType.BASIC_ABILITY_HASTE),
+            Map.entry(ULTIMATE_HASTE, StatType.ULTIMATE_HASTE),
+            Map.entry(IMMOBILIZE_HASTE, StatType.IMMOBILIZE_ABILITY_HASTE),
+            Map.entry(IMMOBILIZE_HASTE_GAIN, StatType.IMMOBILIZE_ABILITY_HASTE),
+            Map.entry(SUMMONER_HASTE, StatType.SUMMONER_SPELL_HASTE));
 
     private static final Pattern HAS_DIGIT = Pattern.compile("\\d");
     private static final Pattern STARTS_LIKE_STAT =Pattern.compile("^(gain|increases?)\\b.*");
@@ -108,12 +115,7 @@ public final class ItemPassiveTextParser {
     }
 
     private static List<Effect> simpleHaste(String s) {
-        Map<Pattern, StatType> patterns = Map.of(BASIC_HASTE, StatType.BASIC_ABILITY_HASTE,
-                ULTIMATE_HASTE, StatType.ULTIMATE_HASTE,
-                IMMOBILIZE_HASTE, StatType.IMMOBILIZE_ABILITY_HASTE,
-                IMMOBILIZE_HASTE_GAIN, StatType.IMMOBILIZE_ABILITY_HASTE,
-                SUMMONER_HASTE, StatType.SUMMONER_SPELL_HASTE);
-        for (Map.Entry<Pattern, StatType> e : patterns.entrySet()) {
+        for (Map.Entry<Pattern, StatType> e : HASTE_PATTERNS) {
             Matcher m = e.getKey().matcher(s);
             if (m.matches()) {
                 return List.of(new Effect(e.getValue(), number(m, 1)));

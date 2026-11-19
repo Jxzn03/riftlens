@@ -17,6 +17,7 @@ import com.leaguetool.data.GameData;
 import com.leaguetool.data.UpdateReport;
 import com.leaguetool.data.itempassives.ItemPassiveUpdater;
 import com.leaguetool.data.lolalytics.LolalyticsBuild;
+import com.leaguetool.data.lolalytics.LolalyticsClient;
 import com.leaguetool.data.lolalytics.LolalyticsCounters;
 import com.leaguetool.data.lolalytics.LolalyticsFullTierList;
 import com.leaguetool.data.lolalytics.LolalyticsLateItems;
@@ -30,6 +31,7 @@ import com.leaguetool.model.BaseStats;
 import com.leaguetool.model.Champion;
 import com.leaguetool.model.ChampionDetail;
 import com.leaguetool.model.Item;
+import com.leaguetool.model.Role;
 import com.leaguetool.model.Rune;
 import com.leaguetool.model.RuneTree;
 import com.leaguetool.model.StatShard;
@@ -42,6 +44,7 @@ import com.leaguetool.stats.StatRanking;
 import com.leaguetool.stats.WinStats;
 import com.leaguetool.util.Text;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
@@ -50,6 +53,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -58,6 +62,10 @@ final class Dto {
 
     /** So viele Einträge zeigt eine Rangliste. */
     private static final int TOP = 3;
+    /** Boots stehen in zwei Spalten, daher doppelt so viele Einträge im selben Platz. */
+    private static final int TOP_BOOTS = 6;
+    /** Core-Build: drei Builds plus Meistgespielt; steht dieser unter den dreien, rückt der vierte nach. */
+    private static final int TOP_CORE = 4;
     private static final List<String> PRIMARY_MODES = List.of("CLASSIC", "ARAM", "URF", "CHERRY");
     private static final int SHORT_MODES = 3;
 
@@ -76,6 +84,13 @@ final class Dto {
     private static Map<String, Object> updateReport(UpdateReport r) {
         return obj("patch", r.patch(), "checkedAt", r.checkedAt(), "count", r.count(),
                 "changes", r.changes(), "review", r.review(), "notes", r.notes());
+    }
+
+    /** Ein Papierkorb-Eintrag: {@code item} plus Lösch- und Ablaufzeitpunkt (Draft-Archiv und Fearless-Serien). */
+    static Map<String, Object> trashed(Map<String, Object> item, Instant deletedAt, Instant expiresAt) {
+        item.put("deletedAt", deletedAt.toString());
+        item.put("expiresAt", expiresAt.toString());
+        return item;
     }
 
     // ------------------------------------------------------------------ Bilder
@@ -427,18 +442,18 @@ final class Dto {
                 "lower", s.wilsonLower(), "upper", s.wilsonUpper());
     }
 
-    static Map<String, Object> statLine(StatLine<?> l) {
+    private static Map<String, Object> statLine(StatLine<?> l) {
         Map<String, Object> m = win(l);
         m.put("pickRate", l.pickRate());
         return m;
     }
 
-    static Map<String, Object> report(ChampionReport r) {
+    private static Map<String, Object> report(ChampionReport r) {
         Map<String, Object> m = win(r);
         m.put("pickRate", r.pickRate());
         m.put("banRate", r.banRate());
-        m.put("coreBuilds", ranking(r.coreBuilds(), ids -> ids));
-        m.put("boots", ranking(r.boots(), List::of));
+        m.put("coreBuilds", ranking(r.coreBuilds(), ids -> ids, TOP_CORE));
+        m.put("boots", ranking(r.boots(), List::of, TOP_BOOTS, true));
         m.put("starters", ranking(r.starters(), ids -> ids));
         m.put("keystones", ranking(r.keystones(), List::of));
         m.put("runePages", ranking(r.runePages(), Dto::runePage));
@@ -452,13 +467,34 @@ final class Dto {
         return order.stream().map(AbilitySlot::label).toList();
     }
 
+    /** Kurznamen der Shards für die Runenseiten der Match-Statistik; die übrigen behalten ihren Namen. */
+    private static final Map<Integer, String> SHARD_LABELS = Map.of(5008, "Adaptive", 5001, "HP-Scaling",
+            5013, "Tenacity", 5011, "HP-Flat");
+
+    static String shardLabel(int id) {
+        return SHARD_LABELS.getOrDefault(id, StatShard.nameOf(id));
+    }
+
     private static Map<String, Object> runePage(RunePageKey key) {
         return obj("primary", key.primaryPerks(), "sub", key.subPerks(), "shardIds", key.shards(),
-                "shards", key.shards().stream().map(StatShard::nameOf).collect(Collectors.joining(" / ")));
+                "shards", key.shards().stream().map(Dto::shardLabel).collect(Collectors.joining(" / ")));
     }
 
     /** Bevorzugt die besten Einträge (Bayes-Untergrenze, Mindest-Stichprobe), sonst die häufigsten. */
     private static <K> Map<String, Object> ranking(StatRanking<K> ranking, Function<K, Object> keyView) {
+        return ranking(ranking, keyView, TOP);
+    }
+
+    private static <K> Map<String, Object> ranking(StatRanking<K> ranking, Function<K, Object> keyView, int limit) {
+        return ranking(ranking, keyView, limit, false);
+    }
+
+    /**
+     * @param fill füllt freie Plätze hinter den besten mit den häufigsten Einträgen unter der Mindest-Stichprobe auf;
+     *             sie tragen {@code belowMin} und werden ausgegraut angezeigt
+     */
+    static <K> Map<String, Object> ranking(StatRanking<K> ranking, Function<K, Object> keyView, int limit,
+                                           boolean fill) {
         boolean best = !ranking.best().isEmpty();
         List<StatLine<K>> lines = best ? ranking.best() : ranking.mostFrequent();
         Function<StatLine<K>, Map<String, Object>> view = line -> {
@@ -466,9 +502,20 @@ final class Dto {
             m.put("key", keyView.apply(line.key()));
             return m;
         };
+        List<Map<String, Object>> shown = new ArrayList<>(lines.stream().limit(limit).map(view).toList());
+        if (fill && best) {
+            Set<K> listed = lines.stream().map(StatLine::key).collect(Collectors.toSet());
+            ranking.mostFrequent().stream()
+                    .filter(line -> line.games() > 0 && !listed.contains(line.key()))
+                    .limit(Math.max(0, limit - shown.size()))
+                    .forEach(line -> {
+                        Map<String, Object> m = view.apply(line);
+                        m.put("belowMin", true);
+                        shown.add(m);
+                    });
+        }
         // Meistgespielter Eintrag unabhängig von der Winrate; der Core-Build zeigt ihn unter den besten.
-        return obj("best", best, "minGames", ranking.minGames(),
-                "lines", lines.stream().limit(TOP).map(view).toList(),
+        return obj("best", best, "minGames", ranking.minGames(), "lines", shown,
                 "mostPlayed", ranking.top().map(view).orElse(null));
     }
 
@@ -482,8 +529,9 @@ final class Dto {
     private static final int LOLALYTICS_MIN_GAMES = 100;
     private static final int LATE_ITEMS = 8;
 
-    private static final Map<String, String> LANE_LABELS = Map.of("top", "Top", "jungle", "Jungle", "middle", "Mid",
-            "bottom", "ADC", "support", "Support");
+    /** Lolalytics-Lane → Beschriftung der Rolle (z. B. {@code middle} → „Mid“). */
+    private static final Map<String, String> LANE_LABELS = Arrays.stream(Role.values())
+            .collect(Collectors.toUnmodifiableMap(LolalyticsClient::lane, Role::label));
 
     /** Zeile der Champions-Tabelle. */
     static Map<String, Object> lolalyticsChampionStat(LolalyticsFullTierList.Row row, Double strength) {
@@ -541,6 +589,7 @@ final class Dto {
         json.put("counters", counters(LolalyticsCounters.of(b.matchups(), opponentLane, min, b.winRate())));
         json.put("skillPath", slots(bestSkillPath(report)));
         json.put("lateItems", lateItems(b, report));
+        json.put("minGames", min);   // Mindest-Stichprobe aller Ranglisten, Anzeige im Kartenkopf
         return json;
     }
 

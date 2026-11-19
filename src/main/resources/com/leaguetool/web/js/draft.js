@@ -169,9 +169,34 @@ function archiveDraft(key) {
     .catch(() => {});
 }
 
+/**
+ * Vollständige Antworten je Anfrage (Schlüssel: Anfrage-Text). Zurück zu einem schon berechneten Brett, etwa beim
+ * Wechsel „Für mein Team“/„Für den Gegner“ oder beim erneuten Öffnen des Tabs, zeigt sofort das gemerkte Ergebnis.
+ * Die Anfrage geht trotzdem genau wie ohne Speicher hinaus und ersetzt es; an den Abrufen ändert sich nichts.
+ */
+const draftResults = new Map();
+const DRAFT_RESULT_LIMIT = 20;
+const DRAFT_DEBOUNCE_MS = 150;
+
+function rememberDraftResult(body, result) {
+  draftResults.delete(body);
+  draftResults.set(body, result);
+  if (draftResults.size > DRAFT_RESULT_LIMIT) {
+    draftResults.delete(draftResults.keys().next().value);
+  }
+}
+
+/**
+ * Die Felder, nach denen das Backend entscheidet, was es lädt (`DraftDataLoader`: Picks samt Rollen, Seite, Rang-Bereich,
+ * Zeitraum). Bleiben sie gleich und ändern sich nur Bans, Sperren oder Filter, lädt die Anfrage nichts Neues; dann
+ * braucht sie keine Wartezeit, die schnelle Klickfolgen zusammenfasst.
+ */
+function loadKey(body) {
+  const { ally, enemy, side, tier, period } = JSON.parse(body);
+  return JSON.stringify([ally, enemy, side, tier, period]);
+}
+
 function useDraftResult(view, dataSource, locked) {
-  const [state, setState] = useState({ result: null, error: null, loading: true, completing: false });
-  const sequence = useRef(0);
   const body = JSON.stringify({
     ally: view.ally.filter(Boolean), enemy: view.enemy.filter(Boolean), bans: view.bans, side: view.side,
     // Fearless: in früheren Spielen der Serie gespielte Champions fehlen in den Vorschlägen.
@@ -183,13 +208,33 @@ function useDraftResult(view, dataSource, locked) {
     ignoreChampionWinRates: view.ignoreChampionWinRates,
     tier: dataSource.tier, period: dataSource.period,
   });
+  // Beim erneuten Öffnen des Tabs steht ein gemerktes Ergebnis schon im ersten Bild.
+  const [state, setState] = useState(() => {
+    const remembered = draftResults.get(body);
+    return { result: remembered || null, error: null, loading: !remembered, completing: false };
+  });
+  const sequence = useRef(0);
+  const lastLoadKey = useRef(null);
   // Zwei Schritte: Die schnelle Anfrage lädt nur, was die Vorschläge bestimmen, und zeigt sie sofort. Fehlt danach noch
   // etwas für die Gesamtanalyse ("complete": false), lädt eine zweite Anfrage den Rest (completing).
   useEffect(() => {
     const requestId = ++sequence.current;
     const controller = new AbortController();
     const post = (id, quick) => api.post('/api/draft', { ...JSON.parse(body), client: CLIENT_ID, requestId: id, quick }, controller.signal);
-    setState((previous) => ({ ...previous, error: null, loading: true, completing: false, requestId }));
+    const key = loadKey(body);
+    const delay = key === lastLoadKey.current ? 0 : DRAFT_DEBOUNCE_MS;
+    lastLoadKey.current = key;
+    // Mit gemerktem Ergebnis gilt das Brett nicht als ladend: Die Antwort ersetzt es still.
+    const remembered = draftResults.get(body);
+    setState((previous) => (remembered
+      ? { result: remembered, error: null, loading: false, completing: false, requestId }
+      : { ...previous, error: null, loading: true, completing: false, requestId }));
+    const show = (result, id) => {
+      if (result.complete !== false) {
+        rememberDraftResult(body, result);
+      }
+      setState({ result, error: null, loading: false, completing: result.complete === false, requestId: id });
+    };
     const timer = setTimeout(() => {
       post(requestId, true)
         .then((result) => {
@@ -197,17 +242,19 @@ function useDraftResult(view, dataSource, locked) {
             return null;
           }
           if (result.complete !== false) {
-            setState({ result, error: null, loading: false, completing: false, requestId });
+            show(result, requestId);
             return null;
           }
           const fullId = ++sequence.current;
-          setState({ result, error: null, loading: false, completing: true, requestId: fullId });
-          return post(fullId, false).then((full) => !controller.signal.aborted
-            && setState({ result: full, error: null, loading: false, completing: false, requestId: fullId }));
+          // Ein gemerktes vollständiges Ergebnis bleibt stehen, bis die vollständige Antwort da ist.
+          if (!remembered) {
+            show(result, fullId);
+          }
+          return post(fullId, false).then((full) => !controller.signal.aborted && show(full, fullId));
         })
         .catch((error) => !controller.signal.aborted
           && setState((previous) => ({ ...previous, error, loading: false, completing: false })));
-    }, 150);
+    }, delay);
     return () => {
       clearTimeout(timer);
       controller.abort();
@@ -803,11 +850,12 @@ export function DraftView() {
 
   // Pick, dessen Rolle gerade geändert wurde: Er zeigt einen Spinner, bis seine Daten nachgeladen sind.
   const [pendingRole, setPendingRole] = useState(null);
+  // Auch bei gemerktem Ergebnis: Dann bleibt "loading" false, nur das Ergebnis wechselt.
   useEffect(() => {
     if (!loading) {
       setPendingRole(null);
     }
-  }, [loading]);
+  }, [loading, result]);
 
   const setSlotRole = (teamName, index, role) => {
     setPendingRole(`${teamName}:${view[teamName][index].champion}`);

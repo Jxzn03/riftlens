@@ -172,17 +172,20 @@ export function useFetch(url, { keep = false } = {}) {
   return state;
 }
 
-export function statsUrl(path) {
-  const { filter, dataSource } = store.get();
-  const params = new URLSearchParams({ role: filter.role, period: dataSource.period, laTier: dataSource.tier });
+/**
+ * Aktuelle Statistik-URL, die sich mit Rolle, Zeitraum und Rang-Bereich ändert. Die URL ist auch der Cache-Schlüssel
+ * von {@link useFetch}: Reihenfolge der Parameter nicht ändern.
+ *
+ * @param role Rolle statt des Rollenfilters (z. B. die Rolle eines Champions); weggelassen = Rollenfilter
+ */
+export function useStatsUrl(path, role) {
+  const filter = useStore((s) => s.filter);
+  const dataSource = useStore((s) => s.dataSource);
+  if (!path) {
+    return null;
+  }
+  const params = new URLSearchParams({ role: role === undefined ? filter.role : role, period: dataSource.period, laTier: dataSource.tier });
   return `${path}?${params}`;
-}
-
-/** Aktuelle Statistik-URL, die sich mit Rolle, Zeitraum und Rang-Bereich ändert. */
-export function useStatsUrl(path) {
-  useStore((s) => s.filter);
-  useStore((s) => s.dataSource);
-  return path ? statsUrl(path) : null;
 }
 
 const CHAMPION_ROLES = 'champion-roles';
@@ -212,14 +215,7 @@ export function useChampionRole(championKey) {
 
 /** Wie {@link useStatsUrl}, aber mit der Rolle des Champions statt des Rollenfilters. */
 export function useChampionStatsUrl(path, role) {
-  const url = useStatsUrl(path);
-  if (!url) {
-    return null;
-  }
-  const [base, query] = url.split('?');
-  const params = new URLSearchParams(query);
-  params.set('role', role || '');
-  return `${base}?${params}`;
+  return useStatsUrl(path, role || '');
 }
 
 /**
@@ -266,8 +262,11 @@ export function useSourceLabel() {
 /**
  * Verzögert das Laden noch nicht vorhandener Antworten. So löst schnelles Durchklicken der Liste keine Abrufe für
  * jeden Zwischenstand aus (Lolalytics wird höchstens alle 2 Sekunden angefragt). Liefert bis dahin {@code null}.
+ *
+ * cachedUrl: optional die URL einer Anfrage, die nur aus dem Cache des Backends antwortet (ohne Abruf, sonst
+ * `{ cached: false }`). Sie läuft parallel zur unveränderten Wartezeit; trifft sie, gilt ihre Antwort als die von url.
  */
-export function useDeferredUrl(url, delay) {
+export function useDeferredUrl(url, delay, cachedUrl) {
   const ready = !delay || !url || responseCache.has(url);
   const [value, setValue] = useState(ready ? url : null);
   useEffect(() => {
@@ -276,8 +275,24 @@ export function useDeferredUrl(url, delay) {
       return undefined;
     }
     setValue(null);
-    const timer = setTimeout(() => setValue(url), delay);
-    return () => clearTimeout(timer);
+    const controller = new AbortController();
+    const timer = setTimeout(() => {
+      controller.abort();
+      setValue(url);
+    }, delay);
+    if (cachedUrl) {
+      api.get(cachedUrl, controller.signal).then((data) => {
+        if (!controller.signal.aborted && data && data.cached !== false) {
+          clearTimeout(timer);
+          remember(url, data);
+          setValue(url);
+        }
+      }).catch(() => {});
+    }
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
   }, [url, delay]);
   return value;
 }
@@ -647,14 +662,6 @@ export function toast(text, kind = 'info') {
 
 export function percent(fraction, decimals = 1) {
   return fraction === null || fraction === undefined || Number.isNaN(fraction) ? '–' : `${(fraction * 100).toFixed(decimals)} %`;
-}
-
-export function winRateText(stats, decimals = 1) {
-  return `${percent(stats.winRate, decimals)} (KI ${(stats.lower * 100).toFixed(decimals)}–${percent(stats.upper, decimals)})`;
-}
-
-export function summary(line, decimals = 1) {
-  return `${winRateText(line, decimals)} WR · ${percent(line.pickRate)} PR · ${line.games.toLocaleString('de-DE')} Spiele`;
 }
 
 export function normalize(text) {

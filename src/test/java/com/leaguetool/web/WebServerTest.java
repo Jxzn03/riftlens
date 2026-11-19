@@ -21,12 +21,18 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.FileTime;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class WebServerTest {
@@ -297,6 +303,78 @@ class WebServerTest {
         assertEquals(3089, lateItems.path(1).path("item").asInt());
         assertEquals(45_562 + 8_924, lateItems.path(1).path("games").asInt(), "lateItems: Spiele über alle Plätze");
         assertEquals(5, lateItems.path(1).path("slots").path(1).path("slot").asInt(), "lateItems: Aufteilung je Platz");
+    }
+
+    @Test
+    void cachedOnlyReportNeverFetches() throws Exception {
+        settings.setLolalyticsEnabled(true);
+        String list = "https://lolalytics.com/lol/tierlist/?tier=emerald_plus&lane=all&patch=30";
+        String build = "https://lolalytics.com/lol/ahri/build/?tier=emerald_plus&patch=30";
+        fake.respond(list, LolalyticsPages.tierList());
+        fake.respond(build, LolalyticsPages.build());
+
+        // Leerer Cache: keine Antwort aus dem Cache und kein Abruf, weder Liste noch Seite.
+        HttpResponse<String> empty = get("/api/stats/report/103?cachedOnly=1", true);
+        assertEquals(200, empty.statusCode(), empty.body());
+        assertFalse(json.readTree(empty.body()).path("cached").asBoolean(true));
+        assertTrue(fake.requests().stream().noneMatch(u -> u.contains("lolalytics")), "kein Lolalytics-Abruf");
+
+        // Nur die Liste im Cache (Champions-Liste geladen): die Seite fehlt weiter, es wird nichts abgerufen.
+        get("/api/stats/champions", true);
+        int afterList = fake.requests().size();
+        assertFalse(json.readTree(get("/api/stats/report/103?cachedOnly=1", true).body()).path("cached").asBoolean(true));
+        assertEquals(afterList, fake.requests().size());
+        assertFalse(fake.requests().contains(build));
+
+        // Nach dem normalen Abruf liefert die Cache-Variante denselben Report ohne weiteren Abruf.
+        String normal = get("/api/stats/report/103", true).body();
+        int afterReport = fake.requests().size();
+        assertEquals(json.readTree(normal), json.readTree(get("/api/stats/report/103?cachedOnly=1", true).body()));
+        assertEquals(afterReport, fake.requests().size());
+    }
+
+    @Test
+    void outdatedThirtyDayStatisticsShowAtOnceAndRefreshOnceInTheBackground() throws Exception {
+        settings.setLolalyticsEnabled(true);
+        String list = "https://lolalytics.com/lol/tierlist/?tier=emerald_plus&lane=all&patch=30";
+        String build = "https://lolalytics.com/lol/ahri/build/?tier=emerald_plus&patch=30";
+        fake.respond(list, LolalyticsPages.tierList());
+        fake.respond(build, LolalyticsPages.build());
+        String fresh = get("/api/stats/report/103", true).body();
+        Path listFile = age("lolalytics/full_v4_emerald_plus_all_30d.json");
+        Path buildFile = age("lolalytics/build_v4_ahri_emerald_plus_main_30d.json");
+
+        // Abrufe angehalten: Müsste die Anfrage auf sie warten, liefe sie in die Zeitgrenze.
+        CountDownLatch releaseList = fake.hold(list);
+        CountDownLatch releaseBuild = fake.hold(build);
+        try {
+            HttpResponse<String> report = assertTimeoutPreemptively(Duration.ofSeconds(5), () -> get("/api/stats/report/103", true));
+            assertEquals(200, report.statusCode(), report.body());
+            assertEquals(json.readTree(fresh), json.readTree(report.body()), "alte Werte sofort");
+        } finally {
+            releaseList.countDown();
+            releaseBuild.countDown();
+        }
+
+        // Danach erneuert der Hintergrund jeden Eintrag genau einmal, mit der üblichen Drosselung.
+        Instant deadline = Instant.now().plusSeconds(15);
+        while ((isOld(listFile) || isOld(buildFile)) && Instant.now().isBefore(deadline)) {
+            Thread.sleep(50);
+        }
+        assertFalse(isOld(listFile), "Liste erneuert");
+        assertFalse(isOld(buildFile), "Seite erneuert");
+        assertEquals(2, fake.requests().stream().filter(list::equals).count());
+        assertEquals(2, fake.requests().stream().filter(build::equals).count());
+    }
+
+    private Path age(String key) throws IOException {
+        Path file = settings.cacheDir().resolve("_global").resolve(key);
+        Files.setLastModifiedTime(file, FileTime.from(Instant.now().minus(Duration.ofDays(2))));
+        return file;
+    }
+
+    private static boolean isOld(Path file) throws IOException {
+        return Files.getLastModifiedTime(file).toInstant().isBefore(Instant.now().minus(Duration.ofDays(1)));
     }
 
     @Test

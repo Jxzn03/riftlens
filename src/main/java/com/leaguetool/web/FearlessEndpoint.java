@@ -47,7 +47,6 @@ import java.util.Set;
 final class FearlessEndpoint {
 
     static final String FILE_NAME = "fearless-series.json";
-    private static final String ID_PATTERN = "[0-9a-f-]{36}";
 
     private final WebContext ctx;
     private final FearlessStore store;
@@ -63,21 +62,22 @@ final class FearlessEndpoint {
     Object handle(String method, List<String> path, JsonNode body) throws IOException {
         backfillArchive();
         String sub = path.size() > 1 ? path.get(1) : "";
-        if (path.size() == 3 && "POST".equals(method) && sub.matches(ID_PATTERN) && "game".equals(path.get(2))) {
+        if (path.size() == 3 && "POST".equals(method) && sub.matches(Input.ID_PATTERN) && "game".equals(path.get(2))) {
             return addDraftTo(sub, body);
         }
         if (path.size() == 3) {
             return trashAction(method, sub, path.get(2));
         }
-        if (path.size() == 4 && sub.matches(ID_PATTERN) && "game".equals(path.get(2))) {
+        if (path.size() == 4 && sub.matches(Input.ID_PATTERN) && "game".equals(path.get(2))) {
+            int number = Input.intValue(path.get(3), 404, "Unbekannter Endpunkt");
             if ("DELETE".equals(method)) {
-                return removeGame(sub, path.get(3));
+                return removeGame(sub, number);
             }
             if ("PUT".equals(method)) {
                 if (body.has("result")) {
-                    return updateGameResult(sub, path.get(3), body);
+                    return updateGameResult(sub, number, body);
                 }
-                return body.path("replace").asBoolean(false) ? replaceGame(sub, path.get(3), body) : updateGameRoles(sub, path.get(3), body);
+                return body.path("replace").asBoolean(false) ? replaceGame(sub, number, body) : updateGameRoles(sub, number, body);
             }
         }
         if (path.size() > 3) {
@@ -97,7 +97,7 @@ final class FearlessEndpoint {
                 yield state();
             }
             default -> {
-                if (!sub.matches(ID_PATTERN)) {
+                if (!sub.matches(Input.ID_PATTERN)) {
                     throw new ApiException(404, "Unbekannter Endpunkt");
                 }
                 yield switch (method) {
@@ -111,7 +111,7 @@ final class FearlessEndpoint {
 
     /** {@code POST /api/fearless/<id>/restore} und {@code DELETE /api/fearless/trash/<id>}. */
     private Object trashAction(String method, String first, String second) throws IOException {
-        if ("POST".equals(method) && first.matches(ID_PATTERN) && "restore".equals(second)) {
+        if ("POST".equals(method) && first.matches(Input.ID_PATTERN) && "restore".equals(second)) {
             FearlessSeries series = store.trash().stream().map(FearlessStore.TrashedSeries::series)
                     .filter(s -> s.id().equals(first)).findFirst().orElse(null);
             if (series == null || !store.restore(first)) {
@@ -122,7 +122,7 @@ final class FearlessEndpoint {
             response.put("draftsRestored", drafts.restoreMatching(gameDrafts(series)));
             return response;
         }
-        if ("DELETE".equals(method) && "trash".equals(first) && second.matches(ID_PATTERN)) {
+        if ("DELETE".equals(method) && "trash".equals(first) && second.matches(Input.ID_PATTERN)) {
             if (!store.purge(second)) {
                 throw new ApiException(404, "Nicht im Papierkorb");
             }
@@ -164,10 +164,7 @@ final class FearlessEndpoint {
     private List<Map<String, Object>> trash() throws IOException {
         List<Map<String, Object>> items = new ArrayList<>();
         for (FearlessStore.TrashedSeries t : store.trash()) {
-            Map<String, Object> item = series(ordered(t.series()));
-            item.put("deletedAt", t.deletedAt().toString());
-            item.put("expiresAt", t.expiresAt().toString());
-            items.add(item);
+            items.add(Dto.trashed(series(ordered(t.series())), t.deletedAt(), t.expiresAt()));
         }
         return items;
     }
@@ -177,8 +174,7 @@ final class FearlessEndpoint {
      * Serie; die übrigen Spiele rücken nach, ihre Sperren folgen daraus. Der Draft bleibt unter „Drafts“: Fehlt er dort
      * ganz (auch nicht im Papierkorb), wird er aus dem Spiel neu angelegt ({@code draftRecreated}).
      */
-    private Object removeGame(String id, String numberText) throws IOException {
-        int number = gameNumber(numberText);
+    private Object removeGame(String id, int number) throws IOException {
         Game removed;
         try {
             removed = store.removeGame(id, number);
@@ -196,22 +192,13 @@ final class FearlessEndpoint {
         return response;
     }
 
-    private static int gameNumber(String text) {
-        try {
-            return Integer.parseInt(text);
-        } catch (NumberFormatException e) {
-            throw new ApiException(404, "Unbekannter Endpunkt");
-        }
-    }
-
     /**
      * {@code PUT /api/fearless/<id>/game/<n> {replace: true, ally, enemy, bans, shownRoles}}: ersetzt den Draft eines Spiels
      * (z. B. aus dem Archiv geladen, ein Pick korrigiert); Ergebnis und Zeitpunkt bleiben. Champion aus einem anderen Spiel
      * der Serie oder unvollständig → 400. Gleiche Archiv-Drafts werden mit ersetzt ({@code draftsUpdated}); gibt es keinen,
      * wird er aus dem Spiel neu angelegt ({@code draftsRecreated}).
      */
-    private Object replaceGame(String id, String numberText, JsonNode body) throws IOException {
-        int number = gameNumber(numberText);
+    private Object replaceGame(String id, int number, JsonNode body) throws IOException {
         GameData data = ctx.awaitData();
         Draft board = DraftEndpoint.board(body, data, "Nur vollständige Drafts zählen als Game.");
         Map<Integer, Role> shownRoles = shownRoles(body.path("shownRoles"), board.ally(), board.enemy());
@@ -237,8 +224,7 @@ final class FearlessEndpoint {
      * {@code PUT /api/fearless/<id>/game/<n> {ally, enemy}}: überschreibt nur die festen Rollen des Spiels. Andere
      * Champions → 400.
      */
-    private Object updateGameRoles(String id, String numberText, JsonNode body) throws IOException {
-        int number = gameNumber(numberText);
+    private Object updateGameRoles(String id, int number, JsonNode body) throws IOException {
         List<Slot> ally = DraftEndpoint.storedSlots(body.path("ally"));
         List<Slot> enemy = DraftEndpoint.storedSlots(body.path("enemy"));
         Game updated;
@@ -262,10 +248,9 @@ final class FearlessEndpoint {
      * {@code PUT /api/fearless/<id>/game/<n> {result}}: Ergebnis ändern ({@code WIN|LOSS|null}). Liefert {@code reopened},
      * wenn eine beendete Serie dadurch wieder läuft, und {@code reopenBlocked}, wenn das an einer anderen laufenden scheitert.
      */
-    private Object updateGameResult(String id, String numberText, JsonNode body) throws IOException {
-        int number = gameNumber(numberText);
+    private Object updateGameResult(String id, int number, JsonNode body) throws IOException {
         JsonNode value = body.path("result");
-        Result result = value.isNull() || value.asText("").isEmpty() ? null : parse(Result.class, value.asText(), "Ungültiges Ergebnis");
+        Result result = value.isNull() || value.asText("").isEmpty() ? null : Input.enumValue(Result.class, value.asText(), "Ungültiges Ergebnis");
         FearlessStore.ResultChange change;
         try {
             change = store.updateGameResult(id, number, result);
@@ -288,7 +273,7 @@ final class FearlessEndpoint {
     }
 
     private Object start(JsonNode body) throws IOException {
-        Format format = parse(Format.class, body.path("format").asText(""), "Ungültiges Format");
+        Format format = Input.enumValue(Format.class, body.path("format").asText(""), "Ungültiges Format");
         try {
             store.start(format, maxGames(format, body.path("maxGames")), label(body), limit());
         } catch (IllegalStateException e) {
@@ -316,7 +301,7 @@ final class FearlessEndpoint {
         GameData data = ctx.awaitData();
         Draft board = DraftEndpoint.board(body, data, "Nur vollständige Drafts zählen als Game.");
         String resultText = body.path("result").asText("");
-        Result result = resultText.isEmpty() ? null : parse(Result.class, resultText, "Ungültiges Ergebnis");
+        Result result = resultText.isEmpty() ? null : Input.enumValue(Result.class, resultText, "Ungültiges Ergebnis");
         Map<Integer, Role> shownRoles = shownRoles(body.path("shownRoles"), board.ally(), board.enemy());
 
         FearlessSeries active = store.active().orElseThrow(() -> new ApiException(409, "Es läuft keine Fearless-Serie."));
@@ -512,18 +497,10 @@ final class FearlessEndpoint {
                 throw new ApiException(400, "Ungültige angezeigte Rolle");
             }
             if (open.contains(champion)) {
-                shown.put(champion, parse(Role.class, e.getValue().asText(""), "Ungültige angezeigte Rolle"));
+                shown.put(champion, Input.enumValue(Role.class, e.getValue().asText(""), "Ungültige angezeigte Rolle"));
             }
         });
         return shown;
-    }
-
-    private static <E extends Enum<E>> E parse(Class<E> type, String value, String message) {
-        try {
-            return Enum.valueOf(type, value);
-        } catch (IllegalArgumentException e) {
-            throw new ApiException(400, message);
-        }
     }
 
     private static List<Slot> concat(List<Slot> a, List<Slot> b) {

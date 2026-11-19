@@ -1,5 +1,6 @@
 package com.leaguetool.util;
 
+import java.util.List;
 import java.util.Locale;
 import java.util.regex.Pattern;
 
@@ -12,6 +13,10 @@ public final class Text {
     private static final Pattern SPACES = Pattern.compile("[ \\t\\x0B\\f\\r]+");
     private static final Pattern SPACE_AROUND_NEWLINE = Pattern.compile(" *\n *");
     private static final Pattern MANY_NEWLINES = Pattern.compile("\n{3,}");
+    private static final Pattern SPACES_ALL = Pattern.compile("\\s+");
+
+    /** Data Dragon gibt globale Reichweiten als 25000 (oder mehr) an. */
+    private static final double GLOBAL_RANGE = 25000;
 
     private Text() {
     }
@@ -67,16 +72,13 @@ public final class Text {
         return String.format(Locale.ROOT, "%.1f %%", fraction * 100.0);
     }
 
-    /** Data Dragon gibt globale Reichweiten als 25000 (oder mehr) an. */
-    public static final double GLOBAL_RANGE = 25000;
-
     /** Reichweite, ab {@link #GLOBAL_RANGE} als "global". */
     public static String range(double value) {
         return value >= GLOBAL_RANGE ? "global" : num(value);
     }
 
     /** Reichweiten je Rang; "global", wenn alle Werte global sind, "–" bei leerer Liste. */
-    public static String ranges(java.util.List<Double> values) {
+    public static String ranges(List<Double> values) {
         if (values == null || values.isEmpty()) {
             return "–";
         }
@@ -94,7 +96,7 @@ public final class Text {
         if (raw == null) {
             return "";
         }
-        String s = raw.toLowerCase(Locale.ROOT).replace(' ', ' ');
+        String s = raw.toLowerCase(Locale.ROOT).replace('\u00A0', ' '); // geschütztes Leerzeichen
         s = SPACES_ALL.matcher(s).replaceAll(" ").strip();
         while (!s.isEmpty() && ".,:".indexOf(s.charAt(s.length() - 1)) >= 0) {
             s = s.substring(0, s.length() - 1).strip();
@@ -102,15 +104,13 @@ public final class Text {
         return s;
     }
 
-    private static final Pattern SPACES_ALL = Pattern.compile("\\s+");
-
     /** Fasst jeden Leerraum (auch Zeilenumbrüche) zu einem Leerzeichen zusammen. */
     public static String collapseSpaces(String s) {
         return SPACES_ALL.matcher(s).replaceAll(" ");
     }
 
     /** Werte je Rang: "7 / 6.5 / 6" bzw. ein einzelner Wert, wenn alle gleich sind. */
-    public static String perRank(java.util.List<Double> values) {
+    public static String perRank(List<Double> values) {
         if (values == null || values.isEmpty()) {
             return "–";
         }

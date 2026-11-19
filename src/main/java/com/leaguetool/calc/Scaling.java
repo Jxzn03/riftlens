@@ -36,7 +36,7 @@ public record Scaling(double ratio, ScalingStat stat) {
         if (text == null) {
             return Optional.empty();
         }
-        Matcher m = RATIO_TEXT.matcher(text.replace(' ', ' ').strip());
+        Matcher m = RATIO_TEXT.matcher(text.replace('\u00A0', ' ').strip()); // geschütztes Leerzeichen
         if (!m.matches()) {
             return Optional.empty();
         }

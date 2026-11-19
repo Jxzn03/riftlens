@@ -22,7 +22,6 @@ import java.util.Map;
 final class DraftArchiveEndpoint {
 
     static final String FILE_NAME = "draft-archive.json";
-    private static final String ID_PATTERN = "[0-9a-f-]{36}";
 
     private final WebContext ctx;
     private final DraftArchive archive;
@@ -42,17 +41,12 @@ final class DraftArchiveEndpoint {
         return Dto.obj("limit", limit, "minChanges", DraftArchive.MIN_CHANGES,
                 "entries", archive.entries(limit).stream().map(DraftArchiveEndpoint::entry).toList(),
                 "trashDays", DraftArchive.TRASH_RETENTION.toDays(),
-                "trash", archive.trash().stream().map(t -> {
-                    Map<String, Object> item = entry(t.entry());
-                    item.put("deletedAt", t.deletedAt().toString());
-                    item.put("expiresAt", t.expiresAt().toString());
-                    return item;
-                }).toList());
+                "trash", archive.trash().stream().map(t -> Dto.trashed(entry(t.entry()), t.deletedAt(), t.expiresAt())).toList());
     }
 
     /** {@code POST /api/draft-archive/<id>/restore}: holt einen Eintrag aus dem Papierkorb zurück. */
     Object restore(List<String> path) throws IOException {
-        if (path.size() != 3 || !path.get(1).matches(ID_PATTERN) || !"restore".equals(path.get(2))) {
+        if (path.size() != 3 || !path.get(1).matches(Input.ID_PATTERN) || !"restore".equals(path.get(2))) {
             throw new ApiException(404, "Unbekannter Endpunkt");
         }
         if (!archive.restore(path.get(1))) {
@@ -80,7 +74,7 @@ final class DraftArchiveEndpoint {
      * Champions → 400 (dafür bleibt die normale Aufnahme zuständig). Gleiche Fearless-Spiele gehen mit ({@code seriesUpdated}).
      */
     Object updateRoles(List<String> path, JsonNode body, RoleSync series) throws IOException {
-        if (path.size() != 2 || !path.get(1).matches(ID_PATTERN)) {
+        if (path.size() != 2 || !path.get(1).matches(Input.ID_PATTERN)) {
             throw new ApiException(404, "Unbekannter Endpunkt");
         }
         Entry updated;
@@ -110,13 +104,13 @@ final class DraftArchiveEndpoint {
             archive.emptyTrash();
             return list();
         }
-        if (path.size() == 3 && "trash".equals(path.get(1)) && path.get(2).matches(ID_PATTERN)) {
+        if (path.size() == 3 && "trash".equals(path.get(1)) && path.get(2).matches(Input.ID_PATTERN)) {
             if (!archive.purge(path.get(2))) {
                 throw new ApiException(404, "Draft nicht im Papierkorb");
             }
             return list();
         }
-        if (path.size() != 2 || !path.get(1).matches(ID_PATTERN)) {
+        if (path.size() != 2 || !path.get(1).matches(Input.ID_PATTERN)) {
             throw new ApiException(404, "Unbekannter Endpunkt");
         }
         if (!archive.delete(path.get(1))) {

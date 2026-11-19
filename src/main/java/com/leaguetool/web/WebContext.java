@@ -260,7 +260,12 @@ public final class WebContext implements AutoCloseable {
         if (!settings.riotEnabled()) {
             return Optional.empty();
         }
-        return Optional.of(riotClient(Platform.fromId(settings.platform()).orElse(Platform.EUW1)));
+        return Optional.of(riotClient(platform()));
+    }
+
+    /** Eingestellte Riot-Plattform, sonst EUW1. */
+    Platform platform() {
+        return Platform.fromId(settings.platform()).orElse(Platform.EUW1);
     }
 
     /** Client für eine Plattform; alle Clients teilen sich einen Rate-Limiter (Dev-Key-Limits). */

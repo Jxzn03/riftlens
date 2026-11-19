@@ -166,18 +166,16 @@ final class ApiRoutes {
         RunePage runes = runePage(params);
         int level = StatCalculator.clampLevel((int) doubleParam(params, "level", 11));
         StatBlock bonus = BuildCalculator.totals(build).stats().plus(runes.at(level));
+        List<WikiAbility> abilities = wiki.isEmpty() ? List.of() : wiki.get().abilities(champion.id());
+        WikiChampionData wikiChampion = wiki.isEmpty() ? null : wiki.get().champion(champion.id()).orElse(null);
+        double asRatio = wikiChampion == null ? champion.stats().attackSpeed() : wikiChampion.asRatio();
+        FinalStats stats = ChampionBuildCalculator.compute(champion.stats(), level, bonus, asRatio, adaptiveType(champion, wikiChampion));
         if (wiki.isEmpty()) {
             // Haste hängt nicht vom Wiki ab; ohne Wiki fehlen nur Immobilisierungen und statische Abklingzeiten.
-            FinalStats stats = ChampionBuildCalculator.compute(champion.stats(), level, bonus,
-                    champion.stats().attackSpeed(), adaptiveType(champion));
             return Dto.obj("disabled", true, "itemCount", build.size(), "runeCount", runes.size(),
-                    "haste", Dto.hasteBySlot(List.of(), stats),
+                    "haste", Dto.hasteBySlot(abilities, stats),
                     "summonerSpellHaste", stats.summonerSpellHaste(), "staticCooldowns", List.of());
         }
-        List<WikiAbility> abilities = wiki.get().abilities(champion.id());
-        WikiChampionData wikiChampion = wiki.get().champion(champion.id()).orElse(null);
-        double asRatio = wikiChampion == null ? champion.stats().attackSpeed() : wikiChampion.asRatio();
-        FinalStats stats = ChampionBuildCalculator.compute(champion.stats(), level, bonus, asRatio, adaptiveType(champion));
         return Dto.obj("itemCount", build.size(), "runeCount", runes.size(), "abilities", Dto.wikiAbilities(abilities, stats),
                 "haste", Dto.hasteBySlot(abilities, stats), "summonerSpellHaste", stats.summonerSpellHaste(),
                 "staticCooldowns", Dto.staticCooldownSlots(abilities));
@@ -222,26 +220,28 @@ final class ApiRoutes {
             return values;
         }
         for (String part : raw.split(",")) {
-            try {
-                values.add(Integer.parseInt(part.trim()));
-            } catch (NumberFormatException e) {
-                throw new ApiException(400, "Ungültige " + what + ": " + part);
-            }
+            values.add(Input.intValue(part.trim(), 400, "Ungültige " + what + ": " + part));
         }
         return values;
     }
 
     /** Adaptiver Typ laut Wiki; ohne Wiki aus den Data-Dragon-Werten des Champions. */
     private AdaptiveType adaptiveType(Champion champion) {
-        String wikiType = "";
+        WikiChampionData wikiChampion = null;
         Optional<WikiClient> wiki = ctx.wiki();
         if (wiki.isPresent()) {
             try {
-                wikiType = wiki.get().champion(champion.id()).map(WikiChampionData::adaptiveType).orElse("");
+                wikiChampion = wiki.get().champion(champion.id()).orElse(null);
             } catch (IOException e) {
                 // Das Wiki ist nur eine Verfeinerung; ohne es entscheiden die Data-Dragon-Werte.
             }
         }
+        return adaptiveType(champion, wikiChampion);
+    }
+
+    /** Adaptiver Typ zu schon gelesenen Wiki-Daten ({@code null} = ohne Wiki). */
+    private static AdaptiveType adaptiveType(Champion champion, WikiChampionData wikiChampion) {
+        String wikiType = Optional.ofNullable(wikiChampion).map(WikiChampionData::adaptiveType).orElse("");
         return AdaptiveType.of(wikiType, champion.info().attack(), champion.info().magic());
     }
 
@@ -254,13 +254,7 @@ final class ApiRoutes {
         }
         GameData data = ctx.awaitData();
         for (String part : raw.split(",")) {
-            int id;
-            try {
-                id = Integer.parseInt(part.trim());
-            } catch (NumberFormatException e) {
-                throw new ApiException(400, "Ungültige Item-ID: " + part);
-            }
-            data.item(id).ifPresent(items::add);
+            data.item(Input.intValue(part.trim(), 400, "Ungültige Item-ID: " + part)).ifPresent(items::add);
             if (items.size() == BuildCalculator.MAX_ITEMS) {
                 break;
             }
@@ -285,11 +279,7 @@ final class ApiRoutes {
 
     private static Role role(Map<String, String> params) {
         String role = params.get("role");
-        try {
-            return role == null || role.isBlank() ? null : Role.valueOf(role);
-        } catch (IllegalArgumentException e) {
-            throw new ApiException(400, "Ungültige Rolle");
-        }
+        return role == null || role.isBlank() ? null : Input.enumValue(Role.class, role, "Ungültige Rolle");
     }
 
     private Object stats(List<String> path, Map<String, String> params) throws IOException {
@@ -300,43 +290,70 @@ final class ApiRoutes {
         Role role = role(params);
         LolalyticsPeriod period = period(params.get("period"));
         String tier = statTier(params.get("laTier"));
-        LolalyticsFullTierList list = client.fullTierList(tier, role == null ? "all" : LolalyticsClient.lane(role), period);
+        String listLane = role == null ? "all" : LolalyticsClient.lane(role);
+        if (path.size() == 3 && "report".equals(path.get(1)) && "1".equals(params.get("cachedOnly"))) {
+            return cachedReport(client, path.get(2), tier, listLane, role, period);
+        }
+        // Ungültige Pfade vor dem Abruf abweisen (spart den Lolalytics-Abruf).
         switch (path.get(1)) {
-            case "meta":
-                return Dto.obj("roles", Arrays.stream(Role.values()).map(r -> Dto.obj("value", r.name(), "label", r.label())).toList(),
+            case "meta", "champions" -> { }
+            case "report" -> {
+                if (path.size() != 3) {
+                    throw new ApiException(404, "Unbekannter Endpunkt");
+                }
+            }
+            default -> throw new ApiException(404, "Lolalytics liefert diese Statistik nicht.");
+        }
+        LolalyticsFullTierList list = client.fullTierList(tier, listLane, period, staleOk(period));
+        return switch (path.get(1)) {
+            case "meta" -> Dto.obj("roles", Arrays.stream(Role.values()).map(r -> Dto.obj("value", r.name(), "label", r.label())).toList(),
                         "analysed", list.analysed(), "avgWinRate", list.avgWinRate(), "patch", list.patch());
-            case "champions": {
+            case "champions" -> {
                 Map<Integer, Map<String, Object>> out = new LinkedHashMap<>();
                 // Die Stärke vergleicht innerhalb einer Rolle und ergibt nur mit Rollenfilter Sinn.
                 Map<Integer, Double> strength = role == null ? Map.of() : LolalyticsRoleStrength.compute(list.rows());
                 list.rows().forEach((key, row) -> out.put(key, Dto.lolalyticsChampionStat(row, strength.get(key))));
-                return out;
+                yield out;
             }
-            case "report":
-                if (path.size() == 3) {
-                    return lolalyticsReport(client, list, path.get(2), tier, role, period);
-                }
-                throw new ApiException(404, "Unbekannter Endpunkt");
-            default:
-                throw new ApiException(404, "Lolalytics liefert diese Statistik nicht.");
-        }
+            default -> lolalyticsReport(client, list, path.get(2), tier, role, period, false);
+        };
     }
 
+    /**
+     * 30-Tage-Daten dürfen wie im Draft veraltet sein: Ein vorhandener Eintrag wird sofort gezeigt und im Hintergrund
+     * einmal erneuert, mit derselben Drosselung und höchstens einem Abruf je Eintrag in 12 h. „Letzter Patch“ wird nach
+     * Ablauf oder einem Patchwechsel weiter frisch geholt, alte Werte wären dort der vorige Patch.
+     */
+    private static boolean staleOk(LolalyticsPeriod period) {
+        return period == LolalyticsPeriod.LAST_30_DAYS;
+    }
+
+    /**
+     * Report nur aus frischem Cache, ohne Abruf und ohne Erneuerung im Hintergrund: Die Champions-Seite zeigt gecachte
+     * Statistik so ohne ihre Wartezeit (`REPORT_DELAY`). Liefert genau dann einen Report, wenn die normale Anfrage ohne
+     * Abruf auskäme, sonst {@code {"cached": false}}; an den Abrufen bei Lolalytics ändert sich nichts.
+     */
+    private Object cachedReport(LolalyticsClient client, String key, String tier, String listLane, Role role,
+                                LolalyticsPeriod period) throws IOException {
+        LolalyticsFullTierList list = client.fullTierListIfCached(tier, listLane, period);
+        Object report = list == null ? null : lolalyticsReport(client, list, key, tier, role, period, true);
+        return report != null ? report : Dto.obj("cached", false);
+    }
+
+    /** @param cachedOnly nur eine frische Seite aus dem Cache; {@code null}, wenn keine vorliegt */
     private Object lolalyticsReport(LolalyticsClient client, LolalyticsFullTierList list, String key, String tier, Role role,
-                                    LolalyticsPeriod period) throws IOException {
-        int championKey;
-        try {
-            championKey = Integer.parseInt(key);
-        } catch (NumberFormatException e) {
-            throw new ApiException(400, "Ungültiger Champion-Key: " + key);
-        }
+                                    LolalyticsPeriod period, boolean cachedOnly) throws IOException {
+        int championKey = Input.intValue(key, 400, "Ungültiger Champion-Key: " + key);
         String slug = list.slugs().get(championKey);
         if (slug == null) {
             throw new ApiException(404, "Champion bei Lolalytics nicht gefunden");
         }
         GameData data = ctx.awaitData();
         String lane = role == null ? null : LolalyticsClient.lane(role);
-        LolalyticsBuild build = client.build(slug, tier, lane, period);
+        LolalyticsBuild build = cachedOnly ? client.buildIfCached(slug, tier, lane, period, false) : client.build(slug, tier, lane, period, staleOk(period));
+        if (build == null) {
+            return null;
+        }
         LolalyticsFullTierList.Row row = list.rows().get(championKey);
         String opponentLane = lane != null ? lane : row == null ? "" : row.lane();
         return Dto.lolalyticsReport(build, data, opponentLane);
@@ -380,8 +397,7 @@ final class ApiRoutes {
 
     private Object summoner(Map<String, String> params) throws IOException {
         requireRiotConfigured();
-        Platform platform = Platform.fromId(params.get("platform"))
-                .or(() -> Platform.fromId(ctx.settings().platform())).orElse(Platform.EUW1);
+        Platform platform = Platform.fromId(params.get("platform")).orElseGet(ctx::platform);
         int count = Math.max(1, Math.min(SummonerLookup.MAX_MATCHES, (int) doubleParam(params, "count", 50)));
         return new SummonerLookup(ctx.riotClient(platform), ctx.cache(), ctx.awaitData().patch(),
                 (done, total, cached) -> ctx.publish("summoner-progress",

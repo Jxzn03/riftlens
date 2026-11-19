@@ -39,8 +39,6 @@ import java.util.function.BooleanSupplier;
 /** Der Endpunkt {@code POST /api/draft}: bewertet den Draft und alle möglichen nächsten Picks. */
 final class DraftEndpoint {
 
-    private static final int TEAM_SIZE = 5;
-    private static final int MAX_BANS = 10;
     /** Sperren einer Fearless-Serie: höchstens zehn Picks je Spiel und {@code FearlessSeries.MAX_GAMES} Spiele. */
     private static final int MAX_LOCKED = 10 * com.leaguetool.draft.FearlessSeries.MAX_GAMES;
     private static final int MAX_MIN_GAMES = 100_000;
@@ -60,10 +58,10 @@ final class DraftEndpoint {
         GameData data = ctx.awaitData();
         List<Slot> ally = slots(body.path("ally"), data);
         List<Slot> enemy = slots(body.path("enemy"), data);
-        Set<Integer> bans = bans(body.path("bans"), data);
+        Set<Integer> bans = championKeys(body.path("bans"), data, DraftArchive.MAX_BANS, "Höchstens " + DraftArchive.MAX_BANS + " Bans.");
         requireDistinct(ally, enemy);
         // Fearless: in früheren Spielen der Serie gespielte Champions fehlen in den Vorschlägen wie Bans.
-        Set<Integer> locked = locked(body.path("locked"), data);
+        Set<Integer> locked = championKeys(body.path("locked"), data, MAX_LOCKED, "Höchstens " + MAX_LOCKED + " gesperrte Champions.");
         Set<Integer> excluded = new HashSet<>(bans);
         excluded.addAll(locked);
         int requestId = body.path("requestId").asInt();
@@ -138,12 +136,12 @@ final class DraftEndpoint {
 
     static List<Slot> slots(JsonNode team, GameData data) {
         List<Slot> slots = new ArrayList<>();
-        if (team.size() > TEAM_SIZE) {
-            throw new ApiException(400, "Ein Team hat höchstens " + TEAM_SIZE + " Champions.");
+        if (team.size() > DraftArchive.TEAM_SIZE) {
+            throw new ApiException(400, "Ein Team hat höchstens " + DraftArchive.TEAM_SIZE + " Champions.");
         }
         for (JsonNode node : team) {
             String role = node.path("role").asText("");
-            slots.add(new Slot(championKey(node.path("champion"), data), role.isEmpty() ? null : role(role)));
+            slots.add(new Slot(championKey(node.path("champion"), data), role.isEmpty() ? null : Input.enumValue(Role.class, role, "Ungültige Rolle")));
         }
         return slots;
     }
@@ -153,8 +151,8 @@ final class DraftEndpoint {
      * ohnehin nur die Champions, die schon im gespeicherten Draft stehen ({@code DraftArchive.withRoles}).
      */
     static List<Slot> storedSlots(JsonNode team) {
-        if (!team.isArray() || team.size() > TEAM_SIZE) {
-            throw new ApiException(400, "Ein Team hat höchstens " + TEAM_SIZE + " Champions.");
+        if (!team.isArray() || team.size() > DraftArchive.TEAM_SIZE) {
+            throw new ApiException(400, "Ein Team hat höchstens " + DraftArchive.TEAM_SIZE + " Champions.");
         }
         List<Slot> slots = new ArrayList<>();
         for (JsonNode node : team) {
@@ -162,27 +160,19 @@ final class DraftEndpoint {
                 throw new ApiException(400, "Ungültiger Champion");
             }
             String role = node.path("role").asText("");
-            slots.add(new Slot(node.path("champion").asInt(), role.isEmpty() ? null : role(role)));
+            slots.add(new Slot(node.path("champion").asInt(), role.isEmpty() ? null : Input.enumValue(Role.class, role, "Ungültige Rolle")));
         }
         return slots;
     }
 
-    private static Set<Integer> bans(JsonNode list, GameData data) {
-        if (list.size() > MAX_BANS) {
-            throw new ApiException(400, "Höchstens " + MAX_BANS + " Bans.");
+    /** Champion-Keys einer Liste (Bans, Fearless-Sperren); mehr als {@code max} → 400 mit {@code tooMany}. */
+    private static Set<Integer> championKeys(JsonNode list, GameData data, int max, String tooMany) {
+        if (list.size() > max) {
+            throw new ApiException(400, tooMany);
         }
-        Set<Integer> bans = new HashSet<>();
-        list.forEach(node -> bans.add(championKey(node, data)));
-        return bans;
-    }
-
-    private static Set<Integer> locked(JsonNode list, GameData data) {
-        if (list.size() > MAX_LOCKED) {
-            throw new ApiException(400, "Höchstens " + MAX_LOCKED + " gesperrte Champions.");
-        }
-        Set<Integer> locked = new HashSet<>();
-        list.forEach(node -> locked.add(championKey(node, data)));
-        return locked;
+        Set<Integer> keys = new HashSet<>();
+        list.forEach(node -> keys.add(championKey(node, data)));
+        return keys;
     }
 
     /** Hinweise des Ladens plus ein Hinweis je Pick, der in der Fearless-Serie schon gespielt wurde. */
@@ -242,14 +232,6 @@ final class DraftEndpoint {
                     throw new ApiException(400, "Ein Champion kann nur einmal gewählt werden.");
                 }
             }
-        }
-    }
-
-    private static Role role(String value) {
-        try {
-            return Role.valueOf(value);
-        } catch (IllegalArgumentException e) {
-            throw new ApiException(400, "Ungültige Rolle");
         }
     }
 
