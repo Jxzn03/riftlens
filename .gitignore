@@ -15,8 +15,8 @@ replay_pid*
 *.iml
 /.vscode/
 
-# Lokale Daten/Einstellungen, falls leaguetool.home
-# auf den Projektordner zeigt (enthaelt den Riot-API-Key)
+# Local data/settings in case leaguetool.home
+# points to the project folder (contains the Riot API key)
 /.leaguetool/
 /settings.properties
 /cache/
@@ -24,7 +24,7 @@ replay_pid*
 /draft-archive.json*
 leaguetool.properties
 
-# Geheimnisse
+# Secrets
 .env
 .env.*
 
