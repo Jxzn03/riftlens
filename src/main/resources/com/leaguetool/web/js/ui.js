@@ -23,6 +23,8 @@ const ICONS = {
   arrow: 'M5 12h14M12 5l7 7-7 7',
   up: 'M12 19V5M5 12l7-7 7 7',
   down: 'M12 5v14M19 12l-7 7-7-7',
+  sort: 'M7 4v16M3 16l4 4 4-4M17 20V4M13 8l4-4 4 4',
+  dots: 'M12 3.8a1.2 1.2 0 1 0 0 2.4a1.2 1.2 0 1 0 0-2.4ZM12 10.8a1.2 1.2 0 1 0 0 2.4a1.2 1.2 0 1 0 0-2.4ZM12 17.8a1.2 1.2 0 1 0 0 2.4a1.2 1.2 0 1 0 0-2.4Z',
   chevron: 'M6 9l6 6 6-6',
   lock: 'M5 11h14v10H5zM8 11V7a4 4 0 0 1 8 0v4',
   edit: 'M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z',
@@ -106,6 +108,38 @@ export function Button({ icon, children, onClick, kind = '', disabled, tip, titl
   return html`<button type="button" class=${`btn ${kind}`} onClick=${onClick} disabled=${disabled} data-tip=${tip} aria-label=${title}>
     ${icon ? html`<${Icon} name=${icon} size=${16} />` : null}${children ? html`<span>${children}</span>` : null}
   </button>`;
+}
+
+/**
+ * Knopf mit aufklappendem Menü (z. B. drei Punkte); `children` ist der Inhalt. Schließt bei Klick daneben und mit Esc.
+ * `badge` zeigt eine kleine Markierung am Knopf (z. B. wenn im Menü etwas eingeschaltet ist).
+ */
+export function MenuButton({ icon = 'dots', title, tip, badge = false, children }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef();
+  useEffect(() => {
+    if (!open) {
+      return undefined;
+    }
+    const close = (e) => {
+      if (e.type === 'keydown' ? e.key === 'Escape' : !ref.current.contains(e.target)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', close);
+    document.addEventListener('keydown', close);
+    return () => {
+      document.removeEventListener('mousedown', close);
+      document.removeEventListener('keydown', close);
+    };
+  }, [open]);
+  return html`<div class="menu-button" ref=${ref}>
+    <button type="button" class=${`btn ghost icon-only ${open ? 'active' : ''}`} aria-label=${title} aria-haspopup="true"
+      aria-expanded=${open} data-tip=${open ? undefined : tip} onClick=${() => setOpen(!open)}>
+      <${Icon} name=${icon} size=${18} />${badge ? html`<span class="menu-badge"></span>` : null}
+    </button>
+    ${open ? html`<div class="menu-pop" role="menu">${children}</div>` : null}
+  </div>`;
 }
 
 export function Select({ value, onChange, options, label, cls = '' }) {
@@ -236,12 +270,13 @@ const OVERSCAN = 6;
  * Tabelle, die nur die sichtbaren Zeilen rendert. Scrollen und Tippen bleiben dadurch unabhängig von der
  * Datenmenge flüssig; Bilder werden nur für sichtbare Zeilen geladen.
  */
-export function VirtualTable({ rows, columns, rowKey, selected, onSelect, onDeselect, sort, onSort, rowHeight = 48, empty }) {
+export function VirtualTable({ rows, columns, rowKey, selected, onSelect, onDeselect, sort, onSort, rowHeight = 48, empty, rowProps }) {
   const scroller = useRef();
   const frame = useRef(0);
   const [viewport, setViewport] = useState({ top: 0, height: 600 });
   const template = columns.map((c) => c.width).join(' ');
-  const minWidth = columns.reduce((sum, c) => sum + (parseInt(c.width, 10) || 0), 0);
+  // Breiten in px oder `minmax(<px>, 1fr)` (Spalte füllt den Rest); für die Mindestbreite zählt der px-Wert.
+  const minWidth = columns.reduce((sum, c) => sum + (parseInt(String(c.width || '').replace(/^minmax\(/, ''), 10) || 0), 0);
   const headerHeight = 38;
 
   useLayoutEffect(() => {
@@ -313,6 +348,7 @@ export function VirtualTable({ rows, columns, rowKey, selected, onSelect, onDese
           const key = rowKey(row);
           return html`<div key=${key} role="row" class=${`vt-row ${key === selected ? 'selected' : ''}`}
             style=${{ gridTemplateColumns: template, height: `${rowHeight}px`, transform: `translateY(${(first + offset) * rowHeight}px)` }}
+            ...${rowProps ? rowProps(row) : {}}
             onClick=${() => {
               if (key === selected && onDeselect) {
                 // Erneuter Klick hebt die Auswahl auf; die Tabelle soll danach auch nicht mehr fokussiert wirken.

@@ -1,7 +1,7 @@
 // Ansicht "Runen": Runenseite für den Build-Rechner, Bäume mit Keystones und Reihen, Suche über alle Runen, Shards.
 import { html, useMemo } from '/vendor/htm-preact.js';
 import {
-  useStore, useViewState, select, go, normalize, setRunePage, runePageRunes, EMPTY_RUNE_PAGE, store, gamePatch,
+  useStore, useViewState, select, go, normalize, setRunePage, runePageRunes, EMPTY_RUNE_PAGE, store, useBuildItems, gamePatch,
 } from './core.js';
 import { Img, Card, SearchInput, DataGrid, MasterDetail, Empty, Tag, Button, Slider, Switch, Icon } from './ui.js';
 
@@ -74,7 +74,7 @@ export function RunesView({ id }) {
 
 function RunePageEditor({ data }) {
   const page = useStore((s) => s.runePage);
-  const build = useStore((s) => s.build);
+  const build = useBuildItems();
   const primary = page.primary ? data.treeById.get(page.primary) : null;
   const secondary = page.secondary ? data.treeById.get(page.secondary) : null;
   const shardRows = data.shardRows || [];

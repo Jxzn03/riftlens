@@ -83,14 +83,14 @@ class BuildCalculatorTest {
     }
 
     @Test
-    void sixItemsAreAllowedSevenAreNot() {
+    void sevenItemsAreAllowedForTheAdcBootsSlotEightAreNot() {
         Item rod = byId(TestItems.NEEDLESSLY_LARGE_ROD);
-        BuildTotals six = BuildCalculator.totals(Collections.nCopies(6, rod));
-        assertEquals(6 * 65, six.stats().get(StatType.ABILITY_POWER));
-        assertEquals(6 * 1200, six.totalGold());
+        BuildTotals seven = BuildCalculator.totals(Collections.nCopies(7, rod));
+        assertEquals(7 * 65, seven.stats().get(StatType.ABILITY_POWER));
+        assertEquals(7 * 1200, seven.totalGold());
 
-        List<Item> seven = Collections.nCopies(7, rod);
-        assertThrows(IllegalArgumentException.class, () -> BuildCalculator.totals(seven));
+        List<Item> eight = Collections.nCopies(8, rod);
+        assertThrows(IllegalArgumentException.class, () -> BuildCalculator.totals(eight));
     }
 
     @Test

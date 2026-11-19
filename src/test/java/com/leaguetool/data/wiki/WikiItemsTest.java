@@ -66,6 +66,37 @@ class WikiItemsTest {
     }
 
     @Test
+    void readsCooldownFromFieldOrDescription() {
+        Map<Integer, WikiItems.Entry> items = WikiItems.parseModule("""
+                return {
+                    ["Field"] = { ["id"] = 1, ["effects"] = { ["pass"] = { ["name"] = "A", ["description"] = "X.", ["cd"] = "60" } } },
+                    ["Number"] = { ["id"] = 2, ["effects"] = { ["pass"] = { ["name"] = "B", ["description"] = "X.", ["cd"] = 90 } } },
+                    ["Text"] = { ["id"] = 3, ["effects"] = { ["pass"] = { ["name"] = "Spellblade",
+                        ["description"] = "Deals damage ({{fd|1.5}} second cooldown, starts after the attack)." } } },
+                    ["None"] = { ["id"] = 4, ["effects"] = { ["pass"] = { ["name"] = "C", ["description"] = "No timer." } } },
+                }
+                """);
+        assertEquals("60", items.get(1).passives().get(0).cooldown());
+        assertEquals("90", items.get(2).passives().get(0).cooldown());
+        assertEquals("1.5", items.get(3).passives().get(0).cooldown());
+        assertEquals("", items.get(4).passives().get(0).cooldown());
+    }
+
+    @Test
+    void readsActivesSeparatelyFromPassives() {
+        WikiItems.Entry entry = WikiItems.parseModule("""
+                return {
+                    ["Hourglass"] = { ["id"] = 1, ["effects"] = {
+                        ["pass"] = { ["name"] = "P", ["description"] = "X." },
+                        ["act"] = { ["name"] = "Time Stop", ["description"] = "Stasis.", ["cd"] = "120" } } },
+                }
+                """).get(1);
+        assertEquals(List.of("P"), entry.passives().stream().map(WikiItems.Passive::name).toList());
+        assertEquals("Time Stop", entry.actives().get(0).name());
+        assertEquals("120", entry.actives().get(0).cooldown());
+    }
+
+    @Test
     void recognizesImmobilizingAbilitiesFromTheirDescription() {
         assertTrue(ability("Ahri blows a kiss that charms the first enemy hit.").immobilizes());
         assertTrue(ability("Stuns all enemies in the area.").immobilizes());

@@ -104,6 +104,16 @@ public final class LolalyticsClient {
         return json == null ? null : parsed.parse(source.key(), json, LolalyticsState::parseTierList);
     }
 
+    /**
+     * Tierliste aus dem Cache, auch veraltet, ohne Abruf und ohne Erneuerung im Hintergrund; {@code null}, wenn keine
+     * vorliegt. Nur für den Rollen-Fallback des Build-Champions freigegeben (Nutzerfreigabe 19.11.2026).
+     */
+    public LolalyticsFullTierList fullTierListAnyCached(String tier, String lane, LolalyticsPeriod period) throws IOException {
+        Source source = tierListSource(tier, lane, period);
+        String json = cache.readText(FileCache.GLOBAL, source.key()).orElse(null);
+        return json == null ? null : parsed.parse(source.key(), json, LolalyticsState::parseTierList);
+    }
+
     private Source tierListSource(String tier, String lane, LolalyticsPeriod period) {
         String t = safe(tier, DEFAULT_TIER);
         String l = safe(lane, "all");

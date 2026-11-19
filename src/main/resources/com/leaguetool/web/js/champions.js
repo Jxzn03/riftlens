@@ -3,7 +3,7 @@ import { html, useMemo, useEffect } from '/vendor/htm-preact.js';
 import {
   useStore, useViewState, useFetch, useStatsUrl, useSourceLabel, useDeferredUrl, useWinRateClass, select, go, normalize,
   sortRows, activeSort, percent, setPref, useChampionRole, useChampionStatsUrl,
-  useBuildQuery, runePageRunes, importRunePage, useFavorites, gamePatch,
+  useBuildQuery, useBuildItems, runePageRunes, importRunePage, useFavorites, gamePatch,
 } from './core.js';
 import {
   Icon, Img, Card, Button, SearchInput, Segmented, Slider, Tag, Meter, DataGrid, RateCell, VirtualTable, MasterDetail, HelpTip,
@@ -171,7 +171,7 @@ function ChampionDetail({ champion, tab, onTab }) {
   const report = useChampionReport(champion, roleState.role);
   const level = useStore((s) => s.prefs.level);
   const advancedTips = useAdvancedTips();
-  const build = useStore((s) => s.build);
+  const build = useBuildItems();
   const buildQuery = useBuildQuery();
   const wiki = useFetch(`/api/champions/${champion.id}/wiki`);
   const details = useFetch(`/api/champions/${champion.id}/detail`);
@@ -403,7 +403,7 @@ function LateItems({ lines, data }) {
   </div>`;
 }
 
-function MatchReport({ report, data }) {
+function MatchReport({ champion, report, data }) {
   const sourceLabel = useSourceLabel();
   const winRateClass = useWinRateClass();
   let body = reportPlaceholder(report);
@@ -425,7 +425,7 @@ function MatchReport({ report, data }) {
         <${Ranking} title="Boots" ranking=${r.boots} render=${items} columns />
         <${Ranking} title="Startitems" ranking=${r.starters} render=${items} />
         <${Ranking} title="Runenseite" ranking=${r.runePages} render=${(page) => html`<span class="rune-page"><${RuneIcons} data=${data} ids=${page.primary} size=${26} /><${RuneIcons} data=${data} ids=${page.sub} size=${26} /><small class="muted">${page.shards}</small>
-          <button type="button" class="chip-link import" onClick=${() => importRunePage(page)}>In Build-Rechner</button></span>`} />
+          <button type="button" class="chip-link import" onClick=${() => importRunePage(page, champion)}>In Build-Rechner</button></span>`} />
         <${Ranking} title="Skill-Reihenfolge (Max)" ranking=${r.skillOrders} render=${(order) => html`<${SkillOrder} order=${order} separator="›" />`}>
           ${r.skillPath.length > 0 ? html`<${SkillPathGrid} path=${r.skillPath} />` : null}
         <//>
@@ -438,7 +438,7 @@ function MatchReport({ report, data }) {
 }
 
 function StatsTab({ champion, report, data }) {
-  return html`${NAME_COLUMN.render({ c: champion })}<${MatchReport} report=${report} data=${data} />`;
+  return html`${NAME_COLUMN.render({ c: champion })}<${MatchReport} champion=${champion} report=${report} data=${data} />`;
 }
 
 function CountersTab({ champion, report, data }) {

@@ -31,6 +31,11 @@ export const store = createStore({
   summonerProgress: null,
   draftProgress: null,
   build: [],
+  buildMode: '', // '' | 'adc' | 'mid' | 'support', siehe BUILD_MODES
+  buildBoots: null, // Boots-Platz im ADC-Modus
+  buildChampion: null, // Champion-Key, auf den der Build angewendet wird (bestimmt die Rolle)
+  buildRole: '', // zuletzt angewendete Rolle des Build-Champions (setzt den Modus)
+  buildAuto: { known: true, role: '' }, // automatische Rolle des Build-Champions aus dem Cache (BuildRoleSync)
   runePage: null, // wird unten mit EMPTY_RUNE_PAGE belegt
   split: {},
   prefs: { level: 1, haste: 0, previewLevel: 11, advancedTips: false },
@@ -307,6 +312,7 @@ export async function loadData() {
     data.championById = new Map(data.champions.map((c) => [c.id, c]));
     data.championByKey = new Map(data.champions.map((c) => [c.key, c]));
     data.itemById = new Map(data.items.map((i) => [i.id, i]));
+    markBoots(data);
     data.treeById = new Map(data.runeTrees.map((t) => [t.id, t]));
     data.runeById = new Map();
     data.runeTrees.forEach((t) => t.slots.flat().forEach((r) => data.runeById.set(r.id, r)));
@@ -329,7 +335,10 @@ export async function loadData() {
     store.set({
       data,
       bootError: null,
-      build: store.get().build.filter((id) => data.itemById.has(id)),
+      // Unbekannte IDs (nach einem Patch) fallen weg, ein Jungle-Pet außerhalb des Jungle-Modus auch.
+      build: store.get().build.filter((id) => data.itemById.has(id)
+        && (store.get().buildMode === 'jungle' || !isJunglePet(data.itemById.get(id)))),
+      buildBoots: data.itemById.has(store.get().buildBoots) ? store.get().buildBoots : null,
       runePage: sanitizeRunePage(store.get().runePage, data),
       status: `Patch ${gamePatch(data.patch)} geladen: ${data.champions.length} Champions`
         + (data.offline ? ' (offline aus dem Cache)' : ''),
@@ -354,15 +363,245 @@ export function gamePatch(version) {
 
 export const MAX_BUILD = 6;
 
-export function addToBuild(id) {
-  const { build } = store.get();
-  if (build.length < MAX_BUILD) {
-    store.set({ build: [...build, id] });
+/**
+ * Kennzeichnet Boots ({@code item.boots}): Kategorie „Boots“ oder aus Boots gebaut. Data Dragon lässt die Kategorie
+ * bei manchen aufgewerteten Boots weg (z. B. Gunmetal Greaves).
+ */
+export function markBoots(data) {
+  const tagged = (id) => {
+    const item = data.itemById.get(id);
+    return Boolean(item && item.tags.includes('Boots'));
+  };
+  data.items.forEach((item) => {
+    item.boots = item.tags.includes('Boots') || item.from.some(tagged);
+  });
+  // Zweite Stufe: aus Boots gebaut, deren Kategorie fehlt (aufgewertete Boots aus ungetaggten Boots).
+  data.items.forEach((item) => {
+    item.boots = item.boots || item.from.some((id) => (data.itemById.get(id) || {}).boots);
+  });
+}
+
+export const isBoots = (item) => Boolean(item && (item.boots ?? item.tags.includes('Boots')));
+
+/**
+ * Modus des Build-Rechners, höchstens einer aktiv (`store.buildMode`):
+ * - `adc`: Boots auf einem festen 7. Platz (`buildBoots`), daneben 6 normale Items.
+ * - `mid`: Boots aufgewertet (Stufe 3), beim Ausschalten wieder Stufe 2.
+ * - `support`: Support-Item aufgewertet (World Atlas/Runic Compass → Bounty of Worlds), beim Ausschalten zurück
+ *   zu World Atlas; eine gewählte Endstufe (z. B. Bloodsong) bleibt.
+ * - `jungle`: Nur hier darf ein Jungle-Pet in den Build (eins). Es kommt nie von selbst hinein, weil es sich im
+ *   Spielverlauf auflöst und den Platz freigibt; beim Ausschalten wird es entfernt.
+ */
+export const BUILD_MODES = [
+  { value: 'jungle', label: 'Jungle' }, { value: 'mid', label: 'Mid' }, { value: 'adc', label: 'ADC' },
+  { value: 'support', label: 'Support' },
+];
+
+/** Jungle-Pet (Scorchclaw Pup, Gustwalker Hatchling, Mosstomper Seedling): Rift-Item nur mit der Kategorie „Jungle“. */
+export function isJunglePet(item) {
+  return Boolean(item && item.rift && item.tags.length === 1 && item.tags[0] === 'Jungle');
+}
+
+/** Alle Items des Builds für die Berechnung: die normalen Plätze, beim ADC dazu der Boots-Platz. */
+export function buildItems(state) {
+  return state.buildMode === 'adc' && state.buildBoots !== null ? [...state.build, state.buildBoots] : state.build;
+}
+
+/** Aufgewertete Boots (Stufe 3 auf Summoner's Rift) zu Stufe-2-Boots, sonst {@code null}. */
+export function bootsUpgrade(data, id) {
+  const item = data.itemById.get(id);
+  if (!isBoots(item)) {
+    return null;
+  }
+  const upgrades = item.into.map((i) => data.itemById.get(i)).filter((i) => i && i.rift);
+  return upgrades.length === 1 ? upgrades[0].id : null; // einfache Boots bauen in viele Boots, das ist kein Upgrade
+}
+
+/** Stufe-2-Boots zu aufgewerteten Boots, sonst {@code null}. */
+export function bootsDowngrade(data, id) {
+  const item = data.itemById.get(id);
+  if (!item || item.into.length) {
+    return null;
+  }
+  const base = item.from.find((i) => bootsUpgrade(data, i) === id);
+  return base === undefined ? null : base;
+}
+
+// Stufen des Support-Items. Data Dragon verknüpft sie nicht (sie werten sich im Spiel über Gold auf), darum feste
+// IDs; die Endstufen erkennt man daran, dass sie aus Bounty of Worlds gebaut werden.
+const SUPPORT_STAGES = [3865, 3866, 3867]; // World Atlas, Runic Compass, Bounty of Worlds
+const SUPPORT_TOP = SUPPORT_STAGES[SUPPORT_STAGES.length - 1];
+
+/** Support-Item: eine der Stufen oder eine Endstufe aus Bounty of Worlds. */
+export function isSupportItem(item) {
+  return Boolean(item && (SUPPORT_STAGES.includes(item.id) || item.from.includes(SUPPORT_TOP)));
+}
+
+/** World Atlas oder Runic Compass zu Bounty of Worlds, sonst {@code null}. */
+export function supportUpgrade(data, id) {
+  const index = SUPPORT_STAGES.indexOf(id);
+  return index >= 0 && id !== SUPPORT_TOP && data.itemById.has(SUPPORT_TOP) ? SUPPORT_TOP : null;
+}
+
+/** Runic Compass oder Bounty of Worlds zurück zu World Atlas, sonst {@code null} (Endstufen bleiben). */
+export function supportDowngrade(data, id) {
+  const index = SUPPORT_STAGES.indexOf(id);
+  return index > 0 && data.itemById.has(SUPPORT_STAGES[0]) ? SUPPORT_STAGES[0] : null;
+}
+
+/** Item-ID passend zum Modus: Boots als Mid aufgewertet, sonst Stufe 2; Support-Item als Support aufgewertet. */
+function itemForMode(data, mode, id) {
+  const boots = (mode === 'mid' ? bootsUpgrade(data, id) : bootsDowngrade(data, id)) ?? id;
+  return (mode === 'support' ? supportUpgrade(data, boots) : supportDowngrade(data, boots)) ?? boots;
+}
+
+/** Modus nach dem Hinzufügen: aufgewertete Boots schalten Mid ein, ein Support-Item Support. */
+function modeAfterAdding(state, item) {
+  if (state.data && item && bootsDowngrade(state.data, item.id) !== null) {
+    return 'mid';
+  }
+  return isSupportItem(item) ? 'support' : state.buildMode;
+}
+
+/** Mit Build-Champion nur als Support Support-Items (unbekannte Rolle zählt nicht als Support); ohne Champion frei. */
+export const supportLocked = (state) => Boolean(state.buildChampion) && state.buildRole !== 'UTILITY';
+
+/** Ob das Item noch in den Build passt (beim ADC kommen Boots auf ihren eigenen Platz). */
+export function canAddToBuild(state, item) {
+  // Boots, Support-Item und Jungle-Pet je höchstens einmal (auch über den Boots-Platz des ADC hinweg).
+  const has = (test) => buildItems(state).some((id) => test(state.data.itemById.get(id)));
+  // Trinkets und Verbrauchsgegenstände nie; fertige Items je höchstens einmal (Komponenten dürfen doppelt sein).
+  if (!item || item.tags.includes('Trinket') || item.tags.includes('Consumable')
+    || (item.completed && has((other) => other && other.id === item.id))) {
+    return false;
+  }
+  if ((isBoots(item) && has(isBoots)) || (isSupportItem(item) && has(isSupportItem))) {
+    return false;
+  }
+  if (isSupportItem(item) && supportLocked(state)) {
+    return false;
+  }
+  if (isJunglePet(item)) {
+    return state.buildMode === 'jungle' && state.build.length < MAX_BUILD && !has(isJunglePet);
+  }
+  const mode = modeAfterAdding(state, item);
+  if (mode === 'adc' && isBoots(item)) {
+    return state.buildBoots === null;
+  }
+  // Verlässt das Hinzufügen den ADC-Modus, wandern die Boots vom 7. Platz auf einen normalen Platz.
+  const carried = state.buildMode === 'adc' && mode !== 'adc' && state.buildBoots !== null ? 1 : 0;
+  return state.build.length + carried < MAX_BUILD;
+}
+
+/**
+ * Setzt den Modus ({@code ''} = keiner) und gleicht die Items an: Boots und Support-Item in die passende Stufe,
+ * beim ADC die ersten Boots auf den 7. Platz. Ohne ADC kommen Boots vom 7. Platz auf einen freien normalen Platz,
+ * sonst fallen sie weg (Hinweis).
+ */
+export function setBuildMode(mode) {
+  const state = store.get();
+  const { data } = state;
+  if (!data) {
+    store.set({ buildMode: mode });
+    return;
+  }
+  let build = state.build.map((id) => itemForMode(data, mode, id))
+    .filter((id) => mode === 'jungle' || !isJunglePet(data.itemById.get(id))); // Pet nur im Jungle-Modus
+  let boots = state.buildBoots === null ? null : itemForMode(data, mode, state.buildBoots);
+  let dropped = null;
+  if (mode === 'adc' && boots === null) {
+    const index = build.findIndex((id) => isBoots(data.itemById.get(id)));
+    if (index >= 0) {
+      boots = build[index];
+      build = build.filter((_, i) => i !== index);
+    }
+  } else if (mode !== 'adc' && boots !== null) {
+    if (build.length < MAX_BUILD) {
+      build = [...build, boots];
+    } else {
+      dropped = boots;
+    }
+    boots = null;
+  }
+  store.set({ buildMode: mode, build, buildBoots: boots });
+  if (dropped !== null) {
+    toast(`${data.itemById.get(dropped).name} entfernt: Ohne ADC ist kein Platz für ein 7. Item.`);
   }
 }
 
+export const BUILD_ROLES = [
+  { value: 'TOP', label: 'Top' }, { value: 'JUNGLE', label: 'Jungle' }, { value: 'MIDDLE', label: 'Mid' },
+  { value: 'BOTTOM', label: 'ADC' }, { value: 'UTILITY', label: 'Support' },
+];
+
+const ROLE_MODES = { TOP: '', JUNGLE: 'jungle', MIDDLE: 'mid', BOTTOM: 'adc', UTILITY: 'support' };
+
+/**
+ * Wendet die Rolle des Build-Champions an, nur wenn sie sich geändert hat (so bleibt ein von Hand umgelegter
+ * Schalter stehen): ADC, Mid, Support und Jungle schalten ihren Modus ein, Top alle aus. Leer = Rolle unbekannt:
+ * mit Champion alle aus, ohne Champion bleibt der Modus. Ist der Champion danach kein Support, fliegen Support-Items aus dem Build.
+ */
+export function applyBuildRole(role) {
+  const state = store.get();
+  if (!state.data) {
+    return;
+  }
+  // Unbekannte Rolle mit Champion wird bei jedem Champion- oder Rollenwechsel angewendet (Schalter aus).
+  if (role !== state.buildRole || (!role && state.buildChampion)) {
+    store.set({ buildRole: role });
+    // Mit Champion, aber unbekannter Rolle gehen alle Schalter aus; ohne Champion bleibt der Modus.
+    const mode = role ? ROLE_MODES[role] : state.buildChampion ? '' : state.buildMode;
+    if (mode !== state.buildMode) {
+      setBuildMode(mode);
+    }
+  }
+  const current = store.get();
+  if (supportLocked(current)) {
+    const removed = current.build.filter((id) => isSupportItem(current.data.itemById.get(id)));
+    if (removed.length) {
+      store.set({ build: current.build.filter((id) => !removed.includes(id)) });
+      toast(`${removed.map((id) => current.data.itemById.get(id).name).join(', ')} entfernt: Support-Items nur in der Rolle Support.`);
+    }
+  }
+}
+
+export function addToBuild(rawId) {
+  const state = store.get();
+  const raw = state.data && state.data.itemById.get(rawId);
+  if (!raw || !canAddToBuild(state, raw)) {
+    return;
+  }
+  const mode = modeAfterAdding(state, raw);
+  if (mode !== state.buildMode) {
+    setBuildMode(mode);
+  }
+  const current = store.get();
+  const id = itemForMode(current.data, mode, rawId);
+  if (mode === 'adc' && isBoots(current.data.itemById.get(id))) {
+    store.set({ buildBoots: id });
+  } else {
+    store.set({ build: [...current.build, id] });
+  }
+}
+
+/** Entfernt das Item an Position {@code index} der normalen Plätze oder mit {@code 'boots'} den Boots-Platz. */
 export function removeFromBuild(index) {
-  store.set({ build: store.get().build.filter((_, i) => i !== index) });
+  if (index === 'boots') {
+    store.set({ buildBoots: null });
+  } else {
+    store.set({ build: store.get().build.filter((_, i) => i !== index) });
+  }
+}
+
+/** Verschiebt das Item an Position {@code from} auf Position {@code to} (hinter das Ende = ans Ende). */
+export function moveInBuild(from, to) {
+  const build = [...store.get().build];
+  if (from < 0 || from >= build.length) {
+    return;
+  }
+  const [id] = build.splice(from, 1);
+  build.splice(Math.max(0, Math.min(to, build.length)), 0, id);
+  store.set({ build });
 }
 
 // ------------------------------------------------------------------ Runenseite des Build-Rechners
@@ -429,9 +668,13 @@ function shapeRunePage(page) {
 
 /**
  * Übernimmt eine Runenseite aus der Statistik ({@code primary}: Keystone und Reihen, {@code sub}: zwei Runen,
- * {@code shardIds}) in den Build-Rechner. Eingestellte Stapel bleiben erhalten.
+ * {@code shardIds}) in den Build-Rechner. Eingestellte Stapel bleiben erhalten. Mit {@code champion} wird er zum
+ * Build-Champion; seine Rolle folgt daraus wie in der Statistik (Hand-Rolle, Rollenfilter, häufigste Rolle).
  */
-export function importRunePage(lines) {
+export function importRunePage(lines, champion) {
+  if (champion) {
+    store.set({ buildChampion: String(champion.key) });
+  }
   const { data, runePage } = store.get();
   const rune = (id) => data.runeById.get(id);
   const primaryRunes = (lines.primary || []).map(rune).filter(Boolean);
@@ -446,7 +689,7 @@ export function importRunePage(lines) {
       shards: lines.shardIds || [], stacks: runePage.stacks,
     }, data),
   });
-  toast('Runenseite in den Build-Rechner übernommen');
+  toast(champion ? `Runenseite und ${champion.name} in den Build-Rechner übernommen` : 'Runenseite in den Build-Rechner übernommen');
 }
 
 /** Abfrage für Build-Endpunkte: Items plus Runenseite ({@code runes}, {@code shards}, {@code stacks}). */
@@ -470,9 +713,16 @@ export function buildQuery(build, page) {
 
 /** {@link buildQuery} mit dem aktuellen Build und der Runenseite aus dem Store. */
 export function useBuildQuery() {
-  const build = useStore((s) => s.build);
   const page = useStore((s) => s.runePage);
-  return buildQuery(build, page);
+  return buildQuery(useBuildItems(), page);
+}
+
+/** Item-IDs des Builds für Berechnung und Anzeige (beim ADC mit Boots-Platz am Ende). */
+export function useBuildItems() {
+  const build = useStore((s) => s.build);
+  const mode = useStore((s) => s.buildMode);
+  const boots = useStore((s) => s.buildBoots);
+  return buildItems({ build, buildMode: mode, buildBoots: boots });
 }
 
 export function setPref(patch) {
@@ -567,7 +817,7 @@ export function startRouter() {
 
 // ------------------------------------------------------------------ Zustand speichern
 
-const PERSISTED = ['theme', 'filter', 'dataSource', 'build', 'runePage', 'split', 'prefs', 'summonerRecent', 'favorites', 'window', 'draftDetailsOpen', 'draftOverviewOpen', 'draftFearlessLocksOpen'];
+const PERSISTED = ['theme', 'filter', 'dataSource', 'build', 'buildMode', 'buildBoots', 'buildChampion', 'buildRole', 'runePage', 'split', 'prefs', 'summonerRecent', 'favorites', 'window', 'draftDetailsOpen', 'draftOverviewOpen', 'draftFearlessLocksOpen'];
 let saveTimer = null;
 let lastSaved = null;
 
@@ -586,6 +836,22 @@ export async function loadUiState() {
     }
     if (Array.isArray(patch.build)) {
       patch.build = patch.build.filter((id) => Number.isInteger(id)).slice(0, MAX_BUILD);
+    }
+    // Ältere Stände kannten nur den ADC-Schalter (`buildAdc`).
+    if (patch.buildMode === undefined && saved && saved.buildAdc === true) {
+      patch.buildMode = 'adc';
+    }
+    if (patch.buildMode !== undefined && !BUILD_MODES.some((m) => m.value === patch.buildMode)) {
+      patch.buildMode = '';
+    }
+    if (patch.buildBoots !== undefined && !Number.isInteger(patch.buildBoots)) {
+      patch.buildBoots = null;
+    }
+    if (patch.buildChampion !== undefined && typeof patch.buildChampion !== 'string') {
+      patch.buildChampion = null;
+    }
+    if (patch.buildRole !== undefined && !BUILD_ROLES.some((r) => r.value === patch.buildRole)) {
+      patch.buildRole = '';
     }
     if (patch.runePage !== undefined) {
       const { data } = store.get();

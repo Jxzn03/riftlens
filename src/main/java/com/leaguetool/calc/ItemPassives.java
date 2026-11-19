@@ -58,7 +58,7 @@ public final class ItemPassives {
     }
 
     /** Passiven des Items; leer, wenn es keine hat. */
-    static List<ItemPassive> of(int itemId) {
+    public static List<ItemPassive> of(int itemId) {
         return current.getOrDefault(itemId, List.of());
     }
 

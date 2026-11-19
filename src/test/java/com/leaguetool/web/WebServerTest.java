@@ -322,7 +322,9 @@ class WebServerTest {
         // Nur die Liste im Cache (Champions-Liste geladen): die Seite fehlt weiter, es wird nichts abgerufen.
         get("/api/stats/champions", true);
         int afterList = fake.requests().size();
-        assertFalse(json.readTree(get("/api/stats/report/103?cachedOnly=1", true).body()).path("cached").asBoolean(true));
+        JsonNode listOnly = json.readTree(get("/api/stats/report/103?cachedOnly=1", true).body());
+        assertFalse(listOnly.path("cached").asBoolean(true));
+        assertEquals("Mid", listOnly.path("lane").asText(), "Rollen-Fallback: Hauptlane aus der gecachten Liste");
         assertEquals(afterList, fake.requests().size());
         assertFalse(fake.requests().contains(build));
 
@@ -331,6 +333,21 @@ class WebServerTest {
         int afterReport = fake.requests().size();
         assertEquals(json.readTree(normal), json.readTree(get("/api/stats/report/103?cachedOnly=1", true).body()));
         assertEquals(afterReport, fake.requests().size());
+    }
+
+    @Test
+    void cachedOnlyLaneFallbackUsesOutdatedListWithoutRefresh() throws Exception {
+        settings.setLolalyticsEnabled(true);
+        fake.respond("https://lolalytics.com/lol/tierlist/?tier=emerald_plus&lane=all&patch=30", LolalyticsPages.tierList());
+        get("/api/stats/champions", true);
+        int afterList = fake.requests().size();
+        age("lolalytics/full_v4_emerald_plus_all_30d.json");
+
+        JsonNode r = json.readTree(get("/api/stats/report/103?cachedOnly=1", true).body());
+        assertFalse(r.path("cached").asBoolean(true));
+        assertEquals("Mid", r.path("lane").asText(), "Hauptlane aus der veralteten Liste");
+        Thread.sleep(300);
+        assertEquals(afterList, fake.requests().size(), "kein Abruf, keine Erneuerung im Hintergrund");
     }
 
     @Test

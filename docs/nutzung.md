@@ -1,6 +1,6 @@
 # RiftLens – Bedienung im Detail
 
-Ergänzt die [README](../README.md). Draft-Tab: [`nutzung-draft.md`](nutzung-draft.md), Archiv und Fearless: [`nutzung-archiv.md`](nutzung-archiv.md), Speicherorte und Grenzen: [`konfiguration.md`](konfiguration.md).
+Ergänzt die [README](../README.md). Items-Tab und Build-Rechner: [`nutzung-items.md`](nutzung-items.md), Draft-Tab: [`nutzung-draft.md`](nutzung-draft.md), Archiv und Fearless: [`nutzung-archiv.md`](nutzung-archiv.md), Speicherorte und Grenzen: [`konfiguration.md`](konfiguration.md).
 
 ## Startparameter
 
@@ -19,6 +19,8 @@ Smoke-Test empfiehlt sich ein eigenes Home-Verzeichnis (siehe [`konfiguration.md
 
 Die Tabs sind **Draft**, **Champions**, **Items**, **Runen**, **Abilities** und **Summoner**. Champions, Items, Runen und
 Abilities zeigen die Daten aus Data Dragon und Wiki, dazu den Build-Rechner mit Stats, Cooldowns und Schadensvorschau.
+Items-Tab und Build-Rechner (Item-Liste, Hinzufügen per „+“ oder Ziehen, Schalter, Champion und Rolle):
+[`nutzung-items.md`](nutzung-items.md).
 
 - Patch-Notes: Oben rechts steht der Spiel-Patch (z. B. „Patch 26.23“). Ein Klick darauf zeigt die Änderungen des
   aktuellen Patches für Summoner's Rift laut League-Wiki: Hotfixes zuerst, am Ende die gesammelten Bugfixes. Über die

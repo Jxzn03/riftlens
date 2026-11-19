@@ -25,6 +25,7 @@ import com.leaguetool.data.riot.VerificationReport;
 import com.leaguetool.data.wiki.WikiAbility;
 import com.leaguetool.data.wiki.WikiChampionData;
 import com.leaguetool.data.wiki.WikiClient;
+import com.leaguetool.data.wiki.WikiItems;
 import com.leaguetool.data.wiki.WikiPatchNotes;
 import com.leaguetool.model.Ability;
 import com.leaguetool.model.Champion;
@@ -98,6 +99,7 @@ final class ApiRoutes {
             case "GET summoner" -> summoner(params);
             case "GET stats" -> stats(path, params);
             case "GET champions" -> champion(path, params);
+            case "GET items" -> itemWiki(path);
             case "GET patch-notes" -> patchNotes(params);
             case "POST draft" -> draft(body);
             case "GET draft-archive" -> {
@@ -121,7 +123,7 @@ final class ApiRoutes {
         GameData data = ctx.awaitData();
         byte[] cached = ctx.bootstrapJson(data);
         if (cached == null) {
-            cached = json.writeValueAsBytes(Dto.bootstrap(data, ctx.dataVersion(), ctx.itemPassives().latest(),
+            cached = json.writeValueAsBytes(Dto.bootstrap(data, ctx.settings().locale(), ctx.dataVersion(), ctx.itemPassives().latest(),
                     ctx.runeEffects().latest(), ctx.patchChange()));
             ctx.setBootstrapJson(data, cached);
         }
@@ -155,6 +157,27 @@ final class ApiRoutes {
         }
         Optional<WikiChampionData> data = wiki.get().champion(champion.id());
         return data.<Object>map(d -> Dto.wiki(champion, d)).orElseGet(() -> Dto.obj("found", false));
+    }
+
+    /**
+     * {@code GET items/<id>/wiki}: Passiven und Aktive des Items laut Wiki mit Abklingzeit ({@code Module:ItemData}, im Speicher
+     * gehalten, höchstens einen Tag alt). Ohne Wiki {@code {"disabled": true}}, ohne Eintrag leere Liste.
+     */
+    private Object itemWiki(List<String> path) throws IOException {
+        if (path.size() != 3 || !"wiki".equals(path.get(2))) {
+            throw new ApiException(404, "Unbekannter Endpunkt");
+        }
+        int id = Input.intValue(path.get(1), 400, "Ungültige Item-ID: " + path.get(1));
+        Optional<WikiClient> wiki = ctx.wiki();
+        if (wiki.isEmpty()) {
+            return Dto.obj("disabled", true);
+        }
+        WikiItems.Entry entry = wiki.get().itemData(false).get(id);
+        if (entry == null) {
+            return Dto.obj("passives", List.of(), "actives", List.of());
+        }
+        return Dto.obj("passives", entry.passives().stream().map(p -> Dto.obj("name", p.name(), "cooldown", p.cooldown())).toList(),
+                "actives", entry.actives().stream().map(p -> Dto.obj("name", p.name(), "cooldown", p.cooldown())).toList());
     }
 
     /** Wie viele Patches vor dem aktuellen die Patch-Seite zur Auswahl anbietet. */
@@ -456,7 +479,26 @@ final class ApiRoutes {
                                 LolalyticsPeriod period) throws IOException {
         LolalyticsFullTierList list = client.fullTierListIfCached(tier, listLane, period);
         Object report = list == null ? null : lolalyticsReport(client, list, key, tier, role, period, true);
-        return report != null ? report : Dto.obj("cached", false);
+        return report != null ? report : Dto.obj("cached", false, "lane", cachedLane(client, key, tier, period));
+    }
+
+    /**
+     * Rollen-Fallback ohne frischen Report: häufigste Lane des Champions aus einer gecachten Tierliste (alle Rollen),
+     * auch veraltet, erst im gewählten, dann im anderen Zeitraum. Kein Abruf, keine Erneuerung; sonst {@code null}.
+     */
+    private static String cachedLane(LolalyticsClient client, String key, String tier, LolalyticsPeriod period)
+            throws IOException {
+        int championKey = Input.intValue(key, 400, "Ungültiger Champion-Key: " + key);
+        for (LolalyticsPeriod p : List.of(period, period == LolalyticsPeriod.LAST_30_DAYS
+                ? LolalyticsPeriod.CURRENT_PATCH : LolalyticsPeriod.LAST_30_DAYS)) {
+            LolalyticsFullTierList list = client.fullTierListAnyCached(tier, "all", p);
+            LolalyticsFullTierList.Row row = list == null ? null : list.rows().get(championKey);
+            String label = row == null ? null : Dto.laneLabel(row.lane());
+            if (label != null) {
+                return label;
+            }
+        }
+        return null;
     }
 
     /** @param cachedOnly nur eine frische Seite aus dem Cache; {@code null}, wenn keine vorliegt */

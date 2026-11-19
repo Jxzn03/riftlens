@@ -124,6 +124,22 @@ public final class WikiClient {
      * @throws IOException wenn weder Netz noch Cache verfügbar sind oder das Modul nicht lesbar ist
      */
     public Map<Integer, WikiItems.Entry> itemData(boolean refresh) throws IOException {
+        // Das Modul ist groß (über 400 KB Lua): einmal geparst im Speicher halten, solange es nicht veraltet ist.
+        ItemDataMemo memo = itemDataMemo;
+        if (!refresh && memo != null && memo.loadedAt().plus(ITEM_DATA_MAX_AGE).isAfter(Instant.now())) {
+            return memo.items();
+        }
+        Map<Integer, WikiItems.Entry> items = loadItemData(refresh);
+        itemDataMemo = new ItemDataMemo(items, Instant.now());
+        return items;
+    }
+
+    private record ItemDataMemo(Map<Integer, WikiItems.Entry> items, Instant loadedAt) {
+    }
+
+    private volatile ItemDataMemo itemDataMemo;
+
+    private Map<Integer, WikiItems.Entry> loadItemData(boolean refresh) throws IOException {
         return load(ITEM_DATA_KEY, refresh ? Duration.ZERO : ITEM_DATA_MAX_AGE,
                 () -> http.getText(queryUrl(List.of(ITEM_DATA_TITLE))), this::parseItemModule, parsed -> true);
     }

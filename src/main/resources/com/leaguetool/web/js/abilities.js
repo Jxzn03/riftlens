@@ -1,7 +1,7 @@
 // Ansicht "Abilities": Fähigkeiten je Rang, Abklingzeit mit Ability Haste, Wiki-Details, Schadensvorschau.
 import { html, useMemo, useEffect, useState } from '/vendor/htm-preact.js';
 import {
-  useStore, useViewState, useFetch, select, go, normalize, percent, setPref, useBuildQuery, runePageRunes,
+  useStore, useViewState, useFetch, select, go, normalize, percent, setPref, useBuildQuery, useBuildItems, runePageRunes,
 } from './core.js';
 import {
   Img, Card, Button, Select, SearchInput, Slider, DataGrid, VirtualTable, MasterDetail, Empty, Skeleton, ErrorNote,
@@ -53,7 +53,7 @@ function AbilityDetail({ champion }) {
   const data = useStore((s) => s.data);
   const haste = useStore((s) => s.prefs.haste);
   const previewLevel = useStore((s) => s.prefs.previewLevel);
-  const build = useStore((s) => s.build);
+  const build = useBuildItems();
   const runeCount = useStore((s) => runePageRunes(s.runePage).length);
   const buildQuery = useBuildQuery();
   const details = useFetch(`/api/champions/${champion.id}/detail`);

@@ -4,6 +4,8 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /** Passiven der Items aus {@code Module:ItemData/data}. */
 public final class WikiItems {
@@ -11,14 +13,27 @@ public final class WikiItems {
     /**
      * Passive eines Items.
      *
-     * @param name  Name, leer wenn das Wiki keinen führt
-     * @param lines Beschreibung als Klartext-Zeilen
+     * @param name     Name, leer wenn das Wiki keinen führt
+     * @param lines    Beschreibung als Klartext-Zeilen
+     * @param cooldown Abklingzeit in Sekunden als Text (z. B. {@code "1.5"}, {@code "198 to 99"}), leer ohne
      */
-    public record Passive(String name, List<String> lines) {
+    public record Passive(String name, List<String> lines, String cooldown) {
+
+        public Passive(String name, List<String> lines) {
+            this(name, lines, "");
+        }
     }
 
-    /** Item mit seinen Passiven. */
-    public record Entry(int id, String name, List<Passive> passives) {
+    /** Abklingzeit im Beschreibungstext, z. B. „(1.5 second cooldown“ oder „40-second cooldown“. */
+    private static final Pattern TEXT_COOLDOWN =
+            Pattern.compile("(\\d+(?:\\.\\d+)?(?:\\s*(?:-|–|to)\\s*\\d+(?:\\.\\d+)?)?)[ -]seconds? cooldown");
+
+    /** Item mit seinen Passiven und Aktiven (gleich aufgebaut, nur Passiven zählen für den Build-Rechner). */
+    public record Entry(int id, String name, List<Passive> passives, List<Passive> actives) {
+
+        public Entry(int id, String name, List<Passive> passives) {
+            this(id, name, passives, List.of());
+        }
     }
 
     private static final String REFERENCE = "=>";
@@ -38,19 +53,22 @@ public final class WikiItems {
         }
         for (Map.Entry<?, ?> e : root.entrySet()) {
             if (e.getValue() instanceof Map<?, ?> item && item.get("id") instanceof Number id) {
-                items.putIfAbsent(id.intValue(), new Entry(id.intValue(), String.valueOf(e.getKey()), passives(item, root)));
+                items.putIfAbsent(id.intValue(), new Entry(id.intValue(), String.valueOf(e.getKey()),
+                        effects(item, root, "pass"), effects(item, root, "act")));
             }
         }
         return items;
     }
 
-    private static List<Passive> passives(Map<?, ?> item, Map<?, ?> root) {
+    /** Effekte, deren Schlüssel mit {@code prefix} beginnt ({@code pass}, {@code pass2} … oder {@code act}). */
+    private static List<Passive> effects(Map<?, ?> item, Map<?, ?> root, String prefix) {
         List<Passive> passives = new ArrayList<>();
         if (item.get("effects") instanceof Map<?, ?> effects) {
             for (Map.Entry<?, ?> e : effects.entrySet()) {
                 String key = String.valueOf(e.getKey());
-                if (key.startsWith("pass") && resolve(e.getValue(), key, root) instanceof Map<?, ?> passive) {
-                    passives.add(new Passive(passive.get("name") instanceof String n ? n : "", lines(passive)));
+                if (key.startsWith(prefix) && resolve(e.getValue(), key, root) instanceof Map<?, ?> passive) {
+                    List<String> lines = lines(passive);
+                    passives.add(new Passive(passive.get("name") instanceof String n ? n : "", lines, cooldown(passive, lines)));
                 }
             }
         }
@@ -76,6 +94,19 @@ public final class WikiItems {
         }
         lines.removeIf(String::isBlank);
         return lines;
+    }
+
+    /** Feld {@code cd} des Wikis, sonst die erste Abklingzeit im Text; leer ohne. */
+    private static String cooldown(Map<?, ?> passive, List<String> lines) {
+        Object cd = passive.get("cd");
+        if (cd instanceof Number n) {
+            return n.toString().replaceAll("\\.0$", "");
+        }
+        if (cd instanceof String s && !s.isBlank()) {
+            return plain(s).trim();
+        }
+        Matcher m = TEXT_COOLDOWN.matcher(String.join(" ", lines));
+        return m.find() ? m.group(1) : "";
     }
 
     /** {@code {{rd|Nahkampf|Fernkampf}}} behält beide Werte, sonst bliebe nur der Fernkampf-Wert stehen. */

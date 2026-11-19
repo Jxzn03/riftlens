@@ -520,8 +520,26 @@ table.data.compact td { padding: 3px 10px 3px 0; font-size: 12.5px; }
 .build-panel h3 { font-size: 13px; font-weight: 700; }
 .build-slots { display: flex; gap: 6px; flex-wrap: wrap; }
 .build-slot { width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; border-radius: 9px; border: 1px dashed var(--line-2); color: var(--text-3); }
-.build-slot.filled { border: 1px solid var(--accent); padding: 1px; transition: border-color var(--ease), opacity var(--ease); }
-.build-slot.filled:hover { border-color: var(--bad); opacity: .8; }
+.build-slot.filled { border: 1px solid var(--line-2); padding: 1px; cursor: grab; transition: border-color var(--ease), opacity var(--ease), box-shadow var(--ease); }
+.build-slot.filled:hover, .build-slot.filled.selected { border-color: var(--accent); }
+.build-slot.filled.selected { box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent); }
+.build-slot.dragging { opacity: .35; }
+.build-slot.boots:not(.filled) { font-size: 10px; font-weight: 600; color: var(--text-3); }
+.build-slot:not(.filled) { background: none; cursor: pointer; transition: border-color var(--ease), color var(--ease); }
+.build-slot:not(.filled):hover { border-color: var(--accent); color: var(--accent); }
+.build-slot.boots.filled { border-color: var(--gold, var(--line-2)); }
+.build-modes { display: flex; flex-direction: column; gap: 10px; }
+.build-champion {display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.build-champion .icon-link img { border-radius: 6px; display: block; }
+.build-champion-empty { width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; border-radius: 6px; border: 1px dashed var(--line-2); color: var(--text-3); }
+.build-champion-select { max-width: 170px; }
+.build-slot-sep { width: 1px; align-self: stretch; margin: 4px 2px; background: var(--line-2); }
+.build-slot.drop-target { border: 2px solid var(--accent); background: color-mix(in srgb, var(--accent) 15%, transparent); }
+.item-stats { color: var(--text-2); font-size: 12px; }
+.item-stats .hit { color: var(--text); font-weight: 700; }
+.build-drop-zone { flex: 1; min-height: 0; display: flex; flex-direction: column; position: relative; }
+.build-drop-hint { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 8px; pointer-events: none; border: 2px dashed var(--line-2); border-radius: var(--radius) var(--radius) 0 0; background: color-mix(in srgb, var(--bg) 70%, transparent); color: var(--text-2); font-weight: 600; transition: border-color var(--ease), color var(--ease), background var(--ease); }
+.build-drop-zone.over .build-drop-hint { border-color: var(--bad); color: var(--bad); background: color-mix(in srgb, var(--bad) 10%, var(--bg) 75%); }
 .stat-chips { display: flex; flex-wrap: wrap; gap: 5px; }
 .stat-chip { padding: 2px 8px; border-radius: 6px; background: var(--surface-2); color: var(--text-2); font-size: 12px; }
 .stat-chip strong { color: var(--text); font-variant-numeric: tabular-nums; }
@@ -982,3 +1000,42 @@ button.tag.fearless:hover, button.tag.fearless:focus-visible { background: color
 .draft-series-toggle:hover { background: var(--row-hover); color: var(--text); }
 .draft-series-toggle .draft-locks-chevron { color: inherit; }
 .tag.fearless .tag-fixed { flex: none; white-space: nowrap; }
+
+/* Baupfad als Baum (Items-Detail „Baut aus“) mit Goldwert und Goldeffizienz */
+.recipe-tree { overflow-x: auto; padding: 0; }
+.recipe-tree ul { display: flex; justify-content: center; margin: 0; padding: 12px 0 0; position: relative; list-style: none; }
+.recipe-tree > ul { padding-top: 0; }
+.recipe-tree li { position: relative; padding: 12px 6px 0; text-align: center; }
+.recipe-tree > ul > li { padding-top: 0; }
+/* Waagerechte Linie über den Geschwistern, senkrechte Striche zu jedem Kind und vom Eltern-Item nach unten. */
+.recipe-tree li::before, .recipe-tree li::after { content: ''; position: absolute; top: 0; right: 50%; width: 50%; height: 12px; border-top: 1px solid var(--accent); }
+.recipe-tree li::after { right: auto; left: 50%; border-left: 1px solid var(--accent); }
+.recipe-tree li:only-child::before { display: none; }
+.recipe-tree li:only-child::after { border-top: 0; }
+.recipe-tree li:first-child::before, .recipe-tree li:last-child::after { border-top: 0; }
+.recipe-tree li:first-child:not(:only-child)::after { border-radius: 4px 0 0 0; }
+.recipe-tree li:last-child:not(:only-child)::before { border-right: 1px solid var(--accent); border-radius: 0 4px 0 0; }
+.recipe-tree li:last-child:not(:only-child)::after { border-left: 0; }
+.recipe-tree > ul > li::before, .recipe-tree > ul > li::after { display: none; }
+.recipe-tree ul ul::before { content: ''; position: absolute; top: 0; left: 50%; height: 12px; border-left: 1px solid var(--accent); }
+.recipe-item { display: inline-flex; flex-direction: column; align-items: center; gap: 2px; }
+.recipe-item .gold { font-size: 11.5px; line-height: 1.2; }
+.cost-analysis { margin-top: 12px; }
+.cost-analysis h4 { margin: 10px 0 4px; font-size: 13px; color: var(--text-2); }
+.cost-analysis ul { margin: 0; padding-left: 18px; display: grid; gap: 3px; }
+.cost-analysis .cost-total { list-style: none; margin-left: -18px; padding-top: 3px; }
+.cost-analysis p { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; margin: 0; }
+.item-passive { margin-top: 4px; }
+.item-passive p { margin: 0 0 8px; }
+.item-passive p:last-child { margin-bottom: 0; }
+.item-passive strong { color: var(--text); font-weight: 600; }
+.passive-cd { color: var(--text-3); font-size: 12px; }
+
+/* Menü hinter drei Punkten (MenuButton), z. B. Rollen-Modus im Build-Rechner */
+.menu-button { position: relative; display: inline-flex; }
+.menu-button .btn.icon-only { padding: 6px; position: relative; }
+.menu-button .btn.active { color: var(--accent); }
+.menu-badge { position: absolute; top: 4px; right: 4px; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
+.menu-pop { position: absolute; top: calc(100% + 6px); right: 0; z-index: 50; min-width: 170px; padding: 10px 12px; border-radius: var(--radius); background: var(--surface-2); border: 1px solid var(--line-2); box-shadow: var(--shadow); }
+.menu-title { font-size: 11.5px; font-weight: 600; color: var(--text-3); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 8px; }
+.cost-analysis.no-tree { margin-top: 0; }

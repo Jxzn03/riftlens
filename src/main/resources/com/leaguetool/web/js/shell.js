@@ -3,7 +3,7 @@ import { html, useState, useEffect, useMemo, useRef } from '/vendor/htm-preact.j
 import { store, useStore, useFetch, useStatsUrl, api, go, normalize, percent, toast, setPref, clearFavorites, TIERS, gamePatch } from './core.js';
 import { Icon, Img, Button, Select, Segmented, Switch, Spinner, Loading, ErrorNote, ConfirmHost, confirmDialog } from './ui.js';
 import { ChampionsView } from './champions.js';
-import { ItemsView } from './items.js';
+import { ItemsView, BuildRoleSync } from './items.js';
 import { RunesView } from './runes.js';
 import { AbilitiesView } from './abilities.js';
 import { SummonerView } from './summoner.js';
@@ -64,6 +64,7 @@ export function App() {
     ${dialog === 'settings' ? html`<${SettingsDialog} />` : null}
     <${Toast} />
     <${ConfirmHost} />
+    <${BuildRoleSync} />
   </div>`;
 }
 

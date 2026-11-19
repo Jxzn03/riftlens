@@ -4,6 +4,7 @@ import com.leaguetool.calc.BuildTotals;
 import com.leaguetool.calc.CooldownCalculator;
 import com.leaguetool.calc.DamageInput;
 import com.leaguetool.calc.FinalStats;
+import com.leaguetool.calc.ItemPassives;
 import com.leaguetool.calc.ItemStatParser;
 import com.leaguetool.calc.RuneEffects;
 import com.leaguetool.data.PatchTracker;
@@ -12,6 +13,7 @@ import com.leaguetool.calc.Scaling;
 import com.leaguetool.calc.ScalingStat;
 import com.leaguetool.calc.StatBlock;
 import com.leaguetool.calc.StatCalculator;
+import com.leaguetool.calc.StatLabels;
 import com.leaguetool.calc.StatType;
 import com.leaguetool.data.GameData;
 import com.leaguetool.data.UpdateReport;
@@ -106,7 +108,7 @@ final class Dto {
 
     // ------------------------------------------------------------------ Bootstrap
 
-    static Map<String, Object> bootstrap(GameData data, int version, UpdateReport passives,
+    static Map<String, Object> bootstrap(GameData data, String locale, int version, UpdateReport passives,
                                          UpdateReport runes, PatchTracker.Change patchChange) {
         String patch = data.patch();
         List<Item> riftItems = Item.summonersRiftItems(data.items());
@@ -120,12 +122,22 @@ final class Dto {
                 "runeEffectStatus", updateReport(runes),
                 "champions", data.champions().stream().map(c -> champion(c, patch)).toList(),
                 "items", data.items().stream().map(i -> item(i, patch, riftItems.contains(i))).toList(),
+                "statNames", statNames(locale),
                 "runeTrees", data.runeTrees().stream().map(Dto::runeTree).toList(),
                 "spells", data.summonerSpells().stream().map(s -> spell(s, patch)).toList(),
                 "shards", StatShard.ALL.stream().map(s -> obj("id", s.id(), "name", s.name())).toList(),
                 "shardRows", RuneEffects.shardRows(),
                 "runeEffects", RuneEffects.all().stream().map(e -> obj("id", e.id(), "kind", e.kind().name().toLowerCase(Locale.ROOT),
                         "maxStacks", e.maxStacks(), "stackLabel", e.stackLabel(), "summary", e.summary())).toList());
+    }
+
+    /** Stat-Namen in der Data-Dragon-Sprache je {@link StatType}-Name: {@code label} (voll) und {@code short}. */
+    static Map<String, Object> statNames(String locale) {
+        Map<String, Object> names = new LinkedHashMap<>();
+        for (StatType type : StatType.values()) {
+            names.put(type.name(), obj("label", StatLabels.label(type, locale), "short", StatLabels.shortLabel(type, locale)));
+        }
+        return names;
     }
 
     // ------------------------------------------------------------------ Patch-Notes (Wiki)
@@ -186,7 +198,10 @@ final class Dto {
                 "tags", i.tags(), "from", i.from(), "into", i.into(),
                 "rift", rift, "completed", i.isCompleted(),
                 "icon", patchIcon(patch, "item", i.imageFile()),
-                "stats", statRows(ItemStatParser.parse(i).stats()));
+                "stats", statRows(ItemStatParser.parse(i).stats()),
+                // Immer aktive Item-Passiven aus dem Build-Rechner (Wert in Prozent bzw. flach wie {@link StatType}).
+                "passives", ItemPassives.of(i.id()).stream()
+                        .map(p -> obj("name", p.passive(), "type", p.type().name(), "value", p.value())).toList());
     }
 
     private static Map<String, Object> runeTree(RuneTree t) {
@@ -216,10 +231,16 @@ final class Dto {
                 "classic", s.isClassic(), "icon", patchIcon(patch, "spell", s.imageFile()));
     }
 
-    private static List<Map<String, Object>> statRows(StatBlock block) {
+    /**
+     * Wertezeilen in Enum-Reihenfolge: {@code key} (Name des {@link StatType}, eindeutig auch bei gleichem Label),
+     * {@code label}, {@code value} (formatiert), {@code amount} (Zahl zum Sortieren), {@code percent}.
+     */
+    static List<Map<String, Object>> statRows(StatBlock block) {
         List<Map<String, Object>> rows = new ArrayList<>();
         for (Map.Entry<StatType, Double> e : block.entries()) {
-            rows.add(obj("label", e.getKey().label(), "value", e.getKey().formatValue(e.getValue())));
+            StatType type = e.getKey();
+            rows.add(obj("key", type.name(), "label", type.label(), "value", type.formatValue(e.getValue()),
+                    "amount", e.getValue(), "percent", type.percent()));
         }
         return rows;
     }
@@ -574,6 +595,11 @@ final class Dto {
     /** Lolalytics-Lane → Beschriftung der Rolle (z. B. {@code middle} → „Mid“). */
     private static final Map<String, String> LANE_LABELS = Arrays.stream(Role.values())
             .collect(Collectors.toUnmodifiableMap(LolalyticsClient::lane, Role::label));
+
+    /** Beschriftung einer Lolalytics-Lane oder {@code null}, wenn sie keiner Rolle entspricht. */
+    static String laneLabel(String lane) {
+        return lane == null ? null : LANE_LABELS.get(lane);
+    }
 
     /** Zeile der Champions-Tabelle. */
     static Map<String, Object> lolalyticsChampionStat(LolalyticsFullTierList.Row row, Double strength) {
