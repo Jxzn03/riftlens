@@ -3,20 +3,20 @@ import { html, useMemo, useEffect } from '/vendor/htm-preact.js';
 import {
   useStore, useViewState, useFetch, useStatsUrl, useSourceLabel, useDeferredUrl, useWinRateClass, select, go, normalize,
   sortRows, activeSort, percent, setPref, useChampionRole, useChampionStatsUrl,
-  useBuildQuery, runePageRunes, importRunePage, useFavorites,
+  useBuildQuery, runePageRunes, importRunePage, useFavorites, gamePatch,
 } from './core.js';
 import {
   Icon, Img, Card, Button, SearchInput, Segmented, Slider, Tag, Meter, DataGrid, RateCell, VirtualTable, MasterDetail, HelpTip,
   Empty, Loading, Skeleton, ErrorNote, ItemIcons, RuneIcons, SpellIcons, FavoriteToggle,
 } from './ui.js';
+import { ChampionPatchChanges } from './patch.js';
 
 const DEFAULTS = { q: '', sort: { key: 'name', dir: 1 }, favoritesOnly: false };
 const DETAIL_DEFAULTS = { tab: 'overview' };
 const DETAIL_TABS = [
   { value: 'overview', label: 'Übersicht' },
   { value: 'stats', label: 'Match-Statistik', tip: 'Build, Runen, Skills und Spells laut Lolalytics' },
-  { value: 'counters', label: 'Counters', tip: 'Beste und schlechteste Picks gegen diesen Champion und Advanced Stats (Delta-Werte), aus Sicht des Gegners' },
-];
+  { value: 'counters', label: 'Counters', tip: 'Beste und schlechteste Picks gegen diesen Champion und Advanced Stats (Delta-Werte), aus Sicht des Gegners' },];
 /** Nachkommastellen der Winrates auf der Champions-Seite. */
 const WR_DECIMALS = 2;
 
@@ -209,6 +209,8 @@ function ChampionDetail({ champion, tab, onTab }) {
         </div>`)}</div>` : null}
     <//>
 
+    <${ChampionPatchChanges} champion=${champion} />
+
     <${Card} title="Basiswerte" aside=${html`<span class="muted">Data Dragon</span>`}>
       <div class="level-row">
         <span class="level-pill">Level <strong>${level}</strong></span>
@@ -257,7 +259,7 @@ function PassiveStatus({ info }) {
   const advancedTips = useAdvancedTips();
   const tip = [...info.changes, ...info.review.map((r) => `Nicht auswertbar: ${r}`), ...info.notes].join('\n');
   return html`<p class="muted small" data-tip=${advancedTips && tip ? tip : undefined}>
-    Item-Effekte für Patch ${info.patch || '–'} geprüft: ${info.count} aktiv${info.changes.length ? ` · ${info.changes.length} automatisch aktualisiert` : ''}${info.review.length ? ` · ${info.review.length} nicht auswertbar` : ''}
+    Item-Effekte für Patch ${info.patch ? gamePatch(info.patch) : '–'} geprüft: ${info.count} aktiv${info.changes.length ? ` · ${info.changes.length} automatisch aktualisiert` : ''}${info.review.length ? ` · ${info.review.length} nicht auswertbar` : ''}
   </p>`;
 }
 

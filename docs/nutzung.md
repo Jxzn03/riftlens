@@ -20,6 +20,15 @@ Smoke-Test empfiehlt sich ein eigenes Home-Verzeichnis (siehe [`konfiguration.md
 Die Tabs sind **Draft**, **Champions**, **Items**, **Runen**, **Abilities** und **Summoner**. Champions, Items, Runen und
 Abilities zeigen die Daten aus Data Dragon und Wiki, dazu den Build-Rechner mit Stats, Cooldowns und Schadensvorschau.
 
+- Patch-Notes: Oben rechts steht der Spiel-Patch (z. B. „Patch 26.23“). Ein Klick darauf zeigt die Änderungen des
+  aktuellen Patches für Summoner's Rift laut League-Wiki: Hotfixes zuerst, am Ende die gesammelten Bugfixes. Über die
+  Patch-Auswahl lassen sich auch die 10 Patches davor anzeigen; sie werden erst bei Auswahl geladen. Jeder
+  Block lässt sich auf- und zuklappen; allgemeine Abschnitte und die Bugfixes sind anfangs zu. Die Darstellung folgt
+  dem Wiki (Icons, farbige Werte); ▲ markiert einen Buff, ▼ einen Nerf. Das wird aus dem Text geschätzt („increased“
+  oder „reduced“, bei Abklingzeit und Kosten umgekehrt). Ein Klick auf Champion, Item oder Fähigkeit öffnet die
+  passende Ansicht. In der Übersicht eines Champions zeigt der Block „Patch-Änderungen“ unter den Fähigkeiten die letzte
+  Änderung; „Alle Änderungen“ klappt die ganze Liste auf. Die Patch-Notes werden höchstens einmal täglich neu geladen,
+  damit Hotfixes erscheinen, die Änderungen eines Champions einmal je Patch.
 - Schnellsuche über alles (`Strg`+`K`)
 - Sortierbare Spalten, fehlende Werte stehen immer unten
 - Pfeiltasten-Navigation, Splash-Art, helles und dunkles Design, verschiebbare Trennlinien

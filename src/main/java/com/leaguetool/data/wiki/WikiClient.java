@@ -51,7 +51,19 @@ public final class WikiClient {
     static final String RUNE_PAGE_TITLE = "Rune";
     static final String RUNE_PAGE_KEY = "wiki/rune.json";
     private static final int MAX_TITLES_PER_QUERY = 50;
+    /**
+     * Champion-Historien nur einmal je Patch (Nutzervorgabe): Sie gelten bis zum nächsten Patchwechsel
+     * ({@code notBefore}), die lange Frist greift praktisch nie.
+     */
+    private static final Duration ONCE_PER_PATCH = Duration.ofDays(365);
+    /**
+     * Patch-Seite höchstens einmal täglich, damit nachgetragene Hotfixes erscheinen (Nutzervorgabe); nach einem
+     * Patchwechsel sofort neu. Das ist ein Abruf am Tag und nur beim Öffnen der Unterseite, weit unter jeder Drosselung
+     * des Wikis.
+     */
+    private static final Duration PATCH_NOTES_MAX_AGE = Duration.ofHours(24);
     private static final Pattern SAFE_ID = Pattern.compile("[A-Za-z0-9_]+");
+    private static final Pattern PATCH_TITLE = Pattern.compile("V\\d{1,2}\\.\\d{1,2}");
     private static final String QUERY = "?action=query&prop=revisions&rvprop=content&rvslots=main"
             + "&format=json&formatversion=2&redirects=1&titles=";
 
@@ -161,6 +173,43 @@ public final class WikiClient {
         List<WikiAbility> result = List.copyOf(parsed.abilities());
         abilityCache.put(ddragonId, result);
         return result;
+    }
+
+    /**
+     * Summoner's-Rift-Abschnitte der Patch-Seite (z. B. {@code V26.23}) samt Hotfixes; leer, solange das Wiki die Seite
+     * noch nicht hat. Ein leerer Stand gilt nicht als fertig und wird beim nächsten Aufruf erneut versucht. Ohne Netz
+     * bleibt der letzte Stand.
+     *
+     * @param current {@code true} für den laufenden Patch: höchstens einmal täglich neu (Hotfixes); ältere Patches
+     *                ändern sich nicht mehr und werden einmal je Patch geladen
+     * @throws IOException wenn weder Netz noch Cache verfügbar sind
+     */
+    public List<WikiPatchNotes.Section> patchNotes(String patchTitle, boolean current) throws IOException {
+        if (patchTitle == null || !PATCH_TITLE.matcher(patchTitle).matches()) {
+            throw new IllegalArgumentException("Ungültiger Patch-Titel: " + patchTitle);
+        }
+        return load("wiki/patch/" + patchTitle + ".json", current ? PATCH_NOTES_MAX_AGE : ONCE_PER_PATCH,
+                () -> http.getText(queryUrl(List.of(patchTitle))),
+                json -> WikiPatchNotes.parsePatchPage(pageContent(json)), parsed -> !parsed.isEmpty());
+    }
+
+    /**
+     * Patch-Historie eines Champions ({@code <Wiki-Name>/Patch history}), neuester Patch zuerst; nur auf Anfrage und
+     * einmal je Patch geladen. Leer bei unbekanntem Champion oder fehlender Seite.
+     *
+     * @throws IOException wenn weder Netz noch Cache verfügbar sind
+     */
+    public List<WikiPatchNotes.Entry> championPatchHistory(String ddragonId) throws IOException {
+        if (ddragonId == null || !SAFE_ID.matcher(ddragonId).matches()) {
+            throw new IllegalArgumentException("Ungültige Champion-ID: " + ddragonId);
+        }
+        Optional<WikiChampionData> champion = champion(ddragonId);
+        if (champion.isEmpty()) {
+            return List.of();
+        }
+        String title = champion.get().wikiName() + "/Patch history";
+        return load("wiki/patchhistory/" + ddragonId + ".json", ONCE_PER_PATCH, () -> http.getText(queryUrl(List.of(title))),
+                json -> WikiPatchNotes.parseChampionHistory(pageContent(json)), parsed -> true);
     }
 
     /** {@code true}, wenn die letzte Abfrage mangels Netz aus einem veralteten Cache-Eintrag kam. */
@@ -387,6 +436,17 @@ public final class WikiClient {
             }
         }
         throw new IOException("Wiki-Seite " + title + " fehlt oder ist leer");
+    }
+
+    /** Inhalt der (einzigen) Seite einer Antwort; leer, wenn die Seite fehlt. */
+    private String pageContent(String json) throws IOException {
+        for (JsonNode page : queryNode(json).path("pages")) {
+            JsonNode content = page.path("revisions").path(0).path("slots").path("main").path("content");
+            if (content.isTextual()) {
+                return content.asText();
+            }
+        }
+        return "";
     }
 
     private static String encode(String title) {

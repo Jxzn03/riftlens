@@ -1,6 +1,6 @@
 // Draft-Assistent: Eingabe der Picks und Bans, die fünf besten nächsten Picks und die Gesamteinschätzung.
 import { html, useState, useEffect, useMemo, useRef } from '/vendor/htm-preact.js';
-import { store, useStore, useViewState, useSourceLabel, api, normalize, percent, sortRows, activeSort, useFavorites, openChampion, toast } from './core.js';
+import { store, useStore, useViewState, useSourceLabel, api, normalize, percent, sortRows, activeSort, useFavorites, openChampion, toast, gamePatch } from './core.js';
 import { Icon, Img, Button, Select, Segmented, Switch, Card, Empty, ErrorNote, Loading, Tag, Spinner, FavoriteMark, MoreToggle, confirmDialog } from './ui.js';
 
 const ROLES = [
@@ -1704,7 +1704,7 @@ function ShowMore({ shown, total, onMore }) {
     ${Math.min(ARCHIVE_PAGE, total - shown)} weitere anzeigen (${shown} von ${total})<span class="more-arrow" aria-hidden="true">▼</span>
   </button>`;
 }
-const patchLabel = (patch) => (patch ? `Patch ${patch.split('.').slice(0, 2).join('.')}` : '');
+const patchLabel = (patch) => (patch ? `Patch ${gamePatch(patch)}` : ''); // Spiel-Patch wie im Client (16.23.1 → 26.23)
 
 /** Ausgetauschte Champions zwischen zwei Drafts, wie `DraftArchive.changes` im Backend (vertauschte Seiten zählen nicht). */
 function draftChanges(a, b) {

@@ -1,6 +1,6 @@
 // App-Rahmen: Navigation, Filterleiste, Schnellsuche, Dialoge, Statuszeile.
 import { html, useState, useEffect, useMemo, useRef } from '/vendor/htm-preact.js';
-import { store, useStore, useFetch, useStatsUrl, api, go, normalize, percent, toast, setPref, clearFavorites, TIERS } from './core.js';
+import { store, useStore, useFetch, useStatsUrl, api, go, normalize, percent, toast, setPref, clearFavorites, TIERS, gamePatch } from './core.js';
 import { Icon, Img, Button, Select, Segmented, Switch, Spinner, Loading, ErrorNote, ConfirmHost, confirmDialog } from './ui.js';
 import { ChampionsView } from './champions.js';
 import { ItemsView } from './items.js';
@@ -8,6 +8,7 @@ import { RunesView } from './runes.js';
 import { AbilitiesView } from './abilities.js';
 import { SummonerView } from './summoner.js';
 import { DraftView } from './draft.js';
+import { PatchNotesView } from './patch.js';
 
 const NAV = [
   { view: 'draft', label: 'Draft', icon: 'target' },
@@ -25,6 +26,7 @@ const ROLE_FILTER_VIEWS = ['champions', 'abilities'];
 
 const VIEW_COMPONENTS = {
   champions: ChampionsView, items: ItemsView, runes: RunesView, abilities: AbilitiesView, summoner: SummonerView, draft: DraftView,
+  patch: PatchNotesView, // Unterseite ohne Eintrag in der Navigation, geöffnet über den Patch in der Kopfleiste
 };
 
 export function App() {
@@ -123,9 +125,10 @@ function TopBar({ data, view }) {
       <span class="match-count" data-tip=${advancedTips ? 'Analysierte Champion-Picks und durchschnittliche Winrate laut Lolalytics' : undefined}>${count}</span>
     </div>` : null}
     <div class="topbar-end">
-      <span class=${`patch-chip ${data.offline ? 'offline' : ''}`} data-tip=${advancedTips ? (data.offline ? 'Offline aus dem Cache' : 'Aktueller Patch von Data Dragon') : undefined}>
-        <i></i>Patch ${data.patch}
-      </span>
+      <button type="button" class=${`patch-chip ${data.offline ? 'offline' : ''} ${view === 'patch' ? 'active' : ''}`} onClick=${() => go('patch')}
+        data-tip=${advancedTips ? `${data.offline ? 'Offline aus dem Cache' : 'Aktueller Patch'} (Data Dragon ${data.patch}). Klick zeigt die Patch-Notes.` : undefined}>
+        <i></i>Patch ${gamePatch(data.patch)}
+      </button>
       <${Button} icon="refresh" kind="icon" title="Neu laden" tip="Spieldaten neu laden"
         onClick=${() => { store.set({ status: 'Lade Spieldaten …' }); api.post('/api/reload').catch((e) => toast(e.message, 'error')); }} />
       <${Button} icon=${theme === 'dark' ? 'sun' : 'moon'} kind="icon" title=${theme === 'dark' ? 'Helles Design' : 'Dunkles Design'}

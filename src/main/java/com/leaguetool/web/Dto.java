@@ -24,6 +24,7 @@ import com.leaguetool.data.lolalytics.LolalyticsLateItems;
 import com.leaguetool.data.wiki.WikiAbility;
 import com.leaguetool.data.wiki.WikiChampionData;
 import com.leaguetool.data.wiki.WikiLeveling;
+import com.leaguetool.data.wiki.WikiPatchNotes;
 import com.leaguetool.data.wiki.WikiRatio;
 import com.leaguetool.model.Ability;
 import com.leaguetool.model.AbilitySlot;
@@ -125,6 +126,47 @@ final class Dto {
                 "shardRows", RuneEffects.shardRows(),
                 "runeEffects", RuneEffects.all().stream().map(e -> obj("id", e.id(), "kind", e.kind().name().toLowerCase(Locale.ROOT),
                         "maxStacks", e.maxStacks(), "stackLabel", e.stackLabel(), "summary", e.summary())).toList());
+    }
+
+    // ------------------------------------------------------------------ Patch-Notes (Wiki)
+
+    /**
+     * Summoner's-Rift-Abschnitte eines Patches; {@code patch} ist der Wiki-Titel ({@code V26.23}).
+     *
+     * @param abilityIcon Icon-URL zu „Champion|Fähigkeit“ oder {@code null}
+     */
+    static Map<String, Object> patchNotes(String patch, String version, List<WikiPatchNotes.Section> sections, boolean stale,
+                                          Function<String, String> abilityIcon) {
+        return obj("patch", patch, "version", version, "stale", stale,
+                "sections", sections.stream().map(s -> obj("title", s.title(), "kind", s.kind(), "groups", s.groups().stream()
+                        .map(g -> obj("heading", g.heading(), "kind", g.kind(), "ref", g.ref(),
+                                "lines", patchLines(g.lines(), abilityIcon)))
+                        .toList())).toList());
+    }
+
+    /** Patch-Historie eines Champions, neuester Patch zuerst; {@code current} = aktueller Patch ({@code V26.23}). */
+    static Map<String, Object> patchHistory(List<WikiPatchNotes.Entry> entries, String current, boolean stale,
+                                            Function<String, String> abilityIcon) {
+        return obj("current", current, "stale", stale,
+                "entries", entries.stream().map(e -> obj("patch", e.patch(), "hotfix", e.hotfix(),
+                        "lines", patchLines(e.lines(), abilityIcon))).toList());
+    }
+
+    /** Zeilen mit Teilen ({@code style}, {@code ref}, bei Fähigkeiten {@code icon}) und Trend ({@code buff|nerf}). */
+    private static List<Map<String, Object>> patchLines(List<WikiPatchNotes.Line> lines, Function<String, String> abilityIcon) {
+        return lines.stream().map(l -> obj("depth", l.depth(), "text", l.text(), "trend", l.trend(),
+                "parts", l.parts().stream().map(p -> {
+                    Map<String, Object> part = obj("text", p.text(), "style", p.style(), "ref", p.ref());
+                    if ("ability".equals(p.style()) && p.ref() != null) {
+                        part.put("icon", abilityIcon.apply(p.ref()));
+                    }
+                    return part;
+                }).toList())).toList();
+    }
+
+    /** Icon-URL einer Fähigkeit (Data Dragon), wie in den Champion-Details. */
+    static String abilityIcon(Ability a, String patch) {
+        return patchIcon(patch, a.isPassive() ? "passive" : "spell", a.imageFile());
     }
 
     private static Map<String, Object> champion(Champion c, String patch) {

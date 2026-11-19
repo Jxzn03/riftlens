@@ -324,14 +324,14 @@ export async function loadData() {
     // Erster Start nach einem Patchwechsel: einmal je Programmlauf melden.
     if (data.patchChange && announcedPatchChange !== data.patchChange.at) {
       announcedPatchChange = data.patchChange.at;
-      toast(`Neuer Patch ${data.patchChange.to}${data.patchChange.from ? ` (vorher ${data.patchChange.from})` : ''}: Item- und Runenwerte abgeglichen, Wiki- und Statistikdaten werden neu geladen.`);
+      toast(`Neuer Patch ${gamePatch(data.patchChange.to)}${data.patchChange.from ? ` (vorher ${gamePatch(data.patchChange.from)})` : ''}: Item- und Runenwerte abgeglichen, Wiki- und Statistikdaten werden neu geladen.`);
     }
     store.set({
       data,
       bootError: null,
       build: store.get().build.filter((id) => data.itemById.has(id)),
       runePage: sanitizeRunePage(store.get().runePage, data),
-      status: `Patch ${data.patch} geladen: ${data.champions.length} Champions, ${data.items.length} Items`
+      status: `Patch ${gamePatch(data.patch)} geladen: ${data.champions.length} Champions`
         + (data.offline ? ' (offline aus dem Cache)' : ''),
     });
   } catch (error) {
@@ -341,6 +341,15 @@ export async function loadData() {
       store.set({ bootError: error.message });
     }
   }
+}
+
+/**
+ * Spiel-Patch wie im Wiki und im Client zur Data-Dragon-Version: {@code 16.23.1} → {@code 26.23}. Data Dragon zählt die
+ * Hauptversion seit 2025 zehn niedriger (wie {@code WikiPatchNotes.wikiPatchTitle}); unbekannte Formen bleiben stehen.
+ */
+export function gamePatch(version) {
+  const m = /^(\d+)\.(\d+)/.exec(version || '');
+  return m ? `${Number(m[1]) + 10}.${m[2].padStart(2, '0')}` : version;
 }
 
 export const MAX_BUILD = 6;
@@ -496,7 +505,7 @@ function sanitizeFavorites(value) {
 
 // ------------------------------------------------------------------ Routing
 
-const VIEWS = ['champions', 'items', 'runes', 'abilities', 'summoner', 'draft'];
+const VIEWS = ['champions', 'items', 'runes', 'abilities', 'summoner', 'draft', 'patch'];
 const lastIds = {};
 
 function parseHash() {

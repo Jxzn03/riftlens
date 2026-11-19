@@ -87,6 +87,11 @@ public final class GameDataService {
         }
     }
 
+    /** Data-Dragon-Versionen, neueste zuerst (gecacht wie beim Laden, ohne zusätzlichen Abruf in der Frist). */
+    public List<String> versions() throws IOException {
+        return ddragon.versions(false);
+    }
+
     /** Champion-Details für einen bestimmten Patch; im Speicher zwischengespeichert. */
     public ChampionDetail championDetail(String patch, String championId) throws IOException {
         String key = patch + "|" + championId;

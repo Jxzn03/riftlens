@@ -1,7 +1,7 @@
 // Ansicht "Runen": Runenseite für den Build-Rechner, Bäume mit Keystones und Reihen, Suche über alle Runen, Shards.
 import { html, useMemo } from '/vendor/htm-preact.js';
 import {
-  useStore, useViewState, select, go, normalize, setRunePage, runePageRunes, EMPTY_RUNE_PAGE, store,
+  useStore, useViewState, select, go, normalize, setRunePage, runePageRunes, EMPTY_RUNE_PAGE, store, gamePatch,
 } from './core.js';
 import { Img, Card, SearchInput, DataGrid, MasterDetail, Empty, Tag, Button, Slider, Switch, Icon } from './ui.js';
 
@@ -235,7 +235,7 @@ function RuneEffectStatus({ info }) {
   const advancedTips = useStore((s) => Boolean(s.prefs.advancedTips));
   const tip = [...info.changes, ...info.review, ...info.notes].join('\n');
   return html`<p class="muted small" data-tip=${advancedTips && tip ? tip : undefined}>
-    Runenwerte für Patch ${info.patch || '–'} abgeglichen${info.checkedAt ? ` (${info.checkedAt})` : ''}${info.changes.length ? ` · ${info.changes.length} automatisch aktualisiert` : ''}${info.review.length ? ` · ${info.review.length} nicht auswertbar` : ''}
+    Runenwerte für Patch ${info.patch ? gamePatch(info.patch) : '–'} abgeglichen${info.checkedAt ? ` (${info.checkedAt})` : ''}${info.changes.length ? ` · ${info.changes.length} automatisch aktualisiert` : ''}${info.review.length ? ` · ${info.review.length} nicht auswertbar` : ''}
   </p>`;
 }
 

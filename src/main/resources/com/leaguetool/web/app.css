@@ -31,6 +31,19 @@
   --dmg-physical: #ef5b5b;
   --dmg-magic: #4f8dff;
   --dmg-true: #9aa3b2;
+  /* Wertfarben der Patch-Notes wie im League-Wiki */
+  --pn-ability: #f0c36d;
+  --pn-ap: #8a85ff;
+  --pn-ad: #ff9a3c;
+  --pn-health: #3fc77a;
+  --pn-mana: #5aa9ff;
+  --pn-armor: #f2d56b;
+  --pn-mr: #5fd3d3;
+  --pn-as: #f2c94c;
+  --pn-ms: #e9e1c3;
+  --pn-crit: #ff6b6b;
+  --pn-haste: #c3b6ff;
+  --pn-scale: #e8b660;
   --team-ally: #1fe0f0;
   --locked: #a99cff;
   --team-ally-soft: rgba(31, 224, 240, .07);
@@ -64,6 +77,18 @@
   --dmg-physical: #d63a3a;
   --dmg-magic: #2f6fe0;
   --dmg-true: #8a93a3;
+  --pn-ability: #8a5d0c;
+  --pn-ap: #4b44d6;
+  --pn-ad: #c25a00;
+  --pn-health: #12804a;
+  --pn-mana: #1f6fc9;
+  --pn-armor: #8f7300;
+  --pn-mr: #0b7f86;
+  --pn-as: #8f6d00;
+  --pn-ms: #6b6040;
+  --pn-crit: #c22f2f;
+  --pn-haste: #5b4bc4;
+  --pn-scale: #9a6a12;
   --team-ally: #0598b0;
   --locked: #6a59d1;
   --team-ally-soft: rgba(5, 152, 176, .07);
@@ -157,6 +182,73 @@ kbd {
 .patch-chip { display: inline-flex; align-items: center; gap: 7px; padding: 5px 11px; border-radius: 99px; background: var(--surface); border: 1px solid var(--line); font-weight: 600; white-space: nowrap; }
 .patch-chip i { width: 7px; height: 7px; border-radius: 50%; background: var(--good); }
 .patch-chip.offline i { background: var(--warn); }
+button.patch-chip { font: inherit; font-weight: 600; color: inherit; cursor: pointer; transition: border-color var(--ease); }
+button.patch-chip:hover, button.patch-chip.active { border-color: var(--accent); }
+
+/* Patch-Notes (patch.js) */
+.pn-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.pn-head h1 { font-size: 20px; font-weight: 700; }
+.pn-patches { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+/* Ein Eintrag je Zeile über die volle Breite, getrennt durch eine Linie (keine Spalten, die ineinanderlaufen) */
+.pn-groups { display: flex; flex-direction: column; }
+.pn-group { display: flex; flex-direction: column; gap: 6px; min-width: 0; padding: 10px 0; }
+.pn-group + .pn-group { border-top: 1px solid var(--line); }
+.pn-group:first-child { padding-top: 2px; }
+.pn-group.collapsed .pn-lines { -webkit-mask-image: linear-gradient(180deg, #000 60%, transparent); mask-image: linear-gradient(180deg, #000 60%, transparent); }
+.pn-more { align-self: flex-start; padding: 2px 0; border: 0; background: none; font: inherit; font-size: 12px; font-weight: 600; color: var(--accent); cursor: pointer; }
+.pn-more:hover { text-decoration: underline; }
+.pn-target { display: inline-flex; align-items: center; gap: 8px; align-self: flex-start; padding: 0; border: 0; background: none; color: inherit; font: inherit; cursor: pointer; }
+.pn-target:hover strong { color: var(--accent); }
+.pn-target img { border-radius: 6px; }
+.pn-heading { font-size: 13px; }
+.pn-lines { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 3px; color: var(--text-2); line-height: 1.45; font-size: 12.5px; }
+.pn-lines li { position: relative; }
+.pn-lines .pn-d1 { padding-left: 12px; color: var(--text); font-weight: 600; }
+.pn-lines .pn-d2 { padding-left: 26px; }
+.pn-lines .pn-d3 { padding-left: 40px; }
+.pn-lines .pn-d4 { padding-left: 54px; }
+.pn-lines .pn-d1::before, .pn-lines .pn-d2::before, .pn-lines .pn-d3::before, .pn-lines .pn-d4::before { content: '•'; position: absolute; left: calc(var(--pn-indent, 0px)); color: var(--text-3); }
+.pn-lines .pn-d2::before { left: 14px; }
+.pn-lines .pn-d3::before { left: 28px; content: '–'; }
+.pn-lines .pn-d4::before { left: 42px; content: '–'; }
+/* Darstellung wie im Wiki: Fähigkeiten mit Icon in Gold, Werte farbig, Hervorhebungen in Kapitälchen */
+.pn-lines .pn-d1 { font-weight: 500; }
+/* Einträge innerhalb eines Champions (Fähigkeit, Stats …) mit Abstand statt Linie voneinander absetzen */
+.pn-lines li.pn-d1:not(:first-child) { margin-top: 10px; }
+.pn-lines li.pn-d1 + li:not(.pn-d1) { margin-top: 2px; }
+.pn-ref { display: inline-flex; align-items: center; gap: 5px; padding: 0; border: 0; background: none; font: inherit; color: var(--pn-ability); cursor: pointer; vertical-align: middle; }
+.pn-ref:hover { text-decoration: underline; }
+.pn-ref img { border-radius: 4px; }
+.pn-ref.static { cursor: default; }
+.pn-ref.static:hover { text-decoration: none; }
+.pn-label { font-size: 10.5px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; color: var(--text); }
+.pn-v { font-weight: 500; }
+.pn-v.pn-ap { color: var(--pn-ap); } .pn-v.pn-ad { color: var(--pn-ad); } .pn-v.pn-health { color: var(--pn-health); }
+.pn-v.pn-mana { color: var(--pn-mana); } .pn-v.pn-armor { color: var(--pn-armor); } .pn-v.pn-mr { color: var(--pn-mr); }
+.pn-v.pn-as { color: var(--pn-as); } .pn-v.pn-ms { color: var(--pn-ms); } .pn-v.pn-crit { color: var(--pn-crit); }
+.pn-v.pn-haste { color: var(--pn-haste); } .pn-v.pn-scale { color: var(--pn-scale); }
+/* Buff/Nerf: Pfeil statt Punkt und farbiger Rand */
+.pn-lines li.pn-buff::before { content: '▲' !important; color: var(--good) !important; font-size: 9px; top: 3px; }
+.pn-lines li.pn-nerf::before { content: '▼' !important; color: var(--bad) !important; font-size: 9px; top: 3px; }
+.pn-trend { display: inline-flex; align-items: center; padding: 1px 7px; border-radius: 99px; font-size: 10.5px; font-weight: 700; letter-spacing: .02em; }
+.pn-trend.buff { color: var(--good); background: color-mix(in srgb, var(--good) 14%, transparent); }
+.pn-trend.nerf { color: var(--bad); background: color-mix(in srgb, var(--bad) 14%, transparent); }
+.pn-trend.mixed { color: var(--warn); background: color-mix(in srgb, var(--warn) 14%, transparent); }
+.pn-group-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.pn-legend { display: inline-flex; gap: 10px; align-items: center; }
+.pn-legend .up { color: var(--good); } .pn-legend .down { color: var(--bad); }
+.pn-section > summary { cursor: pointer; list-style: none; }
+.pn-section > summary::-webkit-details-marker { display: none; }
+.pn-section > summary h3::before { content: '▸'; display: inline-block; width: 14px; color: var(--text-3); }
+.pn-section[open] > summary h3::before { content: '▾'; }
+.pn-section:not([open]) { gap: 0; }
+.pn-section.pn-hotfix { border-color: color-mix(in srgb, var(--warn) 45%, var(--line)); }
+.pn-history { display: flex; flex-direction: column; gap: 12px; }
+.pn-entry { display: flex; flex-direction: column; gap: 5px; }
+.pn-entry + .pn-entry { padding-top: 10px; border-top: 1px solid var(--line); }
+.pn-entry h4 { font-size: 12.5px; font-weight: 700; display: flex; align-items: center; gap: 6px; }
+.pn-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.pn-actions:empty { display: none; }
 
 .statusbar {
   flex: none; height: 26px; display: flex; align-items: center; gap: 8px; padding: 0 14px; font-size: 11.5px;

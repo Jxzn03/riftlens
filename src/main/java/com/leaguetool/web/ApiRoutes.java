@@ -25,12 +25,16 @@ import com.leaguetool.data.riot.VerificationReport;
 import com.leaguetool.data.wiki.WikiAbility;
 import com.leaguetool.data.wiki.WikiChampionData;
 import com.leaguetool.data.wiki.WikiClient;
+import com.leaguetool.data.wiki.WikiPatchNotes;
+import com.leaguetool.model.Ability;
 import com.leaguetool.model.Champion;
+import com.leaguetool.model.ChampionDetail;
 import com.leaguetool.model.Item;
 import com.leaguetool.model.Role;
 import com.leaguetool.util.AtomicFiles;
 
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -39,8 +43,14 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.function.Function;
 
 /** Die JSON-Endpunkte unter {@code /api}. */
 final class ApiRoutes {
@@ -88,6 +98,7 @@ final class ApiRoutes {
             case "GET summoner" -> summoner(params);
             case "GET stats" -> stats(path, params);
             case "GET champions" -> champion(path, params);
+            case "GET patch-notes" -> patchNotes(params);
             case "POST draft" -> draft(body);
             case "GET draft-archive" -> {
                 fearless.backfillArchive(); // Serienspiele aus älteren Dateien zuerst nachtragen, sonst fehlen sie in der Liste
@@ -130,6 +141,7 @@ final class ApiRoutes {
         return switch (path.get(2)) {
             case "detail" -> Dto.championDetail(ctx.gameDataService().championDetail(data.patch(), champion.id()), data.patch());
             case "wiki" -> wiki(champion);
+            case "patch-history" -> patchHistory(champion);
             case "levels" -> levels(champion, params);
             case "insights" -> insights(champion, params);
             default -> throw new ApiException(404, "Unbekannter Endpunkt");
@@ -143,6 +155,113 @@ final class ApiRoutes {
         }
         Optional<WikiChampionData> data = wiki.get().champion(champion.id());
         return data.<Object>map(d -> Dto.wiki(champion, d)).orElseGet(() -> Dto.obj("found", false));
+    }
+
+    /** Wie viele Patches vor dem aktuellen die Patch-Seite zur Auswahl anbietet. */
+    private static final int PREVIOUS_PATCHES = 10;
+
+    /**
+     * Summoner's-Rift-Änderungen laut Wiki: der aktuelle Patch oder mit {@code ?patch=V26.22} einer der
+     * {@link #PREVIOUS_PATCHES} davor (nur auf Anfrage geladen). {@code patches} listet die Auswahl.
+     */
+    private Object patchNotes(Map<String, String> params) throws IOException {
+        Optional<WikiClient> wiki = ctx.wiki();
+        if (wiki.isEmpty()) {
+            return Dto.obj("disabled", true);
+        }
+        GameData data = ctx.awaitData();
+        String current = WikiPatchNotes.wikiPatchTitle(data.patch());
+        List<String> patches;
+        try {
+            patches = WikiPatchNotes.recentPatchTitles(ctx.gameDataService().versions(), data.patch(), PREVIOUS_PATCHES);
+        } catch (IOException e) {
+            patches = List.of(current); // ohne Versionsliste nur der aktuelle Patch
+        }
+        String title = params.getOrDefault("patch", current);
+        if (!patches.contains(title)) {
+            throw new ApiException(400, "Patch nicht in der Auswahl: " + title);
+        }
+        List<WikiPatchNotes.Section> sections = wiki.get().patchNotes(title, title.equals(current));
+        List<WikiPatchNotes.Line> lines = sections.stream().flatMap(s -> s.groups().stream())
+                .flatMap(g -> g.lines().stream()).toList();
+        Map<String, Object> result = Dto.patchNotes(title, data.patch(), sections, wiki.get().isStale(), abilityIcons(data, lines));
+        result.put("current", current);
+        result.put("patches", patches);
+        return result;
+    }
+
+    /** Höchste Wartezeit auf Fähigkeits-Icons; die Patch-Notes erscheinen auch ohne sie. */
+    private static final long ICON_WAIT_MS = 3000;
+
+    /**
+     * Icon-URL zu „Champion|Fähigkeit“ aus den Data-Dragon-Details; Namen ohne Satzzeichen und Groß-/Kleinschreibung
+     * verglichen, unbekannt → {@code null}. Die Details der erwähnten Champions laden parallel, gewartet wird höchstens
+     * {@link #ICON_WAIT_MS}: Ist Data Dragon langsam, fehlen nur Icons, statt dass die Seite hängt (bis zu 30 s je
+     * Abruf). Abrufe, die später fertig werden, liegen danach im Cache und zeigen beim nächsten Öffnen ihr Icon.
+     */
+    private Function<String, String> abilityIcons(GameData data, List<WikiPatchNotes.Line> lines) {
+        Map<String, Champion> champions = new HashMap<>();
+        for (WikiPatchNotes.Line line : lines) {
+            for (WikiPatchNotes.Part part : line.parts()) {
+                if ("ability".equals(part.style()) && part.ref() != null && part.ref().indexOf('|') > 0) {
+                    String key = nameKey(part.ref().substring(0, part.ref().indexOf('|')));
+                    data.champions().stream().filter(c -> nameKey(c.name()).equals(key)).findFirst()
+                            .ifPresent(c -> champions.putIfAbsent(key, c));
+                }
+            }
+        }
+        Map<String, CompletableFuture<ChampionDetail>> loads = new HashMap<>();
+        champions.forEach((key, c) -> loads.put(key, CompletableFuture.supplyAsync(() -> {
+            try {
+                return ctx.gameDataService().championDetail(data.patch(), c.id());
+            } catch (IOException e) {
+                throw new UncheckedIOException(e);
+            }
+        })));
+        try {
+            CompletableFuture.allOf(loads.values().toArray(CompletableFuture[]::new)).get(ICON_WAIT_MS, TimeUnit.MILLISECONDS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        } catch (ExecutionException | TimeoutException e) {
+            // fehlende oder langsame Details: ohne Icon weiter
+        }
+        Map<String, Map<String, String>> byChampion = new HashMap<>();
+        loads.forEach((key, load) -> {
+            if (load.isDone() && !load.isCompletedExceptionally()) {
+                Map<String, String> icons = new HashMap<>();
+                for (Ability a : load.join().abilities()) {
+                    String icon = Dto.abilityIcon(a, data.patch());
+                    icons.put(nameKey(a.name()), icon);
+                    // Formen unter einem Namen (Gnar: "Boomerang Throw / Boulder Toss") auch einzeln
+                    for (String form : a.name().split("/")) {
+                        icons.putIfAbsent(nameKey(form), icon);
+                    }
+                }
+                byChampion.put(key, icons);
+            }
+        });
+        return ref -> {
+            int bar = ref.indexOf('|');
+            Map<String, String> icons = bar < 0 ? null : byChampion.get(nameKey(ref.substring(0, bar)));
+            return icons == null ? null : icons.get(nameKey(ref.substring(bar + 1)));
+        };
+    }
+
+    private static String nameKey(String name) {
+        return name.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]", "");
+    }
+
+    /** Patch-Historie eines Champions laut Wiki (nur Summoner's Rift, ohne Skins). */
+    private Object patchHistory(Champion champion) throws IOException {
+        Optional<WikiClient> wiki = ctx.wiki();
+        if (wiki.isEmpty()) {
+            return Dto.obj("disabled", true);
+        }
+        GameData data = ctx.awaitData();
+        List<WikiPatchNotes.Entry> entries = wiki.get().championPatchHistory(champion.id());
+        List<WikiPatchNotes.Line> lines = entries.stream().flatMap(e -> e.lines().stream()).toList();
+        return Dto.patchHistory(entries, WikiPatchNotes.wikiPatchTitle(data.patch()), wiki.get().isStale(),
+                abilityIcons(data, lines));
     }
 
     private Object levels(Champion champion, Map<String, String> params) {
