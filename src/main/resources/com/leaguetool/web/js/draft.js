@@ -1,7 +1,7 @@
 // Draft-Assistent: Eingabe der Picks und Bans, die fünf besten nächsten Picks und die Gesamteinschätzung.
 import { html, useState, useEffect, useMemo, useRef } from '/vendor/htm-preact.js';
 import { store, useStore, useViewState, useSourceLabel, api, normalize, percent, sortRows, activeSort, useFavorites, openChampion, toast, gamePatch } from './core.js';
-import { Icon, Img, Button, Select, Segmented, Switch, Card, Empty, ErrorNote, Loading, Tag, Spinner, FavoriteMark, MoreToggle, confirmDialog } from './ui.js';
+import { Icon, Img, Button, Select, Segmented, Switch, Card, Empty, ErrorNote, Loading, Tag, Spinner, FavoriteMark, MoreToggle, MenuButton, confirmDialog } from './ui.js';
 
 const ROLES = [
   { value: 'TOP', label: 'Top' }, { value: 'JUNGLE', label: 'Jungle' }, { value: 'MIDDLE', label: 'Mid' },
@@ -35,7 +35,8 @@ const TOP_PICKS = 5;
 const MAX_TABLE_ROWS = 40;
 
 const AUTO_MIN_GAMES = 'auto';
-const MIN_GAMES = [0, 1000, 2500, 4300, 10000, 25000].map((n) => ({ value: String(n), label: `ab ${n.toLocaleString('de-DE')} Spiele` }));
+/** Ohne „Spiele“: Die Auswahl steht hinter der Beschriftung „Games“ und muss neben „Draft leeren“ in die Zeile passen. */
+const MIN_GAMES = [0, 1000, 2500, 4300, 10000, 25000].map((n) => ({ value: String(n), label: `ab ${n.toLocaleString('de-DE')}` }));
 /** Pickrate auf der Rolle in Prozent; „Auto“ ist der Standard des Backends. */
 const MIN_PICK_RATES = [0.25, 0.5, 1, 1.5, 2, 3].map((p) => ({ value: String(p / 100), label: `ab ${p} %` }));
 /** Eine Profil-Aussage über ein Team braucht mehr als ein oder zwei Picks. */
@@ -68,7 +69,8 @@ const autoLabel = (result, rarePicks) => {
   if (!result || Boolean(result.minPickRate === 0) !== Boolean(rarePicks)) {
     return 'Auto';
   }
-  return rarePicks ? `Auto (ab ${result.minGames.toLocaleString('de-DE')})` : `Auto (ab ${percent(result.defaultMinPickRate, 2)})`;
+  // Kurz gehalten: Die breiteste Option bestimmt die Breite der Auswahl neben „Optionen“.
+  return rarePicks ? `Auto ${result.minGames.toLocaleString('de-DE')}` : `Auto ${percent(result.defaultMinPickRate, 2)}`;
 };
 
 // ------------------------------------------------------------------ Archiv: Aufzeichnung
@@ -323,15 +325,28 @@ const CLIENT_STATUS = {
   CHAMP_SELECT: 'Champion-Auswahl wird übernommen',
 };
 
-function ClientSync({ lcu, onToggle }) {
+/**
+ * Kachel für einen Modus des Drafts (Fearless-Serie, Client-Abgleich): Titel, Stand in einer Zeile und ein Schalter-Symbol.
+ * Beide Modi verändern, woher das Brett kommt bzw. was darauf erlaubt ist; deshalb stehen sie groß und nebeneinander
+ * unter den Bans statt als kleine Schalter zwischen den Filtern.
+ */
+function ModeTile({ kind, icon, title, status, on, live = false, tip, onClick }) {
+  return html`<button type="button" class=${`draft-mode ${kind} ${on ? 'on' : ''} ${live ? 'live' : ''}`} role="switch" aria-checked=${on}
+    data-tip=${tip} onClick=${onClick}>
+    <span class="draft-mode-icon"><${Icon} name=${icon} size=${18} /></span>
+    <span class="draft-mode-text"><strong>${title}</strong><span class="draft-mode-status">${status}</span></span>
+    <span class="draft-mode-switch" aria-hidden="true"></span>
+  </button>`;
+}
+
+function ClientTile({ lcu, onToggle }) {
   const advancedTips = useStore((s) => Boolean(s.prefs.advancedTips));
   const enabled = Boolean(lcu) && lcu.status !== 'OFF';
-  const text = enabled ? CLIENT_STATUS[lcu.status] || lcu.message : '';
-  return html`<div class="draft-client">
-    <${Switch} checked=${enabled} onChange=${onToggle}
-      tip=${advancedTips ? 'Liest während der Champion-Auswahl Picks, Bans und eure Rollen aus dem League-Client (nur lesend, wie DraftGap). Keine Namen, keine Aktionen im Client.' : undefined}>Mit League-Client abgleichen<//>
-    ${text ? html`<span class=${`small draft-client-status ${lcu.status === 'CHAMP_SELECT' ? 'live' : 'muted'}`}>${text}</span>` : null}
-  </div>`;
+  const live = enabled && lcu.status === 'CHAMP_SELECT';
+  return html`<${ModeTile} kind="client" icon="plug" title="League-Client" on=${enabled} live=${live}
+    status=${enabled ? CLIENT_STATUS[lcu.status] || lcu.message || 'An' : 'Picks und Bans live übernehmen'}
+    tip=${advancedTips ? 'Liest während der Champion-Auswahl Picks, Bans und eure Rollen aus dem League-Client (nur lesend, wie DraftGap). Keine Namen, keine Aktionen im Client.' : undefined}
+    onClick=${() => onToggle(!enabled)} />`;
 }
 
 // ------------------------------------------------------------------ Fearless-Serie
@@ -554,11 +569,19 @@ async function toggleFearless(on, fearless, form, setForm) {
   }
 }
 
-/** Schalter der Fearless-Serie in der Optionsleiste rechts neben der Pickrate; Formular und Stand zeigt `FearlessPanel`. */
-function FearlessSwitch({ fearless, form, setForm }) {
+/**
+ * Kachel der Fearless-Serie unter den Bans: zeigt ohne Serie, wofür sie da ist, und mit Serie Format und Fortschritt.
+ * Formular und Stand zeigt `FearlessPanel` unter dem Brett.
+ */
+function FearlessTile({ fearless, form, setForm }) {
   const advancedTips = useStore((s) => Boolean(s.prefs.advancedTips));
-  return html`<${Switch} checked=${Boolean(fearless.state?.active || form)} onChange=${(on) => toggleFearless(on, fearless, form, setForm)}
-    tip=${advancedTips ? 'Hard Fearless für Bo3, Bo5 oder offene Scrim-Blöcke: Champions, die ein Team in einem früheren Game der Serie gepickt hat, sind danach für beide Teams gesperrt. Bans werden nicht übertragen. Nur lokal, ohne Abfrage beim League-Client.' : undefined}>Fearless-Serie<//>`;
+  const active = fearless.state?.active || null;
+  // Sperren und Bezeichnung stehen in der Serienzeile unter dem Brett; die Kachel zeigt nur, wo die Serie steht.
+  const status = active ? `${seriesFormatLabel(active)} · ${seriesProgress(active)}`
+    : form ? 'Format wählen und starten ↓' : 'Picks für Folge-Games sperren';
+  return html`<${ModeTile} kind="fearless" icon="lock" title="Fearless-Serie" on=${Boolean(active || form)} status=${status}
+    tip=${advancedTips ? 'Hard Fearless für Bo3, Bo5 oder offene Scrim-Blöcke: Champions, die ein Team in einem früheren Game der Serie gepickt hat, sind danach für beide Teams gesperrt. Bans werden nicht übertragen. Nur lokal, ohne Abfrage beim League-Client.' : undefined}
+    onClick=${() => toggleFearless(!(active || form), fearless, form, setForm)} />`;
 }
 
 /**
@@ -684,7 +707,7 @@ function FearlessPanel({ fearless, form, setForm, view, setView, data, locked, d
 
   // Eigene Zeile unter dem Brett, alles nebeneinander: In der mittleren Spalte würde das Panel (und die mit jedem Spiel
   // wachsende Sperrleiste) die Team-Spalten in die Höhe strecken.
-  // Der Schalter sitzt in der Optionsleiste (`FearlessSwitch`); ohne Serie und Formular bleibt die Zeile leer.
+  // Ein- und ausgeschaltet wird über die Kachel unter den Bans (`FearlessTile`); ohne Serie und Formular bleibt die Zeile leer.
   return html`<div class="draft-fearless">
     ${head || form ? html`<div class="draft-fearless-main open">
       ${form ? html`
@@ -809,7 +832,7 @@ export function DraftView() {
     }
   }, []);
   const fearless = useFearless();
-  // Start-Formular der Serie: geöffnet über den Schalter in der Optionsleiste, angezeigt in der Fearless-Zeile.
+  // Start-Formular der Serie: geöffnet über die Fearless-Kachel, angezeigt in der Fearless-Zeile.
   const [fearlessForm, setFearlessForm] = useState(null);
   const fearlessActive = fearless.state?.active || null;
   const fearlessContext = view.fearlessContext || null;
@@ -914,16 +937,24 @@ export function DraftView() {
         <${WinPanel} analysis=${result?.analysis} picks=${picks} loading=${loading} completing=${completing} />
         <${BanRow} bans=${view.bans} data=${data} onAdd=${() => setView({ picker: { team: 'bans' } })}
           onRemove=${(key) => setView({ bans: view.bans.filter((b) => b !== key) })} />
-        <div class="draft-actions">
-          <${Button} icon="trash" onClick=${reset} disabled=${picks === 0 && view.bans.length === 0 && !fearlessContext}>Draft leeren<//>
-          ${storedState && storedState.sameChampions ? html`<${Button} icon="ok" onClick=${() => saveRoles(storedState.board)}
-            disabled=${savingRoles || !storedState.rolesChanged || (loading && stored.kind === 'draft')}
-            title=${storedState.rolesChanged ? 'Rollen in den gespeicherten Draft übernehmen' : 'Rollen sind gespeichert'}
-            tip=${advancedTips ? `Überschreibt nur die Rollen ${stored.kind === 'game' ? `von Game ${stored.number} der Fearless-Serie` : 'des geladenen Drafts im Archiv'}; mit anderen Champions entsteht wie bisher ein neuer Draft` : undefined}>
-            ${storedState.rolesChanged ? 'Rollen speichern' : 'Gespeichert'}<//>` : null}
-          <span class="muted small">${sourceLabel}</span>
+        <div class="draft-modes">
+          <${FearlessTile} fearless=${fearless} form=${fearlessForm} setForm=${setFearlessForm} />
+          <${ClientTile} lcu=${client.lcu} onToggle=${client.toggle} />
         </div>
-        <${ClientSync} lcu=${client.lcu} onToggle=${client.toggle} />
+        <div class="draft-actions">
+          <div class="draft-actions-main">
+            <${Button} icon="trash" onClick=${reset} disabled=${picks === 0 && view.bans.length === 0 && !fearlessContext}>Draft leeren<//>
+            ${storedState && storedState.sameChampions ? html`<${Button} icon="ok" onClick=${() => saveRoles(storedState.board)}
+              disabled=${savingRoles || !storedState.rolesChanged || (loading && stored.kind === 'draft')}
+              title=${storedState.rolesChanged ? 'Rollen in den gespeicherten Draft übernehmen' : 'Rollen sind gespeichert'}
+              tip=${advancedTips ? `Überschreibt nur die Rollen ${stored.kind === 'game' ? `von Game ${stored.number} der Fearless-Serie` : 'des geladenen Drafts im Archiv'}; mit anderen Champions entsteht wie bisher ein neuer Draft` : undefined}>
+              ${storedState.rolesChanged ? 'Rollen speichern' : 'Gespeichert'}<//>` : null}
+          </div>
+          <div class="draft-actions-side">
+            <${QuickFilter} view=${view} setView=${setView} result=${result} />
+            <${DraftOptions} view=${view} setView=${setView} sourceLabel=${sourceLabel} />
+          </div>
+        </div>
       </div>
       <${TeamColumn} title="Gegner" team="enemy" slots=${view.enemy} result=${result} data=${data} pending=${pendingRole} hints=${hints.enemy}
         onPick=${(index) => setView({ picker: { team: 'enemy', index } })} onRole=${setSlotRole} onClear=${clearSlot} />
@@ -941,22 +972,7 @@ export function DraftView() {
       <${Segmented} label="Bereich" value=${view.tab}
         onChange=${(tab) => setView(tab === 'picks' && view.tab !== 'picks' ? { tab, side: 'ally' } : { tab })}
         options=${[{ value: 'picks', label: 'Beste Picks' }, { value: 'analysis', label: 'Draft-Analyse' }, { value: 'archive', label: 'Archiv' }]} />
-      <div class="draft-options">
-        ${view.rarePicks ? html`<label class="draft-option" data-tip=${advancedTips ? 'Mindestspiele eines Vorschlags auf seiner Rolle in den letzten 30 Tagen. Auto richtet sich nach der Spielmenge des Rang-Bereichs; in Emerald+ entspricht das etwa dem Standard von DraftGap.' : undefined}>
-          <span class="muted small">Games</span>
-          <${Select} label="Mindestspiele" value=${view.minGames} onChange=${(minGames) => setView({ minGames })}
-            options=${[{ value: AUTO_MIN_GAMES, label: autoLabel(result, true) }, ...MIN_GAMES]} />
-        </label>` : html`<label class="draft-option" data-tip=${advancedTips ? 'Mindest-Pickrate eines Vorschlags auf seiner Rolle in den letzten 30 Tagen, in jedem Rang-Bereich gleich streng. Höher heißt weniger exotische Picks.' : undefined}>
-          <span class="muted small">Pickrate</span>
-          <${Select} label="Mindest-Pickrate" value=${view.minPickRate || AUTO_MIN_GAMES} onChange=${(minPickRate) => setView({ minPickRate })}
-            options=${[{ value: AUTO_MIN_GAMES, label: autoLabel(result, false) }, ...MIN_PICK_RATES]} />
-        </label>`}
-        <${FearlessSwitch} fearless=${fearless} form=${fearlessForm} setForm=${setFearlessForm} />
-        <${Switch} checked=${view.ignoreChampionWinRates} onChange=${(ignoreChampionWinRates) => setView({ ignoreChampionWinRates })}
-          tip=${advancedTips ? 'Bewertet nur Synergien und Matchups, nicht die allgemeine Stärke der Champions' : undefined}>Nur Synergien und Matchups<//>
-        <${Switch} checked=${Boolean(view.rarePicks)} onChange=${(rarePicks) => setView({ rarePicks })}
-          tip=${advancedTips ? 'Bisheriges Verhalten: auch Off-Role-Picks wie Tahm Kench ADC, Filter nur nach Spielzahl. Sonst braucht ein Vorschlag mindestens 10 % der Spiele seines Champions auf dieser Rolle und die gewählte Pickrate.' : undefined}>Seltene Picks zeigen<//>
-      </div>
+      ${view.tab === 'archive' ? null : html`<${ActiveOptions} view=${view} setView=${setView} />`}
     </div>
 
     ${view.tab === 'archive' ? html`<${Archive} data=${data} view=${view} setView=${setView} />`
@@ -968,6 +984,94 @@ export function DraftView() {
     ${view.picker ? html`<${ChampionPicker} data=${data} used=${used} locked=${locked}
       title=${view.picker.team === 'bans' ? 'Champion bannen' : view.picker.team === 'ally' ? 'Pick für dein Team' : 'Pick des Gegners'}
       onChoose=${(champion) => assign(view.picker, champion)} onClose=${() => setView({ picker: null })} />` : null}
+  </div>`;
+}
+
+// ------------------------------------------------------------------ Draft-Optionen
+
+/**
+ * Schalter des Menüs abseits des Standards, je mit Text und Rücksetzung. Das Menü zählt sie, die Tags in der
+ * Bereichszeile zeigen sie über der Liste, auf die sie wirken: So bleibt nichts unbemerkt eingeschaltet.
+ * Pickrate bzw. Mindestspiele fehlen hier, sie stehen ohnehin sichtbar neben dem Menü (`QuickFilter`).
+ */
+function changedOptions(view) {
+  const changed = [];
+  if (view.ignoreChampionWinRates) {
+    changed.push({ key: 'synergy', label: 'Nur Synergien und Matchups', reset: { ignoreChampionWinRates: false } });
+  }
+  if (view.rarePicks) {
+    changed.push({ key: 'rare', label: 'Seltene Picks', reset: { rarePicks: false } });
+  }
+  return changed;
+}
+
+/**
+ * Mindest-Pickrate (bzw. mit „Seltene Picks zeigen“ die Mindestspiele) direkt neben „Draft-Optionen“: Der Filter wird
+ * während eines Drafts am häufigsten nachgestellt und soll ohne Aufklappen erreichbar sein.
+ */
+function QuickFilter({ view, setView, result }) {
+  const advancedTips = useStore((s) => Boolean(s.prefs.advancedTips));
+  // Eigener Pfeil statt des Browser-Pfeils: schmaler und an fester Stelle, der Fokus umrahmt den ganzen Kasten.
+  const caret = html`<span class="draft-quick-caret" aria-hidden="true"><${Icon} name="chevron" size=${14} /></span>`;
+  return view.rarePicks ? html`<label class="draft-quick-filter" data-tip=${advancedTips ? 'Mindestspiele eines Vorschlags auf seiner Rolle in den letzten 30 Tagen. Auto richtet sich nach der Spielmenge des Rang-Bereichs; in Emerald+ entspricht das etwa dem Standard von DraftGap.' : undefined}>
+      <span class="draft-quick-label">Games</span>
+      <${Select} label="Mindestspiele" value=${view.minGames} onChange=${(minGames) => setView({ minGames })}
+        options=${[{ value: AUTO_MIN_GAMES, label: autoLabel(result, true) }, ...MIN_GAMES]} />
+      ${caret}
+    </label>`
+    : html`<label class="draft-quick-filter" data-tip=${advancedTips ? 'Mindest-Pickrate eines Vorschlags auf seiner Rolle in den letzten 30 Tagen, in jedem Rang-Bereich gleich streng. Höher heißt weniger exotische Picks.' : undefined}>
+      <span class="draft-quick-label">Pickrate</span>
+      <${Select} label="Mindest-Pickrate" value=${view.minPickRate || AUTO_MIN_GAMES} onChange=${(minPickRate) => setView({ minPickRate })}
+        options=${[{ value: AUTO_MIN_GAMES, label: autoLabel(result, false) }, ...MIN_PICK_RATES]} />
+      ${caret}
+    </label>`;
+}
+
+/**
+ * Menü „Draft-Optionen“ an der Stelle der früheren Quellenangabe: „Nur Synergien und Matchups“ und „Seltene Picks
+ * zeigen“. Gilt nur im Draft-Tab, Zeitraum und Rang bleiben in der Kopfleiste.
+ */
+function DraftOptions({ view, setView, sourceLabel }) {
+  const advancedTips = useStore((s) => Boolean(s.prefs.advancedTips));
+  const changed = changedOptions(view);
+  const resetAll = () => setView(Object.assign({}, ...changed.map((c) => c.reset)));
+  // Kurz „Optionen“: Mit der Pickrate davor passt die Zeile so neben „Draft leeren“; die Überschrift im Menü bleibt lang.
+  return html`<${MenuButton} cls="draft-options-menu" icon="sliders" label="Optionen" badge=${changed.length} title="Draft-Optionen"
+    tip=${advancedTips ? `Filter und Bewertung der Vorschläge. Daten: ${sourceLabel}` : undefined}>
+    <div class="menu-head">
+      <strong>Draft-Optionen</strong>
+      <span class="muted small">Filter und Bewertung der Vorschläge</span>
+    </div>
+    <div class="menu-row">
+      <${Switch} checked=${view.ignoreChampionWinRates} onChange=${(ignoreChampionWinRates) => setView({ ignoreChampionWinRates })}
+        tip=${advancedTips ? 'Bewertet nur Synergien und Matchups, nicht die allgemeine Stärke der Champions' : undefined}>
+        <span class="menu-row-text"><span>Nur Synergien und Matchups</span><small class="muted">Ohne die allgemeine Stärke der Champions</small></span>
+      <//>
+    </div>
+    <div class="menu-row">
+      <${Switch} checked=${Boolean(view.rarePicks)} onChange=${(rarePicks) => setView({ rarePicks })}
+        tip=${advancedTips ? 'Bisheriges Verhalten: auch Off-Role-Picks wie Tahm Kench ADC, Filter nur nach Spielzahl. Sonst braucht ein Vorschlag mindestens 10 % der Spiele seines Champions auf dieser Rolle und die gewählte Pickrate.' : undefined}>
+        <span class="menu-row-text"><span>Seltene Picks zeigen</span><small class="muted">Auch Off-Role-Picks, Filter nach Spielzahl</small></span>
+      <//>
+    </div>
+    <div class="menu-foot">
+      <span class="muted small" data-tip=${advancedTips ? 'Zeitraum und Rang-Bereich stellst du oben in der Kopfleiste ein' : undefined}>${sourceLabel}</span>
+      ${changed.length ? html`<${Button} kind="ghost" icon="undo" onClick=${resetAll}>Standard<//>` : null}
+    </div>
+  <//>`;
+}
+
+/** Tags der geänderten Draft-Optionen rechts in der Bereichszeile; ✕ setzt die jeweilige Option zurück. */
+function ActiveOptions({ view, setView }) {
+  const changed = changedOptions(view);
+  if (!changed.length) {
+    return null;
+  }
+  return html`<div class="draft-active-options" aria-label="Geänderte Draft-Optionen">
+    ${changed.map((c) => html`<button type="button" key=${c.key} class="tag draft-option-tag" aria-label=${`${c.label} zurücksetzen`}
+      data-tip=${`${c.label} zurücksetzen`} onClick=${() => setView(c.reset)}>
+      <span>${c.label}</span><${Icon} name="x" size=${12} />
+    </button>`)}
   </div>`;
 }
 

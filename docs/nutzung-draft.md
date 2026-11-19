@@ -9,13 +9,19 @@ und je Rolle gefiltert. Ein Klick übernimmt den Pick. Beim Start der App und be
 „Für mein Team“ gewählt; zum Gegner wechselt die Ansicht nur von selbst, wenn du einen Gegner-Pick entfernst (am Brett
 oder per Klick im Archiv).
 
+**Aufbau:** Unter den Bans stehen zwei Kacheln für die Modi **Fearless-Serie** und **League-Client**; ein Klick schaltet
+sie ein oder aus, darunter steht ihr aktueller Stand. Darunter rechts neben „Draft leeren“ stehen die **Mindest-Pickrate** (mit „Seltene
+Picks zeigen“ stattdessen die Mindestspiele, „Games“) zum schnellen Nachstellen und **Optionen** mit den Schaltern
+„Nur Synergien und Matchups“ und „Seltene Picks zeigen“. Ist einer davon an, zeigt der Knopf ihre Anzahl, und über der
+Vorschlagsliste steht er als Tag; ✕ schaltet ihn wieder aus. Zeitraum und Rang-Bereich stellst du wie in den anderen Tabs oben in der Kopfleiste ein.
+
 **Draft-Analyse:** erwartete Winrate, Gesamteinschätzung, alle Matchups und Synergien, Schadensverteilung und Vorsprung
 nach Spieldauer.
 
 **Archiv und Fearless-Serien:** siehe [`nutzung-archiv.md`](nutzung-archiv.md) (Aufnahme, Papierkorb, Rollen nachträglich
 korrigieren, Hard Fearless).
 
-**Abgleich mit dem League-Client** (Schalter im Draft-Tab, Standard aus, sein Stand bleibt über Neustarts erhalten;
+**Abgleich mit dem League-Client** (Kachel „League-Client“ im Draft-Tab, Standard aus, sein Stand bleibt über Neustarts erhalten;
 ausgeschaltet wird der Client nie abgefragt): Während der Champion-Auswahl übernimmt das
 Tool gesperrte Picks, Bans und eure zugewiesenen Rollen automatisch, wie DraftGap. Ansagen von Mitspielern erscheinen
 als Hinweis. „Nur spielbare Champions“ zeigt nur Vorschläge, die dein Account in dieser Auswahl spielen darf.
@@ -39,8 +45,8 @@ Synergien (Duos) und Matchups addieren sich. Kleine Stichproben werden zur Erwar
 
 - „Bester Pick“ heißt: höchste erwartete Winrate mit den bisher bekannten Picks. Spätere Antworten des Gegners und
   die Beherrschung des Champions fließen nicht ein.
-- Champions auf Nebenrollen können wegen ihrer spezialisierten Spieler hoch stehen. Dagegen hilft der Filter
-  **Vorschläge** (Mindestspiele). Sein Standard **Auto** richtet sich nach der Spielmenge des Rang-Bereichs und
+- Champions auf Nebenrollen können wegen ihrer spezialisierten Spieler hoch stehen. Dagegen hilft standardmäßig die
+  Mindest-Pickrate; mit „Seltene Picks zeigen“ gilt stattdessen der Filter **Mindestspiele** (beides neben „Optionen“). Sein Standard **Auto** richtet sich nach der Spielmenge des Rang-Bereichs und
   entspricht in Emerald+ etwa DraftGaps Standard.
 - Auch bei „ab 0 Spiele“ braucht ein Vorschlag mindestens ein Spiel auf seiner Rolle.
 

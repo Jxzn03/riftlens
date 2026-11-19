@@ -33,6 +33,8 @@ const ICONS = {
   ok: 'M20 6 9 17l-5-5',
   user: 'M20 21a8 8 0 0 0-16 0M12 13a5 5 0 1 0 0-10 5 5 0 0 0 0 10z',
   target: 'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM12 18a6 6 0 1 0 0-12 6 6 0 0 0 0 12zM12 14a2 2 0 1 0 0-4 2 2 0 0 0 0 4z',
+  sliders: 'M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6',
+  plug: 'M9 2v6M15 2v6M6 8h12v4a6 6 0 0 1-12 0zM12 18v4',
 };
 
 export function Icon({ name, size = 18 }) {
@@ -111,34 +113,35 @@ export function Button({ icon, children, onClick, kind = '', disabled, tip, titl
 }
 
 /**
- * Knopf mit aufklappendem Menü (z. B. drei Punkte); `children` ist der Inhalt. Schließt bei Klick daneben und mit Esc.
- * `badge` zeigt eine kleine Markierung am Knopf (z. B. wenn im Menü etwas eingeschaltet ist).
+ * Knopf mit aufklappendem Menü (z. B. Optionen einer Ansicht). Schließt bei Klick daneben und mit Escape.
+ * Mit `label`: beschrifteter Knopf mit Pfeil (Draft-Optionen); ohne: nur das Icon (z. B. drei Punkte im
+ * Build-Rechner). `badge` als Zahl zählt Einstellungen abseits des Standards, `true` zeigt nur einen Punkt.
  */
-export function MenuButton({ icon = 'dots', title, tip, badge = false, children }) {
+export function MenuButton({ icon, label, badge = 0, title, tip, children, cls = '' }) {
   const [open, setOpen] = useState(false);
-  const ref = useRef();
+  const box = useRef();
   useEffect(() => {
     if (!open) {
       return undefined;
     }
-    const close = (e) => {
-      if (e.type === 'keydown' ? e.key === 'Escape' : !ref.current.contains(e.target)) {
-        setOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', close);
-    document.addEventListener('keydown', close);
+    const outside = (e) => !box.current?.contains(e.target) && setOpen(false);
+    const escape = (e) => e.key === 'Escape' && setOpen(false);
+    document.addEventListener('pointerdown', outside);
+    document.addEventListener('keydown', escape);
     return () => {
-      document.removeEventListener('mousedown', close);
-      document.removeEventListener('keydown', close);
+      document.removeEventListener('pointerdown', outside);
+      document.removeEventListener('keydown', escape);
     };
   }, [open]);
-  return html`<div class="menu-button" ref=${ref}>
-    <button type="button" class=${`btn ghost icon-only ${open ? 'active' : ''}`} aria-label=${title} aria-haspopup="true"
-      aria-expanded=${open} data-tip=${open ? undefined : tip} onClick=${() => setOpen(!open)}>
-      <${Icon} name=${icon} size=${18} />${badge ? html`<span class="menu-badge"></span>` : null}
+  return html`<div class=${`menu ${cls}`} ref=${box}>
+    <button type="button" class=${`btn menu-trigger ${label ? '' : 'ghost icon-only'} ${open ? 'open' : ''}`} aria-haspopup="dialog"
+      aria-expanded=${open} aria-label=${title} data-tip=${open ? undefined : tip} onClick=${() => setOpen(!open)}>
+      ${icon ? html`<${Icon} name=${icon} size=${label ? 16 : 18} />` : null}${label ? html`<span>${label}</span>` : null}
+      ${badge === true ? html`<span class="menu-dot" aria-label="aktiv"></span>`
+        : badge ? html`<span class="menu-badge" aria-label=${`${badge} geändert`}>${badge}</span>` : null}
+      ${label ? html`<span class="menu-caret"><${Icon} name="chevron" size=${14} /></span>` : null}
     </button>
-    ${open ? html`<div class="menu-pop" role="menu">${children}</div>` : null}
+    ${open ? html`<div class="menu-panel" role="dialog" aria-label=${title || label}>${children}</div>` : null}
   </div>`;
 }
 

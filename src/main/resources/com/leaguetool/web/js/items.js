@@ -362,7 +362,7 @@ function BuildPanel({ data, selected, drag, setDrag }) {
         ${all.length ? html`<strong class="gold">${(totals ? totals.gold : 0).toLocaleString('de-DE')} Gold</strong>` : null}
         <${Button} icon="x" kind="ghost" disabled=${!championSet} onClick=${() => { store.set({ buildChampion: null }); setBuildMode(''); }}>Champion entfernen<//>
         <${Button} icon="trash" kind="ghost" disabled=${!all.length} onClick=${() => { store.set({ build: [], buildBoots: null }); setBuildMode(''); }}>Leeren<//>
-        <${MenuButton} title="Rollen-Modus" tip=${advancedTips ? 'Rollen-Modus (Jungle, Mid, ADC, Support)' : undefined} badge=${Boolean(mode)}>
+        <${MenuButton} icon="dots" cls="build-mode-menu" title="Rollen-Modus" tip=${advancedTips ? 'Rollen-Modus (Jungle, Mid, ADC, Support)' : undefined} badge=${Boolean(mode)}>
           <div class="menu-title">Rollen-Modus</div>
           <div class="build-modes switches">
             ${BUILD_MODES.map((m) => html`<${Switch} key=${m.value} checked=${mode === m.value}

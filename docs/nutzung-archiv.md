@@ -18,7 +18,7 @@ unter „Drafts“) bekommt die Rollen mit. Fehlt ein Fearless-Game unter „Dra
 legt das Speichern es dort neu an. Das gilt nur, solange jede Seite genau dieselben Champions hat. Mit anderen
 Champions bleibt der gespeicherte Draft unverändert, und es gilt die normale Speicherung.
 
-**Fearless-Serie** (Schalter im Draft-Tab rechts neben „Pickrate“, Standard aus; für Scrims oder nachgestellte Profispiele): Es gilt Hard
+**Fearless-Serie** (Kachel im Draft-Tab unter den Bans, Standard aus; für Scrims oder nachgestellte Profispiele): Es gilt Hard
 Fearless. Champions, die ein Team in einem früheren Game der Serie gepickt hat, sind danach für **beide** Teams
 gesperrt. Bans werden nicht übertragen. Beim Einschalten wählst du das Format (Bo3, Bo5 oder Offen, bei Offen
 dazu die Anzahl der Games, 1 bis 10) und optional eine Bezeichnung wie „Scrim Dienstag“; der aktuelle Draft ist Game 1. Ein Game zählt erst nach „Game abschließen“ (alle
