@@ -22,6 +22,13 @@ Abilities zeigen die Daten aus Data Dragon und Wiki, dazu den Build-Rechner mit 
 Items-Tab und Build-Rechner (Item-Liste, Hinzufügen per „+“ oder Ziehen, Schalter, Champion und Rolle):
 [`nutzung-items.md`](nutzung-items.md).
 
+In der Übersicht eines Champions zeigen „Basiswerte“ und „Werte mit Build“ zuerst die Kernwerte; der Pfeil unter der
+Tabelle („Alle Werte“) erweitert sie um alle übrigen. Die Basiswerte nehmen die Werte aus dem LoL-Wiki, ohne Wiki aus Data Dragon (Data Dragon ist z. B. beim
+Angriffsschaden pro Level oft ungenau). Abweichende Werte sind unterstrichen, der Tooltip nennt den Data-Dragon-Wert.
+Dazu kommen Angriffstempo-Ratio, Windup, Positionen, adaptiver Typ und Nah-/Fernkampf aus dem Wiki. „Werte mit Build“
+enthält dieselben Werte (dazu Fähigkeitsstärke, Haste, Krit usw.) und führt über
+„Items bearbeiten“ zum Build-Rechner, über „Runen bearbeiten“ zur Runenseite.
+
 - Patch-Notes: Oben rechts steht der Spiel-Patch (z. B. „Patch 26.23“). Ein Klick darauf zeigt die Änderungen des
   aktuellen Patches für Summoner's Rift laut League-Wiki: Hotfixes zuerst, am Ende die gesammelten Bugfixes. Über die
   Patch-Auswahl lassen sich auch die 10 Patches davor anzeigen; sie werden erst bei Auswahl geladen. Jeder

@@ -298,8 +298,25 @@ final class ApiRoutes {
                     asRatio, adaptiveType);
             finals.add(Dto.finalRows(f));
         }
-        return Dto.obj("base", Dto.baseRows(champion), "finals", finals, "gold", totals.totalGold(),
+        WikiChampionData wikiChampion = wikiChampion(champion);
+        // Wie in den Basiswerten: Zusatzdaten aus dem Wiki (vom Build unabhängig) auch unter „Werte mit Build“.
+        finals.forEach(rows -> rows.addAll(Dto.wikiExtraRows(wikiChampion)));
+        return Dto.obj("base", Dto.baseRows(champion, wikiChampion), "wiki", wikiChampion != null,
+                "wikiInfo", Dto.wikiInfo(wikiChampion), "finals", finals, "gold", totals.totalGold(),
                 "itemCount", totals.itemCount(), "runeCount", runes.size());
+    }
+
+    /** Wiki-Daten des Champions für die Basiswerte; ohne Wiki, Eintrag oder Netz und Cache {@code null} (dann Data Dragon). */
+    private WikiChampionData wikiChampion(Champion champion) {
+        Optional<WikiClient> wiki = ctx.wiki();
+        if (wiki.isEmpty()) {
+            return null;
+        }
+        try {
+            return wiki.get().champion(champion.id()).orElse(null);
+        } catch (IOException e) {
+            return null;
+        }
     }
 
     private Object insights(Champion champion, Map<String, String> params) throws IOException {

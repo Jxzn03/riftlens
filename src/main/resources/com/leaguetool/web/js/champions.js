@@ -1,5 +1,5 @@
 // Ansicht "Champions": sortierbare Liste und Detail mit Werten, Wiki-Vergleich, Build und Match-Statistik.
-import { html, useMemo, useEffect } from '/vendor/htm-preact.js';
+import { html, useMemo, useEffect, useState } from '/vendor/htm-preact.js';
 import {
   useStore, useViewState, useFetch, useStatsUrl, useSourceLabel, useDeferredUrl, useWinRateClass, select, go, normalize,
   sortRows, activeSort, percent, setPref, useChampionRole, useChampionStatsUrl,
@@ -211,19 +211,22 @@ function ChampionDetail({ champion, tab, onTab }) {
 
     <${ChampionPatchChanges} champion=${champion} />
 
-    <${Card} title="Basiswerte" aside=${html`<span class="muted">Data Dragon</span>`}>
+    <${Card} title="Basiswerte" aside=${html`<span class="muted">${levels.data && levels.data.wiki ? 'LoL-Wiki, sonst Data Dragon' : 'Data Dragon'}</span>`}>
       <div class="level-row">
         <span class="level-pill">Level <strong>${level}</strong></span>
         <${Slider} label="Level" value=${level} min=${1} max=${18} onInput=${(value) => setPref({ level: value })} />
       </div>
       ${levels.data
-        ? html`<${DataGrid} head=${['Wert', 'Basis', 'pro Level', `Level ${level}`]}
-            rows=${levels.data.base.map((r) => [r.label, r.base, r.perLevel, html`<strong>${r.values[level - 1]}</strong>`])} />`
+        ? html`<${StatTable} head=${['Wert', 'Basis', 'pro Level', `Level ${level}`]} rows=${levels.data.base}
+            cells=${(r) => [r.label,
+              r.dd ? html`<span class="wiki-diff" data-tip=${`Data Dragon: ${r.dd}`}>${r.base}</span>` : r.base,
+              r.perLevel, html`<strong>${r.values[level - 1]}</strong>`]} />
+          ${levels.data.wikiInfo ? html`<p class="muted small">${levels.data.wikiInfo}</p>` : null}
+          ${levels.data.base.some((r) => r.dd) ? html`<p class="muted small">Unterstrichene Werte weichen von Data Dragon ab (Wiki gilt); der Tooltip nennt den Data-Dragon-Wert.</p>` : null}`
         : levels.error ? html`<${ErrorNote} prefix="Werte nicht verfügbar" error=${levels.error} />` : html`<${Skeleton} lines=${5} />`}
     <//>
 
-    <${BuildValues} levels=${levels.data} level=${level} build=${build} data=${data} />
-    <${WikiCompare} wiki=${wiki} />`;
+    <${BuildValues} levels=${levels.data} level=${level} build=${build} data=${data} />`;
 
   return html`<div class="detail">
     <div class="detail-tabs">
@@ -236,6 +239,25 @@ function ChampionDetail({ champion, tab, onTab }) {
   </div>`;
 }
 
+/**
+ * Zusatzwerte, die eine Stats-Tabelle erst nach Klick auf den Pfeil darunter zeigt (Regeneration, Reichweite,
+ * Wiki-Zusatzdaten, spezielle Haste, Lebensraub usw.); die Kernwerte stehen immer da.
+ */
+const EXTRA_STATS = new Set(['Reichweite', 'Angriffstempo-Ratio', 'Windup', 'Haste Grundfähigkeiten', 'Haste Ultimate',
+  'Haste Immobilisierungen', 'Haste Beschwörerzauber', 'Heil- und Schildstärke', 'Lebensraub', 'Zähigkeit',
+  'Verlangsamungsresistenz', 'Eff. Leben (physisch)', 'Eff. Leben (magisch)']);
+const isExtraStat = (row) => EXTRA_STATS.has(row.label) || row.label.includes('Reg. (5 s)');
+
+/** Stats-Tabelle mit den Kernwerten; der Pfeil darunter erweitert sie um alle übrigen Werte. */
+function StatTable({ head, rows, cells }) {
+  const [all, setAll] = useState(false);
+  const core = rows.filter((r) => !isExtraStat(r));
+  const shown = all || core.length === rows.length ? rows : core;
+  return html`<${DataGrid} head=${head} rows=${shown.map(cells)} />
+    ${core.length < rows.length ? html`<button type="button" class="stat-more" aria-expanded=${all} onClick=${() => setAll(!all)}>
+      ${all ? 'Weniger Werte' : `Alle Werte (${rows.length - core.length} weitere)`}<${Icon} name="chevron" size=${14} /></button>` : null}`;
+}
+
 function BuildValues({ levels, level, build, data }) {
   const runePage = useStore((s) => s.runePage);
   if (!levels) {
@@ -243,13 +265,14 @@ function BuildValues({ levels, level, build, data }) {
   }
   const runes = runePageRunes(runePage);
   const runeText = levels.runeCount ? `Runenseite mit ${runes.length} Runen${runePage.shards.every((s) => s !== null) ? ' und Shards' : ''}` : 'ohne Runen';
-  return html`<${Card} title="Werte mit Build" aside=${html`<${Button} kind="ghost" onClick=${() => go('runes', 'page')}>Runen bearbeiten<//>`}>
+  return html`<${Card} title="Werte mit Build" aside=${html`<${Button} kind="ghost" onClick=${() => go('items')}>Items bearbeiten<//>
+      <${Button} kind="ghost" onClick=${() => go('runes', 'page')}>Runen bearbeiten<//>`}>
     ${build.length === 0 && !levels.runeCount
       ? html`<p class="muted">Kein Build – in der Ansicht Items Gegenstände zum Build-Rechner hinzufügen und unter Runen eine Runenseite wählen.</p>`
       : html`<div class="build-strip"><${ItemIcons} data=${data} ids=${build} size=${32} /><${RuneIcons} data=${data} ids=${runes} size=${28} />
           <span class="muted">${levels.itemCount} Items (${levels.gold.toLocaleString('de-DE')} Gold), ${runeText}, Level ${level}. Mit dauerhaften prozentualen Item-Effekten (z. B. Rabadon's), ohne sonstige Passiven.</span></div>
-        <${DataGrid} head=${['Wert', 'Gesamt', 'davon Bonus']}
-          rows=${levels.finals[level - 1].map((r) => [r.label, html`<strong>${r.total}</strong>`, r.bonus])} />
+        <${StatTable} head=${['Wert', 'Gesamt', 'davon Bonus']} rows=${levels.finals[level - 1]}
+          cells=${(r) => [r.label, html`<strong>${r.total}</strong>`, r.bonus]} />
         ${data.itemPassives ? html`<${PassiveStatus} info=${data.itemPassives} />` : null}`}
   <//>`;
 }
@@ -261,25 +284,6 @@ function PassiveStatus({ info }) {
   return html`<p class="muted small" data-tip=${advancedTips && tip ? tip : undefined}>
     Item-Effekte für Patch ${info.patch ? gamePatch(info.patch) : '–'} geprüft: ${info.count} aktiv${info.changes.length ? ` · ${info.changes.length} automatisch aktualisiert` : ''}${info.review.length ? ` · ${info.review.length} nicht auswertbar` : ''}
   </p>`;
-}
-
-function WikiCompare({ wiki }) {
-  let body;
-  if (wiki.loading) {
-    body = html`<${Skeleton} lines=${4} />`;
-  } else if (wiki.error) {
-    body = html`<${ErrorNote} prefix="Wiki nicht verfügbar" error=${wiki.error} />`;
-  } else if (wiki.data && wiki.data.disabled) {
-    body = html`<p class="muted">In den Einstellungen deaktiviert.</p>`;
-  } else if (wiki.data && !wiki.data.found) {
-    body = html`<p class="muted">Kein Wiki-Eintrag gefunden.</p>`;
-  } else if (wiki.data) {
-    body = html`<${DataGrid} head=${['Wert', 'Data Dragon', 'Wiki']}
-        rows=${wiki.data.rows.map((r) => [r.label, r.dd, html`<strong class=${r.differs ? 'bad' : ''}>${r.wiki}</strong>`])} />
-      ${wiki.data.info ? html`<p class="muted small">${wiki.data.info}</p>` : null}
-      <p class="muted small">Abweichungen sind rot markiert; Data Dragon ist bei einzelnen Werten (z. B. Angriffsschaden pro Level) bekanntermaßen ungenau.</p>`;
-  }
-  return html`<${Card} title="Zusatzdaten" aside=${html`<span class="muted">LoL-Wiki</span>`}>${body}<//>`;
 }
 
 /** So viele Einträge zeigt eine Rangliste mit {@code withMostPlayed} neben dem meistgespielten. */

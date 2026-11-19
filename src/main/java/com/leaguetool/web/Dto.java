@@ -311,29 +311,99 @@ final class Dto {
 
     // ------------------------------------------------------------------ Werte je Level
 
-    /** Grundwerte als Zeilen; jede Zeile enthält die Werte aller 18 Level (der Regler braucht keine Anfrage). */
+    /** Grundwerte nur aus Data Dragon (ohne Wiki). */
     static List<Map<String, Object>> baseRows(Champion c) {
+        return baseRows(c, null);
+    }
+
+    /**
+     * Grundwerte als Zeilen; jede Zeile enthält die Werte aller 18 Level (der Regler braucht keine Anfrage). Mit
+     * Wiki-Daten gelten deren Werte (Data Dragon ist bei einzelnen Werten ungenau); weicht Data Dragon ab, nennt
+     * {@code dd} dessen Wert. Danach folgen die Zusatzdaten aus dem Wiki (Angriffstempo-Ratio, Windup).
+     */
+    static List<Map<String, Object>> baseRows(Champion c, WikiChampionData w) {
         BaseStats s = c.stats();
         List<Map<String, Object>> rows = new ArrayList<>();
-        rows.add(statRow("Leben", s.hp(), s.hpPerLevel()));
-        rows.add(statRow("Lebensreg. (5 s)", s.hpRegen(), s.hpRegenPerLevel()));
+        rows.add(statRow("Leben", s.hp(), s.hpPerLevel(), w == null ? null : new double[] {w.hpBase(), w.hpLvl()}));
+        rows.add(statRow("Lebensreg. (5 s)", s.hpRegen(), s.hpRegenPerLevel(), w == null ? null : new double[] {w.hp5Base(), w.hp5Lvl()}));
         if (s.mp() > 0) {
             String res = c.resource().isBlank() ? "Ressource" : c.resource();
-            rows.add(statRow(res, s.mp(), s.mpPerLevel()));
-            rows.add(statRow(res + "-Reg. (5 s)", s.mpRegen(), s.mpRegenPerLevel()));
+            rows.add(statRow(res, s.mp(), s.mpPerLevel(), w == null ? null : new double[] {w.mpBase(), w.mpLvl()}));
+            rows.add(statRow(res + "-Reg. (5 s)", s.mpRegen(), s.mpRegenPerLevel(), w == null ? null : new double[] {w.mp5Base(), w.mp5Lvl()}));
         }
-        rows.add(statRow("Angriffsschaden", s.attackDamage(), s.attackDamagePerLevel()));
+        rows.add(statRow("Angriffsschaden", s.attackDamage(), s.attackDamagePerLevel(), w == null ? null : new double[] {w.damBase(), w.damLvl()}));
+        boolean wikiAs = w != null && w.asBase() > 0;
+        double asBase = wikiAs ? w.asBase() : s.attackSpeed();
+        double asLvl = wikiAs ? w.asLvl() : s.attackSpeedPerLevel();
         List<String> attackSpeed = new ArrayList<>();
         for (int level = StatCalculator.MIN_LEVEL; level <= StatCalculator.MAX_LEVEL; level++) {
-            attackSpeed.add(Text.num(StatCalculator.attackSpeedAtLevel(s.attackSpeed(), s.attackSpeedPerLevel(), level), 3));
+            attackSpeed.add(Text.num(StatCalculator.attackSpeedAtLevel(asBase, asLvl, level), 3));
         }
-        rows.add(obj("label", "Angriffstempo", "base", Text.num(s.attackSpeed()),
-                "perLevel", "+" + Text.num(s.attackSpeedPerLevel()) + " %", "values", attackSpeed));
-        rows.add(statRow("Rüstung", s.armor(), s.armorPerLevel()));
-        rows.add(statRow("Magieresistenz", s.spellBlock(), s.spellBlockPerLevel()));
-        rows.add(statRow("Reichweite", s.attackRange(), 0));
-        rows.add(statRow("Lauftempo", s.moveSpeed(), 0));
+        Map<String, Object> as = obj("label", "Angriffstempo", "base", Text.num(asBase),
+                "perLevel", "+" + Text.num(asLvl) + " %", "values", attackSpeed);
+        if (differs(s.attackSpeed(), s.attackSpeedPerLevel(), asBase, asLvl)) {
+            as.put("dd", Text.num(s.attackSpeed()) + " / +" + Text.num(s.attackSpeedPerLevel()) + " %");
+        }
+        rows.add(as);
+        rows.add(statRow("Rüstung", s.armor(), s.armorPerLevel(), w == null ? null : new double[] {w.armBase(), w.armLvl()}));
+        rows.add(statRow("Magieresistenz", s.spellBlock(), s.spellBlockPerLevel(), w == null ? null : new double[] {w.mrBase(), w.mrLvl()}));
+        rows.add(statRow("Reichweite", s.attackRange(), 0, w == null ? null : new double[] {w.range(), 0}));
+        rows.add(statRow("Lauftempo", s.moveSpeed(), 0, w == null ? null : new double[] {w.ms(), 0}));
+        if (w != null) {
+            rows.add(fixedRow("Angriffstempo-Ratio", Text.num(w.asRatio())));
+            w.windupPercent().ifPresent(p -> rows.add(fixedRow("Windup", Text.percent(p))));
+        }
         return rows;
+    }
+
+    /** Zusatzzeilen für „Werte mit Build“ (Angriffstempo-Ratio, Windup); leer ohne Wiki. */
+    static List<Map<String, Object>> wikiExtraRows(WikiChampionData d) {
+        List<Map<String, Object>> rows = new ArrayList<>();
+        if (d != null) {
+            rows.add(row("Angriffstempo-Ratio", Text.num(d.asRatio()), ""));
+            d.windupPercent().ifPresent(p -> rows.add(row("Windup", Text.percent(p), "")));
+        }
+        return rows;
+    }
+
+    /** Zusatzangaben aus dem Wiki unter der Tabelle (Positionen, adaptiver Typ, Nah-/Fernkampf), leer ohne. */
+    static String wikiInfo(WikiChampionData d) {
+        if (d == null) {
+            return "";
+        }
+        List<String> info = new ArrayList<>();
+        if (!d.positions().isEmpty()) {
+            info.add("Positionen: " + String.join(", ", d.positions()));
+        }
+        if (!d.adaptiveType().isBlank()) {
+            info.add("Adaptiv: " + d.adaptiveType());
+        }
+        if (!d.rangeType().isBlank()) {
+            info.add(d.rangeType());
+        }
+        return String.join(" · ", info);
+    }
+
+    private static Map<String, Object> fixedRow(String label, String value) {
+        return obj("label", label, "base", value, "perLevel", "–",
+                "values", java.util.Collections.nCopies(StatCalculator.MAX_LEVEL - StatCalculator.MIN_LEVEL + 1, value));
+    }
+
+    private static boolean differs(double ddBase, double ddLvl, double base, double lvl) {
+        return Math.abs(ddBase - base) > 1e-6 || Math.abs(ddLvl - lvl) > 1e-6;
+    }
+
+    /** @param wiki Basis und Wert pro Level laut Wiki oder {@code null}; gilt vor Data Dragon */
+    private static Map<String, Object> statRow(String label, double ddBase, double ddLvl, double[] wiki) {
+        // Fehlt der Wert im Wiki (0 bei vorhandenem Data-Dragon-Wert), gilt Data Dragon.
+        boolean useWiki = wiki != null && !(wiki[0] == 0 && ddBase != 0);
+        double base = useWiki ? wiki[0] : ddBase;
+        double perLevel = useWiki ? wiki[1] : ddLvl;
+        Map<String, Object> row = statRow(label, base, perLevel);
+        if (differs(ddBase, ddLvl, base, perLevel)) {
+            row.put("dd", Text.num(ddBase) + (ddLvl == 0 && perLevel == 0 ? "" : " / +" + Text.num(ddLvl)));
+        }
+        return row;
     }
 
     private static Map<String, Object> statRow(String label, double base, double perLevel) {
@@ -349,8 +419,12 @@ final class Dto {
     static List<Map<String, Object>> finalRows(FinalStats f) {
         List<Map<String, Object>> rows = new ArrayList<>();
         rows.add(finalRow("Leben", f.maxHealth(), f.bonusHealth(), 0));
+        rows.add(row("Lebensreg. (5 s)", Text.num(f.healthRegen(), 1),
+                regenBonus(f, StatType.HEALTH_REGEN, StatType.HEALTH_REGEN_FLAT)));
         if (f.maxMana() > 0) {
             rows.add(finalRow("Mana", f.maxMana(), f.bonusMana(), 0));
+            rows.add(row("Mana-Reg. (5 s)", Text.num(f.manaRegen(), 1),
+                    regenBonus(f, StatType.MANA_REGEN, StatType.MANA_REGEN_FLAT)));
         }
         rows.add(finalRow("Angriffsschaden", f.totalAd(), f.bonusAd(), 1));
         rows.add(finalRow("Fähigkeitsstärke", f.abilityPower(), f.abilityPower(), 0));
@@ -359,6 +433,7 @@ final class Dto {
         String as = Text.num(f.attackSpeed(), 3) + (f.attackSpeedRaw() > f.attackSpeed() + 1e-9
                 ? " (roh " + Text.num(f.attackSpeedRaw(), 3) + ", gekappt)" : "");
         rows.add(row("Angriffstempo", as, "+" + Text.num(f.bonusAttackSpeed(), 1) + " %"));
+        rows.add(row("Reichweite", Text.num(f.attackRange()), ""));
         rows.add(row("Lauftempo", Text.num(f.moveSpeed(), 1),
                 f.moveSpeedRaw() != f.moveSpeed() ? "roh " + Text.num(f.moveSpeedRaw(), 1) : ""));
         rows.add(row("Ability Haste", hasteText(f.abilityHaste()), Text.percent(f.cooldownReduction()) + " CDR"));
@@ -379,6 +454,18 @@ final class Dto {
         rows.add(row("Eff. Leben (physisch)", Text.num(f.effectiveHealthPhysical(), 0), ""));
         rows.add(row("Eff. Leben (magisch)", Text.num(f.effectiveHealthMagic(), 0), ""));
         return rows;
+    }
+
+    /** Bonus der Regeneration aus dem Build: Prozent der Grundregeneration und flache Werte, sonst „–“. */
+    private static String regenBonus(FinalStats f, StatType percent, StatType flat) {
+        List<String> parts = new ArrayList<>();
+        if (f.bonus().get(percent) != 0) {
+            parts.add("+" + Text.num(f.bonus().get(percent)) + " % Grund");
+        }
+        if (f.bonus().get(flat) != 0) {
+            parts.add("+" + Text.num(f.bonus().get(flat), 1));
+        }
+        return parts.isEmpty() ? "–" : String.join(", ", parts);
     }
 
     private static void addSpecificHaste(List<Map<String, Object>> rows, String label, FinalStats f, StatType type) {
