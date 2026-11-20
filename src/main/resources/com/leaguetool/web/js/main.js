@@ -1,6 +1,6 @@
 // Start der Oberfläche.
 import { html, render } from '/vendor/htm-preact.js';
-import { store, loadData, loadUiState, startRouter } from './core.js';
+import { store, loadData, loadUiState, startRouter, setUpdate, loadUpdate } from './core.js';
 import { installTooltips } from './ui.js';
 import { App } from './shell.js';
 
@@ -18,6 +18,7 @@ function connectEvents() {
   events.addEventListener('summoner-progress', (e) => store.set({ summonerProgress: JSON.parse(e.data) }));
   events.addEventListener('draft-progress', (e) => store.set({ draftProgress: JSON.parse(e.data) }));
   events.addEventListener('lcu', (e) => store.set({ lcu: JSON.parse(e.data) }));
+  events.addEventListener('update', (e) => setUpdate(JSON.parse(e.data)));
 }
 
 function installShortcuts() {
@@ -38,6 +39,7 @@ async function start() {
   render(html`<${App} />`, document.getElementById('app'));
   connectEvents();
   loadData();
+  loadUpdate();
 }
 
 start();

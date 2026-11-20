@@ -38,6 +38,8 @@ enthält dieselben Werte (dazu Fähigkeitsstärke, Haste, Krit usw.) und führt 
   passende Ansicht. In der Übersicht eines Champions zeigt der Block „Patch-Änderungen“ unter den Fähigkeiten die letzte
   Änderung; „Alle Änderungen“ klappt die ganze Liste auf. Die Patch-Notes werden höchstens einmal täglich neu geladen,
   damit Hotfixes erscheinen, die Änderungen eines Champions einmal je Patch.
+- Statusleiste unten rechts: installierte Version und Update-Stand, ein gefundenes Update startet per Klick:
+  [`nutzung-update.md`](nutzung-update.md)
 - Schnellsuche über alles (`Strg`+`K`)
 - Sortierbare Spalten, fehlende Werte stehen immer unten
 - Pfeiltasten-Navigation, Splash-Art, helles und dunkles Design, verschiebbare Trennlinien

@@ -113,6 +113,8 @@ final class ApiRoutes {
             case "POST fearless", "PUT fearless" -> fearless.handle(method, path, body.length == 0 ? json.createObjectNode() : parse(body));
             case "GET lcu" -> ClientSyncEndpoint.get(ctx);
             case "POST lcu" -> ClientSyncEndpoint.set(ctx, parse(body));
+            case "GET update" -> ctx.updates().state();
+            case "POST update" -> update(path);
             default -> throw new ApiException(404, "Unbekannter Endpunkt");
         };
     }
@@ -615,6 +617,7 @@ final class ApiRoutes {
                 "draftArchiveDefault", AppSettings.DRAFT_ARCHIVE_DEFAULT,
                 "fearlessSeriesLimit", s.fearlessSeriesLimit(), "fearlessSeriesLimits", AppSettings.FEARLESS_SERIES_LIMITS,
                 "fearlessSeriesDefault", AppSettings.FEARLESS_SERIES_DEFAULT,
+                "updateCheck", s.updateCheckEnabled(),
                 "lcuDetected", ctx.lcuLocator().detectedInstallFolder().map(Path::toString).orElse(null),
                 "file", s.file().toString());
     }
@@ -653,7 +656,11 @@ final class ApiRoutes {
         if (lcuFolder != null) {
             s.setLcuFolder(lcuFolder);
         }
+        if (n.path("updateCheck").isBoolean()) {
+            s.setUpdateCheckEnabled(n.path("updateCheck").asBoolean());
+        }
         s.save();
+        ctx.updates().settingsChanged();
         ctx.rebuildServices();
         ctx.reload();
         return settings();
@@ -678,6 +685,22 @@ final class ApiRoutes {
             throw new ApiException(400, "Im Ordner " + folder + " liegt kein LeagueClient.exe");
         }
         return folder.toString();
+    }
+
+    // ------------------------------------------------------------------ Update
+
+    /** {@code POST update/check} sucht nach einer neuen Version, {@code POST update/install} installiert sie. */
+    private Object update(List<String> path) {
+        String action = path.size() == 2 ? path.get(1) : "";
+        try {
+            return switch (action) {
+                case "check" -> ctx.updates().check();
+                case "install" -> ctx.updates().install();
+                default -> throw new ApiException(404, "Unbekannter Endpunkt");
+            };
+        } catch (IllegalStateException e) {
+            throw new ApiException(409, e.getMessage());
+        }
     }
 
     // ------------------------------------------------------------------ Oberflächen-Zustand

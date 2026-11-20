@@ -16,7 +16,11 @@ enthalten.
 Windows SmartScreen kann beim ersten Start warnen, weil die Datei nicht signiert ist: *Weitere Informationen →
 Trotzdem ausführen*.
 
-**Update:** Den alten Ordner durch den neuen ersetzen. Einstellungen und Cache bleiben erhalten.
+**Update:** RiftLens sucht beim Start auf GitHub nach einer neuen Version (abschaltbar in den Einstellungen). Gibt es
+eine, steht unten rechts in der Statusleiste „Update auf X.Y.Z“: Ein Klick lädt das Update, prüft die digitale
+Signatur und den Inhalt, tauscht den Programmordner aus und startet RiftLens neu; startet die neue Version nicht, kommt
+die alte zurück. Das klappt, wenn RiftLens in einem eigenen Ordner liegt (so, wie das ZIP ihn anlegt). Von Hand geht es
+weiterhin: den alten Ordner durch den neuen ersetzen. Einstellungen und Cache bleiben in beiden Fällen erhalten.
 
 ## Funktionen
 
@@ -68,6 +72,8 @@ Die Software wird ohne Gewährleistung bereitgestellt (siehe [Lizenz](LICENSE)).
 - Die Oberfläche läuft über einen Server nur auf `127.0.0.1`, von außen ist nichts erreichbar.
 - Datenquellen: Riot Data Dragon, League of Legends Wiki, Lolalytics und die Riot-API. Abrufe werden gedrosselt
   und zwischengespeichert; ohne Netz arbeitet RiftLens mit dem Cache weiter.
+- Update-Prüfung: beim Start eine Anfrage an die GitHub-API (`api.github.com`, nur das neueste Release dieses
+  Repositorys), ohne Nutzerdaten. Abschaltbar in den Einstellungen, im Offline-Modus aus.
 
 ## Aus dem Quellcode bauen
 

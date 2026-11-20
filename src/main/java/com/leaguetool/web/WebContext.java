@@ -21,6 +21,7 @@ import com.leaguetool.data.riot.RateLimiter;
 import com.leaguetool.data.riot.RiotApi;
 import com.leaguetool.data.riot.RiotApiClient;
 import com.leaguetool.data.wiki.WikiClient;
+import com.leaguetool.update.UpdateService;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -61,6 +62,7 @@ public final class WebContext implements AutoCloseable {
     private final RateLimiter riotLimiter = RateLimiter.riotDevKey();
     private final Map<Platform, RiotApiClient> riotClients = new EnumMap<>(Platform.class);
     private final Map<String, CompletableFuture<Path>> downloads = new ConcurrentHashMap<>();
+    private final UpdateService updates;
 
     private volatile GameDataService gameDataService;
     private volatile WikiClient wiki;
@@ -93,9 +95,15 @@ public final class WebContext implements AutoCloseable {
         this.runeEffects = new RuneEffectUpdater(cache);
         this.lcuLocator = new LcuLocator(settings::lcuFolder);
         this.lcu = new LcuSync(lcuLocator::find, LcuHttpTransport::new, state -> publish("lcu", ClientSyncEndpoint.json(state)));
+        this.updates = UpdateService.create(settings, http, this::publish);
         rebuildServices();
         // Gespeicherter Stand des Schalters im Draft-Tab; Standard aus.
         lcu.setEnabled(settings.lcuSyncEnabled());
+    }
+
+    /** Automatisches Update über GitHub-Releases. */
+    public UpdateService updates() {
+        return updates;
     }
 
     /** Abgleich mit dem League-Client (nur lesend, siehe {@code docs/client-sync.md}). */
@@ -336,6 +344,7 @@ public final class WebContext implements AutoCloseable {
     @Override
     public void close() {
         lcu.close();
+        updates.close();
         background.shutdownNow();
     }
 

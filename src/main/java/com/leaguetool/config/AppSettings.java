@@ -137,6 +137,27 @@ public final class AppSettings {
         props.setProperty("lcu.sync", Boolean.toString(enabled));
     }
 
+    /** Beim Programmstart auf GitHub nach einer neuen RiftLens-Version suchen. Standard: an. */
+    public synchronized boolean updateCheckEnabled() {
+        return Boolean.parseBoolean(props.getProperty("update.check", "true"));
+    }
+
+    public synchronized void setUpdateCheckEnabled(boolean enabled) {
+        props.setProperty("update.check", Boolean.toString(enabled));
+    }
+
+    /**
+     * Testschalter: Update-Suche berücksichtigt auch Pre-Releases. Nur von Hand in {@code settings.properties}
+     * ({@code update.prerelease=true}), keine Oberfläche. Standard: aus.
+     */
+    public synchronized boolean updatePrereleaseEnabled() {
+        return Boolean.parseBoolean(props.getProperty("update.prerelease", "false"));
+    }
+
+    public synchronized void setUpdatePrereleaseEnabled(boolean enabled) {
+        props.setProperty("update.prerelease", Boolean.toString(enabled));
+    }
+
     /** Wie viele vollständige Drafts das Archiv behält (10, 25, 50, 100, 250, 500 oder 1000; Standard 100). */
     public synchronized int draftArchiveLimit() {
         try {

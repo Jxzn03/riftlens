@@ -42,6 +42,12 @@ public final class ModernMain {
             System.exit(code);
         }
         System.out.println("RiftLens: " + server.entryUrl());
+        // Nach dem Start des Updaters: Fenster schließen und beenden, der Updater tauscht dann den App-Ordner.
+        ctx.updates().onRestart(() -> {
+            AppWindow.closeOpened();
+            System.exit(0);
+        });
+        ctx.updates().checkOnStartup();
         if (window) {
             server.exitWhenClosed(() -> System.exit(0));
             Path ui = settings.home().resolve("modern-ui");

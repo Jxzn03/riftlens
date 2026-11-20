@@ -29,6 +29,37 @@ public final class AppWindow {
     private static final int MIN_WIDTH = 640;
     private static final int MIN_HEIGHT = 420;
     private static final String MAXIMIZED = "--start-maximized";
+    /** Zuletzt gestarteter Browser-Prozess (nur der eigene App-Fenster-Browser mit eigenem Profil). */
+    private static volatile Process opened;
+
+    /**
+     * Schließt das selbst geöffnete App-Fenster regulär (vor dem Neustart durch ein Update). Unter Windows über
+     * {@code taskkill} ohne {@code /F}: Das schickt dem Fenster eine normale Schließen-Nachricht, der Browser beendet
+     * sich sauber. Hat der Browser die Seite an eine schon laufende Instanz übergeben, passiert nichts.
+     */
+    public static void closeOpened() {
+        Process process = opened;
+        if (process == null || !process.isAlive()) {
+            return;
+        }
+        try {
+            if (System.getProperty("os.name", "").toLowerCase(java.util.Locale.ROOT).startsWith("windows")) {
+                String root = System.getenv("SystemRoot");
+                Path taskkill = Path.of(root == null || root.isBlank() ? "C:\\Windows" : root, "System32", "taskkill.exe");
+                new ProcessBuilder(taskkill.toString(), "/PID", Long.toString(process.pid()))
+                        .redirectOutput(ProcessBuilder.Redirect.DISCARD)
+                        .redirectError(ProcessBuilder.Redirect.DISCARD)
+                        .start().waitFor(5, java.util.concurrent.TimeUnit.SECONDS);
+            } else {
+                process.destroy();
+            }
+            process.waitFor(3, java.util.concurrent.TimeUnit.SECONDS);
+        } catch (IOException e) {
+            // Fenster bleibt offen und zeigt „Verbindung getrennt“
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+    }
 
     /**
      * Öffnet das Fenster maximiert oder in der zuletzt gespeicherten Größe und Lage.
@@ -48,7 +79,9 @@ public final class AppWindow {
                             "--no-first-run",
                             "--no-default-browser-check"));
                     command.addAll(placement);
-                    new ProcessBuilder(command)
+                    // Arbeitsordner im Profil: sonst erbt der Browser den App-Ordner und sperrt ihn für das Update.
+                    opened = new ProcessBuilder(command)
+                            .directory(profile.toFile())
                             .redirectOutput(ProcessBuilder.Redirect.DISCARD)
                             .redirectError(ProcessBuilder.Redirect.DISCARD)
                             .start();

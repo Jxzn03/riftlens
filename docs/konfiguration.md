@@ -34,6 +34,7 @@ stammen. Dabei wird nichts abgerufen.
 | `cache/_global/item-passives/` | Stand und Verlauf der automatischen Item-Passiv-Updates |
 | `modern-ui/` | UI-Zustand (`ui-state.json`) und Browserprofil |
 | `draft-archive.json` | Draft-Archiv (nur Champions, Rollen, Bans; Anzahl in den Einstellungen) |
+| `update/` | Automatisches Update: `update.log`, Updater-Skript mit Auftrag (`update-params.json`), Sperrdatei; Download und entpackte Version nur während eines Updates |
 
 ### Offline-Betrieb
 
@@ -70,6 +71,7 @@ Pakete unter `com.leaguetool`:
 | `calc` | Stats nach Level, Item-Stat-Summen, Cooldowns mit Ability Haste, Schadensvorschau |
 | `draft` | Draft-Bewertung und Vorschläge, Rollen-Vorhersage, Datenbeschaffung aus Lolalytics |
 | `stats` | Datenformen der Statistik-Anzeige (Ranglisten, Wilson-Intervall, Bayes-Ranking) und Item-Einordnung |
+| `update` | Automatisches Update: neuestes GitHub-Release prüfen, ZIP laden, Ed25519-Signatur und Inhalt prüfen, Programmordner austauschen (mit Rückfall) |
 | `web` | Oberfläche: lokaler Server und JSON-API (Frontend in `src/main/resources/com/leaguetool/web`) |
 | `config`, `util` | Einstellungen, Text-/Patch-Hilfen |
 

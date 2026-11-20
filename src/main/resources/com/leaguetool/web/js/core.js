@@ -48,6 +48,7 @@ export const store = createStore({
   palette: false,
   connected: true,
   toast: null,
+  update: null, // Stand der Update-Prüfung (`/api/update`)
 });
 
 /** Abonniert einen Ausschnitt des Stores; rendert nur neu, wenn sich dieser Ausschnitt ändert. */
@@ -300,6 +301,88 @@ export function useDeferredUrl(url, delay, cachedUrl) {
     };
   }, [url, delay]);
   return value;
+}
+
+// ------------------------------------------------------------------ Programm-Update
+
+let manualUpdateCheck = false;
+
+/** Update-Stand aus `/api/update` oder dem Ereignis `update`; ältere Stände (kleinere `seq`) werden verworfen. */
+export function setUpdate(update) {
+  const previous = store.get().update;
+  if (!update || (previous && update.seq < previous.seq)) {
+    return;
+  }
+  store.set({ update });
+  if (previous?.phase === 'checking' && update.phase === 'idle' && manualUpdateCheck) {
+    manualUpdateCheck = false;
+    if (update.errorKind === 'check') {
+      toast(update.error, 'error');
+    } else {
+      toast(update.available ? `RiftLens ${update.latest.version} ist verfügbar.` : `RiftLens ${update.current} ist die neueste Version.`);
+    }
+  } else if (previous?.phase !== 'idle' && update.phase === 'idle' && update.errorKind === 'install' && previous?.error !== update.error) {
+    toast(update.error, 'error');
+  }
+}
+
+/** Sucht von Hand nach einem Update; das Ergebnis kommt als Hinweis. */
+export function checkUpdate() {
+  manualUpdateCheck = true;
+  return api.post('/api/update/check').then((update) => {
+    setUpdate(update);
+    if (update.phase === 'idle' && update.errorKind === 'check') {
+      manualUpdateCheck = false;
+      toast(update.error, 'error');
+    }
+  }).catch((e) => {
+    manualUpdateCheck = false;
+    toast(e.message, 'error');
+  });
+}
+
+/** Kurztext zum Update-Stand für Statusleiste und Einstellungen. */
+export function updateLabel(update) {
+  if (!update) {
+    return '';
+  }
+  switch (update.phase) {
+    case 'checking': return 'Suche nach Updates …';
+    case 'downloading': return `Lade RiftLens ${update.latest?.version} … ${Math.round(update.progress * 100)} %`;
+    case 'extracting': return `Prüfe RiftLens ${update.latest?.version} …`;
+    case 'restarting': return `Installiere RiftLens ${update.latest?.version}, startet neu …`;
+    default:
+      if (update.available) {
+        return `Update auf ${update.latest.version} verfügbar`;
+      }
+      return update.latest && update.checkedAt ? `Neueste Version (geprüft ${new Date(update.checkedAt).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })})` : '';
+  }
+}
+
+/** Erster Abruf beim Start (das Ergebnis eines gerade installierten Updates meldet die Statusleiste). */
+export async function loadUpdate() {
+  try {
+    setUpdate(await api.get('/api/update'));
+  } catch (e) {
+    // ohne Update-Anzeige weiter
+  }
+}
+
+/** Startet Download und Installation nach Rückfrage; die App startet danach neu. */
+export async function installUpdate(confirm) {
+  const update = store.get().update;
+  if (!update?.latest) {
+    return;
+  }
+  const ok = await confirm({
+    title: `Auf RiftLens ${update.latest.version} aktualisieren?`,
+    message: `${update.latest.name}. RiftLens lädt das Update von GitHub, prüft Signatur und Inhalt, schließt sich und startet in der neuen Version neu. Startet sie nicht, kommt die bisherige Version zurück. Deine Daten und Einstellungen bleiben erhalten.`,
+    confirmLabel: 'Jetzt aktualisieren',
+    icon: 'download',
+  });
+  if (ok) {
+    api.post('/api/update/install').then(setUpdate).catch((e) => toast(e.message, 'error'));
+  }
 }
 
 // ------------------------------------------------------------------ Spieldaten

@@ -256,7 +256,19 @@ button.patch-chip:hover, button.patch-chip.active { border-color: var(--accent);
 }
 .status-busy { width: 14px; display: inline-flex; }
 .status-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; }
-.status-version { flex: none; white-space: nowrap; }
+.status-version-group { flex: none; display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
+.status-version { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+.status-version:hover:not(:disabled) { color: var(--text); text-decoration: underline; }
+.status-version:disabled { cursor: default; }
+.status-update { display: inline-flex; align-items: center; gap: 5px; font: inherit; white-space: nowrap; }
+.status-update.latest { color: var(--good); }
+.status-update.working { color: var(--text-2); }
+.status-update.available {
+  height: 19px; padding: 0 8px; border-radius: 6px; border: 1px solid transparent; cursor: pointer; font-weight: 600;
+  background: var(--accent); color: var(--accent-ink); text-decoration: none;
+}
+.status-update.available:hover { filter: brightness(1.08); }
+.setting-actions { display: inline-flex; flex-wrap: wrap; gap: 8px; }
 
 /* Steuerelemente */
 .btn {

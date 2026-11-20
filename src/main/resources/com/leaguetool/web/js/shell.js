@@ -1,6 +1,7 @@
 // App-Rahmen: Navigation, Filterleiste, Schnellsuche, Dialoge, Statuszeile.
 import { html, useState, useEffect, useMemo, useRef } from '/vendor/htm-preact.js';
-import { store, useStore, useFetch, useStatsUrl, api, go, normalize, percent, toast, setPref, clearFavorites, TIERS, gamePatch } from './core.js';
+import { store, useStore, useFetch, useStatsUrl, api, go, normalize, percent, toast, setPref, clearFavorites, TIERS, gamePatch,
+  checkUpdate, installUpdate, updateLabel } from './core.js';
 import { Icon, Img, Button, Select, Segmented, Switch, Spinner, Loading, ErrorNote, ConfirmHost, confirmDialog } from './ui.js';
 import { ChampionsView } from './champions.js';
 import { ItemsView, BuildRoleSync } from './items.js';
@@ -147,8 +148,67 @@ function StatusBar() {
     <span class="status-busy">${busy > 0 ? html`<${Spinner} small />` : null}</span>
     <span class="status-text">${status}</span>
     ${connected ? null : html`<span class="bad">Verbindung zum Programm getrennt</span>`}
-    ${appVersion ? html`<span class="status-version">RiftLens ${appVersion}</span>` : null}
+    ${appVersion ? html`<${UpdateStatus} version=${appVersion} />` : null}
   </footer>`;
+}
+
+let announcedUpdateResult = false;
+
+/**
+ * Version unten rechts (Klick sucht nach Updates), daneben der Stand der Update-Prüfung. Ein gefundenes Update
+ * startet per Klick; lässt es sich nicht automatisch installieren, führt der Klick zur Release-Seite.
+ */
+function UpdateStatus({ version }) {
+  const update = useStore((s) => s.update);
+  useEffect(() => {
+    if (update?.lastResult && !announcedUpdateResult) {
+      announcedUpdateResult = true;
+      toast(update.lastResult.text, update.lastResult.ok ? 'info' : 'error');
+    }
+  }, [update?.lastResult]);
+
+  const phase = update?.phase || 'idle';
+  const busy = phase !== 'idle';
+  let extra = null;
+  if (busy) {
+    extra = html`<span class="status-update working">${phase === 'checking' ? html`<${Spinner} small />` : null}${updateLabel(update)}</span>`;
+  } else if (update?.available && update.canInstall) {
+    extra = html`<button type="button" class="status-update available" onClick=${() => installUpdate(confirmDialog)}
+      data-tip=${update.errorKind === 'install' ? `${update.error}. Klick versucht es erneut.` : `${update.latest.name}. Klick lädt und installiert das Update, RiftLens startet danach neu.`}>
+      <${Icon} name="download" size=${13} />Update auf ${update.latest.version}
+    </button>`;
+  } else if (update?.available) {
+    extra = html`<a class="status-update available" href=${update.latest.url} target="_blank" rel="noopener" data-tip=${update.installHint}>
+      <${Icon} name="download" size=${13} />${update.latest.version} auf GitHub
+    </a>`;
+  } else if (update?.latest && !update.error) {
+    extra = html`<span class="status-update latest" data-tip=${updateLabel(update)}><${Icon} name="ok" size=${12} />aktuell</span>`;
+  }
+  return html`<span class="status-version-group">
+    <button type="button" class="status-version" disabled=${busy} onClick=${checkUpdate}
+      data-tip=${update?.errorKind === 'check' ? `${update.error}. Klick sucht erneut.` : 'Nach Updates suchen'}>RiftLens ${version}</button>
+    ${extra}
+  </span>`;
+}
+
+/** Update-Bereich der Einstellungen: Suche von Hand und Stand; der Schalter für die Suche beim Start liegt im Formular. */
+function UpdateSetting() {
+  const update = useStore((s) => s.update);
+  const busy = Boolean(update) && update.phase !== 'idle';
+  const label = updateLabel(update);
+  return html`<div class="setting-row">
+    <span>
+      Installiert: <strong>RiftLens ${update?.current || '–'}</strong>
+      ${label ? html` <span class=${`small ${update.available ? 'good' : 'muted'}`}>· ${label}</span>` : null}
+      ${!busy && update?.error ? html` <span class="small bad">· ${update.error}</span>` : null}
+      ${!busy && update?.available && update.installHint ? html`<br /><span class="small muted">${update.installHint}</span>` : null}
+    </span>
+    <span class="setting-actions">
+      ${!busy && update?.available && update.canInstall ? html`<${Button} kind="primary" icon="download" onClick=${() => installUpdate(confirmDialog)}>Aktualisieren<//>` : null}
+      ${!busy && update?.available && !update.canInstall ? html`<a class="btn" href=${update.latest.url} target="_blank" rel="noopener"><${Icon} name="download" size=${16} /><span>Auf GitHub öffnen</span></a>` : null}
+      <${Button} icon="refresh" disabled=${busy} onClick=${checkUpdate}>Jetzt nach Updates suchen<//>
+    </span>
+  </div>`;
 }
 
 function Toast() {
@@ -277,6 +337,7 @@ function SettingsDialog() {
         lolalyticsEnabled: form.lolalyticsEnabled,
         riotEnabled: form.riotEnabled, platform: form.platform, lcuFolder: form.lcuFolder || '',
         draftArchiveLimit: Number(form.draftArchiveLimit), fearlessSeriesLimit: Number(form.fearlessSeriesLimit),
+        updateCheck: form.updateCheck,
       };
       if (key.trim() !== '' || form.clearKey) {
         body.riotApiKey = key.trim();
@@ -309,6 +370,9 @@ function SettingsDialog() {
       <label class="field"><span data-tip=${advancedTips ? 'Gilt für beendete Serien (fearless-series.json); die laufende zählt nicht mit. Ihre Games bleiben zusätzlich als Drafts im Draft-Archiv. Beim Verkleinern werden ältere ausgeblendet und mit der nächsten Änderung an den Serien gelöscht.' : undefined}>Fearless-Serien</span>
         <${Select} label="Fearless-Serien" value=${String(form.fearlessSeriesLimit)} onChange=${(limit) => set({ fearlessSeriesLimit: Number(limit) })}
           options=${form.fearlessSeriesLimits.map((n) => ({ value: String(n), label: `Letzte ${n} beendete Serien behalten${n === form.fearlessSeriesDefault ? ' (Standard)' : ''}` }))} /></label>
+      <div class="divider"></div>
+      <${Switch} checked=${form.updateCheck} onChange=${(updateCheck) => set({ updateCheck })}>Beim Start nach Updates suchen (GitHub-Releases)<//>
+      <${UpdateSetting} />
       <div class="divider"></div>
       <${Switch} checked=${form.riotEnabled} onChange=${(riotEnabled) => set({ riotEnabled })}>Riot-API verwenden (Summoner-Abfrage, Verifizierung)<//>
       <label class="field"><span>Riot-API-Key</span>

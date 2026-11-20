@@ -3,6 +3,7 @@ package com.leaguetool.web;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import com.leaguetool.update.ReleaseSignature;
 import com.leaguetool.util.Json;
 
 import java.io.IOException;
@@ -31,9 +32,11 @@ public final class SmokeTest {
             for (String path : List.of("/", "/app.css", "/js/main.js", "/vendor/htm-preact.js", "/api/settings",
                     "/api/stats/meta", "/api/stats/champions", "/api/stats/report/" + key, "/api/build?items=" + item,
                     "/api/champions/" + champion + "/detail", "/api/champions/" + champion + "/levels?items=" + item,
-                    "/api/champions/" + champion + "/wiki", "/api/champions/" + champion + "/insights?level=11")) {
+                    "/api/champions/" + champion + "/wiki", "/api/champions/" + champion + "/insights?level=11", "/api/update")) {
                 get(http, server, path);
             }
+            // Auto-Update: gepackte Laufzeit kann Ed25519, eingebauter Release-Schlüssel ist lesbar
+            ReleaseSignature.selfCheck();
             System.out.println("SMOKE OK patch=" + data.path("patch").asText() + " offline=" + data.path("offline").asBoolean()
                     + " champions=" + data.path("champions").size() + " items=" + data.path("items").size()
                     + " runeTrees=" + data.path("runeTrees").size() + " spells=" + data.path("spells").size());
