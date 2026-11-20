@@ -15,15 +15,19 @@ Wiki-Championdaten sofort, Wiki-Fähigkeiten und Lolalytics-Statistiken beim nä
 demselben Patch nutzen den gespeicherten Stand. Ohne Netz bleiben die alten Daten nutzbar. Die Lolalytics-Team-Werte
 für die Draft-Synergien behalten ihre 12 Stunden Cache.
 
+**Aufräumen:** Einmal je Programmstart löscht die App ältere Data-Dragon-Patches (es bleiben der aktuelle und der
+vorige als Rückfall ohne Netz) sowie Lolalytics-Einträge, die älter als 30 Tage sind oder aus einem früheren Format
+stammen. Dabei wird nichts abgerufen.
+
 | Pfad | Inhalt |
 |---|---|
 | `settings.properties` | Einstellungen (Sprache, Offline-Modus, Wiki/Riot/Lolalytics an/aus, Rang-Bereich, Plattform, Größe von Draft-Archiv und Fearless-Serien, optional API-Key) |
-| `cache/<patch>/data/<sprache>/…` | Data-Dragon-JSON pro Patch (unveränderlich, cache-first) |
+| `cache/<patch>/data/<sprache>/…` | Data-Dragon-JSON pro Patch (unveränderlich, cache-first; es bleiben der aktuelle und der vorige Patch) |
 | `cache/<patch>/img/…`, `cache/_global/img/…` | Bilder (Champions, Items, Spells, Runen) |
 | `cache/_global/ddragon/versions.json` | Patch-Liste (beim Programmstart frisch geprüft, danach 6 h, sonst Netz mit Cache-Fallback) |
 | `cache/_global/patch/state.json` | Zuletzt geladener Patch und Zeitpunkt des letzten Patchwechsels |
 | `cache/_global/wiki/…` | Wiki-Zusatzdaten (3 Tage frisch, Item-Daten 1 Tag, höchstens bis zum Patchwechsel, sonst Netz mit Cache-Fallback) |
-| `cache/_global/lolalytics/…` | Lolalytics-Abrufe (12 h frisch, Statistiken höchstens bis zum Patchwechsel, sonst Netz mit Cache-Fallback) |
+| `cache/_global/lolalytics/…` | Lolalytics-Abrufe (12 h frisch, Statistiken höchstens bis zum Patchwechsel, sonst Netz mit Cache-Fallback; Einträge über 30 Tage werden gelöscht) |
 | `cache/_global/rune-effects/` | Stand und Verlauf der automatisch abgeglichenen Runen- und Shard-Werte |
 | `cache/_global/riot/history/…` | Match-Historie je Spieler (gzip, Summoner-Tab) |
 | `cache/_global/riot/match/…` | Früherer Match-Cache; wird nur noch gelesen und in die Historie übernommen |

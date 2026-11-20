@@ -97,6 +97,35 @@ class FileCacheTest {
     }
 
     @Test
+    void prunesPatchesOlderThanCurrentAndOneFallback() throws IOException {
+        FileCache cache = new FileCache(tmp);
+        for (String patch : List.of("16.20.1", "16.21.1", "16.22.1", "16.23.1", "16.24.1")) {
+            cache.writeText(patch, "img/item/1001.png", "x");
+            cache.writeText(patch, "data/en_US/item.json", "{}");
+        }
+        cache.writeText(FileCache.GLOBAL, "wiki/x.json", "1");
+        Files.createDirectories(tmp.resolve("lolpatch_7.20")); // keine reguläre Version: bleibt
+
+        // Aktuell 16.23.1 (z. B. offline geladen): 16.24.1 ist neuer und bleibt, dazu ein älterer als Rückfall.
+        assertEquals(List.of("16.21.1", "16.20.1"), cache.prunePatches("16.23.1", 1));
+        assertEquals(List.of("16.24.1", "16.23.1", "16.22.1"), cache.cachedPatches());
+        assertFalse(Files.exists(tmp.resolve("16.21.1")), "Ordner samt Unterordnern gelöscht");
+        assertTrue(cache.contains(FileCache.GLOBAL, "wiki/x.json"));
+        assertTrue(Files.isDirectory(tmp.resolve("lolpatch_7.20")));
+        assertEquals(List.of(), cache.prunePatches("16.23.1", 1), "nichts mehr zu löschen");
+        assertEquals(List.of(), cache.prunePatches("ungültig", 1));
+    }
+
+    @Test
+    void listsFileNamesOfADirectory() throws IOException {
+        FileCache cache = new FileCache(tmp);
+        cache.writeText(FileCache.GLOBAL, "dir/a.json", "1");
+        cache.writeText(FileCache.GLOBAL, "dir/sub/b.json", "1");
+        assertEquals(List.of("a.json"), cache.list(FileCache.GLOBAL, "dir"));
+        assertEquals(List.of(), cache.list(FileCache.GLOBAL, "missing"));
+    }
+
+    @Test
     void rejectsPathTraversal() {
         FileCache cache = new FileCache(tmp);
         assertThrows(IllegalArgumentException.class, () -> cache.pathFor("16.22.1", "../../etc/passwd"));

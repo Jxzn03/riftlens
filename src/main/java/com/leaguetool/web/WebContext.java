@@ -44,6 +44,8 @@ import java.util.function.BiConsumer;
 public final class WebContext implements AutoCloseable {
 
     private static final long LOAD_TIMEOUT_SECONDS = 120;
+    /** Ältere Data-Dragon-Patches neben dem aktuellen, die als Rückfall ohne Netz im Cache bleiben. */
+    static final int KEEP_OLDER_PATCHES = 1;
 
     private final AppSettings settings;
     private final FileCache cache;
@@ -72,6 +74,8 @@ public final class WebContext implements AutoCloseable {
     /** Versionsliste beim ersten Laden nach dem Programmstart frisch abfragen, damit ein neuer Patch sofort zählt. */
     private volatile boolean versionsChecked;
     private volatile PatchTracker.Change lastPatchChange;
+    /** Der Cache wird einmal je Programmlauf aufgeräumt, nach dem ersten erfolgreichen Laden. */
+    private final java.util.concurrent.atomic.AtomicBoolean cachePruned = new java.util.concurrent.atomic.AtomicBoolean();
 
     public WebContext(AppSettings settings) {
         this(settings, new JavaHttpFetcher(), DDragonClient.BASE_URL);
@@ -172,12 +176,33 @@ public final class WebContext implements AutoCloseable {
                 if (change.isNew() && wikiClient != null) {
                     prefetchWiki(wikiClient);
                 }
+                if (cachePruned.compareAndSet(false, true)) {
+                    background.execute(() -> pruneCache(data.patch()));
+                }
                 return data;
             } catch (IOException e) {
                 throw new UncheckedIOException(e);
             }
         }, background).whenComplete((data, error) -> onLoaded(gen, data));
         return loading;
+    }
+
+    /**
+     * Räumt den Cache auf, ohne Abruf und ohne Inhalte zu lesen: Data Dragon behält den geladenen Patch, neuere und
+     * {@link #KEEP_OLDER_PATCHES} ältere; Lolalytics verliert alte Formate und Einträge über 30 Tage (auch bei
+     * abgeschaltetem Lolalytics, es wird nur gelöscht). Fehler lassen den Cache wie er ist.
+     */
+    void pruneCache(String currentPatch) {
+        try {
+            cache.prunePatches(currentPatch, KEEP_OLDER_PATCHES);
+        } catch (IOException | RuntimeException e) {
+            // beim nächsten Start erneut
+        }
+        try {
+            lolalytics.pruneCache(java.time.Instant.now());
+        } catch (IOException | RuntimeException e) {
+            // beim nächsten Start erneut
+        }
     }
 
     /** Lädt die Wiki-Championdaten des neuen Patches im Hintergrund vor; Fehler zeigen sich erst beim Zugriff. */

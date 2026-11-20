@@ -80,9 +80,64 @@ public final class FileCache {
         Files.deleteIfExists(pathFor(scope, key));
     }
 
-    private Optional<Instant> lastModified(String scope, String key) throws IOException {
+    /** Zeitpunkt des letzten Schreibens oder leer, wenn der Eintrag fehlt. */
+    public Optional<Instant> lastModified(String scope, String key) throws IOException {
         Path p = pathFor(scope, key);
         return Files.isRegularFile(p) ? Optional.of(Files.getLastModifiedTime(p).toInstant()) : Optional.empty();
+    }
+
+    /**
+     * Dateinamen direkt im Unterordner {@code dir} eines Scopes (ohne Unterordner); leer, wenn er fehlt. Nur Namen,
+     * die als Schlüssel unverändert bleiben ({@code dir + "/" + name} trifft genau diese Datei).
+     */
+    public List<String> list(String scope, String dir) throws IOException {
+        Path d = pathFor(scope, dir);
+        List<String> names = new ArrayList<>();
+        if (!Files.isDirectory(d)) {
+            return names;
+        }
+        try (DirectoryStream<Path> files = Files.newDirectoryStream(d, Files::isRegularFile)) {
+            for (Path f : files) {
+                String name = f.getFileName().toString();
+                if (!UNSAFE_CHARS.matcher(name).find()) {
+                    names.add(name);
+                }
+            }
+        }
+        return names;
+    }
+
+    /**
+     * Löscht alte Patch-Ordner. Es bleiben {@code current}, alle neueren (z. B. ein Patch, der gerade erst
+     * heruntergeladen wird) und die {@code keepOlder} neuesten älteren als Rückfall ohne Netz; {@link #GLOBAL} und
+     * andere Ordner bleiben unberührt. Nicht löschbare Dateien (z. B. gerade geöffnet) bleiben liegen.
+     *
+     * @return die gelöschten Patches
+     */
+    public List<String> prunePatches(String current, int keepOlder) throws IOException {
+        if (!Patches.isRegularVersion(current)) {
+            return List.of();
+        }
+        List<String> older = cachedPatches().stream().filter(p -> Patches.NEWEST_FIRST.compare(p, current) > 0).toList();
+        List<String> removed = new ArrayList<>();
+        for (String patch : older.subList(Math.min(Math.max(0, keepOlder), older.size()), older.size())) {
+            deleteTree(root.resolve(patch));
+            removed.add(patch);
+        }
+        return removed;
+    }
+
+    private static void deleteTree(Path dir) throws IOException {
+        try (var paths = Files.walk(dir)) {
+            // Tiefste Pfade zuerst, damit die Ordner beim Löschen leer sind.
+            for (Path p : paths.sorted(java.util.Comparator.reverseOrder()).toList()) {
+                try {
+                    Files.deleteIfExists(p);
+                } catch (IOException ignored) {
+                    // gesperrte Datei (Windows) oder nicht leerer Ordner: beim nächsten Start erneut versuchen
+                }
+            }
+        }
     }
 
     /**

@@ -527,12 +527,15 @@ final class ApiRoutes {
             throw new ApiException(404, "Champion bei Lolalytics nicht gefunden");
         }
         GameData data = ctx.awaitData();
-        String lane = role == null ? null : LolalyticsClient.lane(role);
+        LolalyticsFullTierList.Row row = list.rows().get(championKey);
+        // Ohne Rolle die Hauptlane aus der Liste (ohne Rolle ist das die Gesamtliste): Die Seite ohne Lane enthält
+        // dieselben Daten, wäre aber ein eigener Cache-Eintrag und ein zweiter Abruf neben Draft und Rollenwahl.
+        String lane = role != null ? LolalyticsClient.lane(role)
+                : row != null && LolalyticsClient.isLane(row.lane()) ? row.lane() : null;
         LolalyticsBuild build = cachedOnly ? client.buildIfCached(slug, tier, lane, period, false) : client.build(slug, tier, lane, period, staleOk(period));
         if (build == null) {
             return null;
         }
-        LolalyticsFullTierList.Row row = list.rows().get(championKey);
         String opponentLane = lane != null ? lane : row == null ? "" : row.lane();
         return Dto.lolalyticsReport(build, data, opponentLane);
     }

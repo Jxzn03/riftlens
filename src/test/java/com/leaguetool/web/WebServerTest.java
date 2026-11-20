@@ -196,6 +196,39 @@ class WebServerTest {
         assertEquals(400, get("/api/champions/Ahri/levels?runes=8106&stacks=8106", true).statusCode());
     }
 
+    @Test
+    void startPrunesOldPatchesAndOutdatedLolalyticsEntriesOnce() throws Exception {
+        java.nio.file.Path root = settings.cacheDir();
+        for (String patch : List.of("16.19.1", "16.20.1", "16.21.1")) {
+            java.nio.file.Files.createDirectories(root.resolve(patch).resolve("img/item"));
+            java.nio.file.Files.writeString(root.resolve(patch).resolve("img/item/1001.png"), "x");
+        }
+        java.nio.file.Path oldFormat = root.resolve("_global/lolalytics/build_v3_ahri_all_middle_30d.json");
+        java.nio.file.Files.createDirectories(oldFormat.getParent());
+        java.nio.file.Files.writeString(oldFormat, "{}");
+
+        WebContext second = new WebContext(settings, fake, BASE);
+        try {
+            second.reload().join();
+            Instant deadline = Instant.now().plusSeconds(10);
+            while (java.nio.file.Files.exists(root.resolve("16.19.1")) && Instant.now().isBefore(deadline)) {
+                Thread.sleep(20);
+            }
+            assertFalse(java.nio.file.Files.exists(root.resolve("16.19.1")));
+            assertFalse(java.nio.file.Files.exists(root.resolve("16.20.1")));
+            assertTrue(java.nio.file.Files.isDirectory(root.resolve("16.21.1")), "ein älterer Patch bleibt als Rückfall");
+            assertTrue(java.nio.file.Files.isDirectory(root.resolve(PATCH)));
+            deadline = Instant.now().plusSeconds(10);
+            while (java.nio.file.Files.exists(oldFormat) && Instant.now().isBefore(deadline)) {
+                Thread.sleep(20);
+            }
+            assertFalse(java.nio.file.Files.exists(oldFormat), "Lolalytics-Eintrag im alten Format gelöscht");
+        } finally {
+            second.awaitData();
+            second.close();
+        }
+    }
+
     private static String rowValue(JsonNode rows, String label) {
         for (JsonNode row : rows) {
             if (label.equals(row.path("label").asText())) {
@@ -261,7 +294,7 @@ class WebServerTest {
         settings.setLolalyticsEnabled(true);
         String list = "https://lolalytics.com/lol/tierlist/?tier=emerald_plus&lane=all&patch=30";
         fake.respond(list, LolalyticsPages.tierList());
-        fake.respond("https://lolalytics.com/lol/ahri/build/?tier=emerald_plus&patch=30", LolalyticsPages.build());
+        fake.respond("https://lolalytics.com/lol/ahri/build/?tier=emerald_plus&lane=middle&patch=30", LolalyticsPages.build());
 
         HttpResponse<String> champions = get("/api/stats/champions", true);
         assertEquals(200, champions.statusCode(), champions.body());
@@ -306,10 +339,27 @@ class WebServerTest {
     }
 
     @Test
+    void reportWithoutRoleSharesTheEntryOfTheMainLane() throws Exception {
+        settings.setLolalyticsEnabled(true);
+        String build = "https://lolalytics.com/lol/ahri/build/?tier=emerald_plus&lane=middle&patch=30";
+        fake.respond("https://lolalytics.com/lol/tierlist/?tier=emerald_plus&lane=all&patch=30", LolalyticsPages.tierList());
+        fake.respond("https://lolalytics.com/lol/tierlist/?tier=emerald_plus&lane=middle&patch=30", LolalyticsPages.tierList());
+        fake.respond(build, LolalyticsPages.build());
+
+        // Ohne Rolle wird die Hauptlane laut Liste (Mid) mit Lane abgefragt, nie die Seite ohne Lane.
+        String auto = get("/api/stats/report/103", true).body();
+        assertTrue(fake.requests().stream().noneMatch(u -> u.contains("/build/") && !u.contains("&lane=")), fake.requests().toString());
+        // Dieselbe Rolle von Hand (wie im Draft): derselbe Cache-Eintrag, kein zweiter Abruf der Seite.
+        String chosen = get("/api/stats/report/103?role=MIDDLE", true).body();
+        assertEquals(1, fake.requests().stream().filter(build::equals).count());
+        assertEquals(json.readTree(auto).path("games"), json.readTree(chosen).path("games"));
+    }
+
+    @Test
     void cachedOnlyReportNeverFetches() throws Exception {
         settings.setLolalyticsEnabled(true);
         String list = "https://lolalytics.com/lol/tierlist/?tier=emerald_plus&lane=all&patch=30";
-        String build = "https://lolalytics.com/lol/ahri/build/?tier=emerald_plus&patch=30";
+        String build = "https://lolalytics.com/lol/ahri/build/?tier=emerald_plus&lane=middle&patch=30";
         fake.respond(list, LolalyticsPages.tierList());
         fake.respond(build, LolalyticsPages.build());
 
@@ -354,12 +404,12 @@ class WebServerTest {
     void outdatedThirtyDayStatisticsShowAtOnceAndRefreshOnceInTheBackground() throws Exception {
         settings.setLolalyticsEnabled(true);
         String list = "https://lolalytics.com/lol/tierlist/?tier=emerald_plus&lane=all&patch=30";
-        String build = "https://lolalytics.com/lol/ahri/build/?tier=emerald_plus&patch=30";
+        String build = "https://lolalytics.com/lol/ahri/build/?tier=emerald_plus&lane=middle&patch=30";
         fake.respond(list, LolalyticsPages.tierList());
         fake.respond(build, LolalyticsPages.build());
         String fresh = get("/api/stats/report/103", true).body();
         Path listFile = age("lolalytics/full_v4_emerald_plus_all_30d.json");
-        Path buildFile = age("lolalytics/build_v4_ahri_emerald_plus_main_30d.json");
+        Path buildFile = age("lolalytics/build_v4_ahri_emerald_plus_middle_30d.json");
 
         // Abrufe angehalten: Müsste die Anfrage auf sie warten, liefe sie in die Zeitgrenze.
         CountDownLatch releaseList = fake.hold(list);

@@ -30,6 +30,15 @@ public final class LolalyticsClient {
     private static final long BACKGROUND_POLL_MS = 100;
     /** Datenschnittstelle der Website; liefert die Team-Werte, die nicht in der Seite stehen. Nicht dokumentiert. */
     static final String TEAM_API_URL = "https://a1.lolalytics.com/mega/";
+    /** Ordner der Einträge im Cache-Scope {@link FileCache#GLOBAL}. */
+    private static final String CACHE_DIR = "lolalytics";
+    // Schlüssel-Präfixe mit Format-Version: Ein neues Format bekommt ein neues Präfix, alte Einträge räumt pruneCache weg.
+    private static final String TIER_LIST_PREFIX = "full_v4_";
+    private static final String BUILD_PREFIX = "build_v4_";
+    private static final String TEAM_PREFIX = "team_v1_";
+    private static final java.util.List<String> CURRENT_PREFIXES = java.util.List.of(TIER_LIST_PREFIX, BUILD_PREFIX, TEAM_PREFIX);
+    /** Ältere Einträge löscht {@link #pruneCache}; sie gelten nach Patchwechsel und 12 h ohnehin als veraltet. */
+    public static final Duration CACHE_RETENTION = Duration.ofDays(30);
 
     private final HttpFetcher http;
     private final FileCache cache;
@@ -77,6 +86,35 @@ public final class LolalyticsClient {
         };
     }
 
+    /** {@code true} für eine der fünf Lanes ({@link #lane(Role)}), nicht für {@code all} oder leer. */
+    public static boolean isLane(String lane) {
+        return lane != null && java.util.Arrays.stream(Role.values()).anyMatch(r -> lane(r).equals(lane));
+    }
+
+    /**
+     * Räumt den Cache auf, ohne Inhalte zu lesen und ohne Abruf: löscht Einträge alter Formate (Präfix nicht mehr
+     * aktuell) und Einträge, die älter als {@link #CACHE_RETENTION} sind.
+     *
+     * @return Anzahl gelöschter Dateien
+     */
+    public int pruneCache(java.time.Instant now) throws IOException {
+        java.time.Instant limit = now.minus(CACHE_RETENTION);
+        int removed = 0;
+        for (String name : cache.list(FileCache.GLOBAL, CACHE_DIR)) {
+            String key = CACHE_DIR + "/" + name;
+            // Unter der Sperre des Eintrags: Ein gleichzeitiger Abruf schreibt ihn nicht gerade neu.
+            synchronized (lock(key)) {
+                boolean current = CURRENT_PREFIXES.stream().anyMatch(name::startsWith);
+                boolean old = cache.lastModified(FileCache.GLOBAL, key).map(t -> t.isBefore(limit)).orElse(false);
+                if (!current || old) {
+                    cache.delete(FileCache.GLOBAL, key);
+                    removed++;
+                }
+            }
+        }
+        return removed;
+    }
+
     /**
      * Vollständige Tierliste mit allen Champions (aus dem eingebetteten Seitenzustand, ein Abruf genügt).
      *
@@ -118,7 +156,7 @@ public final class LolalyticsClient {
         String t = safe(tier, DEFAULT_TIER);
         String l = safe(lane, "all");
         // "v4": enthält PBI und Lane-Anteil; ältere Cache-Einträge ohne diese Felder dürfen nicht weiterverwendet werden.
-        String key = "lolalytics/full_v4_" + t + "_" + l + "_" + period.cacheSuffix() + ".json";
+        String key = CACHE_DIR + "/" + TIER_LIST_PREFIX + t + "_" + l + "_" + period.cacheSuffix() + ".json";
         String url = BASE_URL + "?tier=" + t + "&lane=" + l + patchQuery(period);
         return new Source(key, url, notBefore.get(), LolalyticsState::extractTierList);
     }
@@ -157,7 +195,7 @@ public final class LolalyticsClient {
         String t = safe(tier, DEFAULT_TIER);
         String l = lane == null ? null : safe(lane, "all");
         // "v4": enthält Matchups mit Delta-Werten, Schaden, Spieldauer und Itemplätze; ältere Cache-Einträge haben diese Felder nicht.
-        String key = "lolalytics/build_v4_" + slug + "_" + t + "_" + (l == null ? "main" : l) + "_" + period.cacheSuffix() + ".json";
+        String key = CACHE_DIR + "/" + BUILD_PREFIX + slug + "_" + t + "_" + (l == null ? "main" : l) + "_" + period.cacheSuffix() + ".json";
         String url = "https://lolalytics.com/lol/" + slug + "/build/?tier=" + t + (l == null ? "" : "&lane=" + l)
                 + patchQuery(period);
         return new Source(key, url, notBefore.get(), LolalyticsState::extractBuild);
@@ -188,7 +226,7 @@ public final class LolalyticsClient {
         requireSlug(slug);
         String t = safe(tier, DEFAULT_TIER);
         String l = safe(lane, "all");
-        String key = "lolalytics/team_v1_" + slug + "_" + t + "_" + l + "_30d.json";
+        String key = CACHE_DIR + "/" + TEAM_PREFIX + slug + "_" + t + "_" + l + "_30d.json";
         String url = TEAM_API_URL + "?ep=build-team&v=1&patch=" + LolalyticsPeriod.LAST_30_DAYS.patchParam() + "&c=" + slug
                 + "&lane=" + l + "&tier=" + t + "&queue=ranked&region=all";
         // Bewusst ohne Patch-Grenze: Für die Draft-Synergien gelten 12 h Cache (Vorgabe des Nutzers).

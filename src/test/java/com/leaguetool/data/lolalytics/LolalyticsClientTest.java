@@ -89,4 +89,49 @@ class LolalyticsClientTest {
         assertEquals(2, fake.requests().size(), "der Eintrag wird nur einmal erneuert");
         assertTrue(Files.getLastModifiedTime(file).toInstant().isAfter(Instant.now().minusSeconds(60)));
     }
+
+    @Test
+    void pruneRemovesOldFormatsAndEntriesOlderThanThirtyDaysWithoutFetching() throws Exception {
+        FakeHttpFetcher fake = new FakeHttpFetcher();
+        FileCache cache = new FileCache(tmp);
+        LolalyticsClient client = new LolalyticsClient(fake, cache, INTERVAL);
+        Instant now = Instant.now();
+        List<String> keep = List.of("build_v4_ahri_emerald_plus_middle_30d.json", "full_v4_emerald_plus_all_30d.json",
+                "team_v1_ahri_emerald_plus_middle_30d.json");
+        List<String> oldFormats = List.of("build_v3_ahri_all_middle_30d.json", "build_ahri_emerald_plus_middle.json",
+                "full_emerald_plus_all.json", "tierlist_emerald_plus_all.html");
+        for (String name : concat(keep, oldFormats)) {
+            cache.writeText(FileCache.GLOBAL, "lolalytics/" + name, "{}");
+        }
+        String expired = "build_v4_zed_emerald_plus_top_30d.json";
+        cache.writeText(FileCache.GLOBAL, "lolalytics/" + expired, "{}");
+        Files.setLastModifiedTime(cache.pathFor(FileCache.GLOBAL, "lolalytics/" + expired),
+                FileTime.from(now.minus(LolalyticsClient.CACHE_RETENTION).minusSeconds(60)));
+        // Knapp innerhalb der 30 Tage: bleibt (veraltet, aber Rückfall ohne Netz).
+        Files.setLastModifiedTime(cache.pathFor(FileCache.GLOBAL, "lolalytics/" + keep.get(0)),
+                FileTime.from(now.minus(LolalyticsClient.CACHE_RETENTION).plusSeconds(3600)));
+        cache.writeText(FileCache.GLOBAL, "wiki/x.json", "{}");
+
+        assertEquals(oldFormats.size() + 1, client.pruneCache(now));
+        assertEquals(keep.stream().sorted().toList(),
+                cache.list(FileCache.GLOBAL, "lolalytics").stream().sorted().toList());
+        assertTrue(cache.contains(FileCache.GLOBAL, "wiki/x.json"), "andere Ordner bleiben");
+        assertEquals(List.of(), fake.requests(), "kein Abruf");
+        assertEquals(0, client.pruneCache(now));
+    }
+
+    private static List<String> concat(List<String> a, List<String> b) {
+        List<String> all = new ArrayList<>(a);
+        all.addAll(b);
+        return all;
+    }
+
+    @Test
+    void lanesAreTheFiveRoles() {
+        assertTrue(LolalyticsClient.isLane("middle"));
+        assertTrue(LolalyticsClient.isLane("support"));
+        assertEquals(false, LolalyticsClient.isLane("all"));
+        assertEquals(false, LolalyticsClient.isLane(""));
+        assertEquals(false, LolalyticsClient.isLane(null));
+    }
 }
