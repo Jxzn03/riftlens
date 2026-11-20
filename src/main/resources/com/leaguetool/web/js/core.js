@@ -537,6 +537,12 @@ export const BUILD_ROLES = [
 
 const ROLE_MODES = { TOP: '', JUNGLE: 'jungle', MIDDLE: 'mid', BOTTOM: 'adc', UTILITY: 'support' };
 
+/** Modus des Build-Rechners zu einer Rolle (Top und unbekannt: keiner). */
+export const modeForRole = (role) => ROLE_MODES[role] || '';
+
+/** Rolle zu einem Modus; ohne Modus leer (Top oder keine Rolle). */
+export const roleForMode = (mode) => (mode ? Object.keys(ROLE_MODES).find((role) => ROLE_MODES[role] === mode) || '' : '');
+
 /**
  * Wendet die Rolle des Build-Champions an, nur wenn sie sich geändert hat (so bleibt ein von Hand umgelegter
  * Schalter stehen): ADC, Mid, Support und Jungle schalten ihren Modus ein, Top alle aus. Leer = Rolle unbekannt:

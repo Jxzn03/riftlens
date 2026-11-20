@@ -3,10 +3,10 @@ import { html, useMemo, useEffect, useState, useRef } from '/vendor/htm-preact.j
 import {
   useStore, useViewState, useFetch, select, go, normalize, sortRows, addToBuild, removeFromBuild, moveInBuild, store,
   MAX_BUILD, runePageRunes, useBuildItems, canAddToBuild, setBuildMode, isBoots, isJunglePet, isSupportItem, supportLocked, upgradedBootsLocked, api, useStatsUrl, useChampionRole,
-  applyBuildRole, BUILD_ROLES, BUILD_MODES,
+  applyBuildRole, BUILD_ROLES, modeForRole, roleForMode,
 } from './core.js';
 import {
-  Img, Card, Button, Select, SearchInput, Switch, Tag, DataGrid, VirtualTable, MasterDetail, Empty, Icon, RuneIcons, MenuButton,
+  Img, Card, Button, Select, SearchInput, Switch, Tag, DataGrid, VirtualTable, MasterDetail, Empty, Icon, RuneIcons,
 } from './ui.js';
 
 const DEFAULTS = { q: '', tag: '', stat: '', completed: false, sort: { key: 'name', dir: 1 } };
@@ -201,12 +201,15 @@ export function ItemsView({ id }) {
       : html`<${Empty} title="Item auswählen">Wähle links ein Item für Werte, Beschreibung und Baupfad.<//>`} />`;
 }
 
-const MODE_TIPS = {
-  adc: 'ADC: 6 normale Items, Boots auf einem festen 7. Platz',
-  mid: 'Mid: Boots aufgewertet; aufgewertete Boots gibt es nur hier',
-  support: 'Support: World Atlas und Runic Compass werden zu Bounty of Worlds; geht an, wenn ein Support-Item dazukommt',
-  jungle: 'Jungle: erlaubt ein Jungle-Pet im Build (kommt nicht von selbst hinein); beim Ausschalten wird es entfernt',
-};
+// Was die Rolle im Build-Rechner ändert (früher Schalter im Menü „Rollen-Modus“), nur bei „Show Advanced Tooltips“.
+const ROLE_TIP = [
+  'Die Rolle steuert den Build-Rechner:',
+  'Jungle: erlaubt ein Jungle-Pet im Build (kommt nicht von selbst hinein); bei anderer Rolle wird es entfernt',
+  'Mid: Boots aufgewertet; aufgewertete Boots gibt es nur hier',
+  'ADC: 6 normale Items, Boots auf einem festen 7. Platz',
+  'Support: World Atlas und Runic Compass werden zu Bounty of Worlds; ohne Champion schaltet ein Support-Item Support ein',
+  'Top: nichts davon',
+].join('\n');
 
 // Beschriftung der Lolalytics-Lane (`counters.lane` im Report) → Rollenwert.
 const LANE_ROLES = Object.fromEntries(BUILD_ROLES.map((r) => [r.label, r.value]));
@@ -260,12 +263,17 @@ export function BuildRoleSync() {
   return null;
 }
 
-/** Auswahl des Build-Champions und seiner Rolle (die Rolle wendet {@link BuildRoleSync} an). */
+/**
+ * Auswahl des Build-Champions und seiner Rolle (die Rolle wendet {@link BuildRoleSync} an). Ohne Champion setzt das
+ * Rollenfeld den Modus direkt; es zeigt den aktuellen Modus (Top und keine Rolle sind derselbe Zustand).
+ */
 function BuildChampion({ data }) {
   const champion = useBuildChampion(data);
   const championKey = champion ? String(champion.key) : '';
   const roleState = useChampionRole(champion ? champion.key : null);
   const auto = useStore((s) => s.buildAuto);
+  const mode = useStore((s) => s.buildMode);
+  const advancedTips = useStore((s) => Boolean(s.prefs.advancedTips));
   const champions = useMemo(() => [...data.champions].sort((a, b) => a.name.localeCompare(b.name)), [data]);
 
   const roleLabel = (value) => (BUILD_ROLES.find((r) => r.value === value) || {}).label;
@@ -286,7 +294,11 @@ function BuildChampion({ data }) {
       onChange=${chooseChampion}
       options=${[{ value: '', label: 'Kein Champion' }, ...champions.map((c) => ({ value: String(c.key), label: c.name }))]} />
     ${champion ? html`<${Select} label=${`Rolle von ${champion.name}`} value=${roleState.chosen} onChange=${roleState.setRole}
-      options=${[{ value: '', label: autoLabel }, ...BUILD_ROLES]} />` : null}  </div>`;
+        tip=${advancedTips ? ROLE_TIP : undefined} options=${[{ value: '', label: autoLabel }, ...BUILD_ROLES]} />`
+      : html`<${Select} label="Rolle für den Build" value=${roleForMode(mode)} onChange=${(role) => setBuildMode(modeForRole(role))}
+        tip=${advancedTips ? ROLE_TIP : undefined}
+        options=${[{ value: '', label: 'Top / keine Rolle' }, ...BUILD_ROLES.filter((r) => modeForRole(r.value))]} />`}
+  </div>`;
 }
 
 function BuildPanel({ data, selected, drag, setDrag }) {
@@ -369,13 +381,6 @@ function BuildPanel({ data, selected, drag, setDrag }) {
         ${all.length ? html`<strong class="gold">${(totals ? totals.gold : 0).toLocaleString('de-DE')} Gold</strong>` : null}
         <${Button} icon="x" kind="ghost" disabled=${!championSet} onClick=${() => { store.set({ buildChampion: null }); setBuildMode(''); }}>Champion entfernen<//>
         <${Button} icon="trash" kind="ghost" disabled=${!all.length} onClick=${() => { store.set({ build: [], buildBoots: null }); setBuildMode(''); }}>Leeren<//>
-        <${MenuButton} icon="dots" cls="build-mode-menu" title="Rollen-Modus" tip=${advancedTips ? 'Rollen-Modus (Jungle, Mid, ADC, Support)' : undefined} badge=${Boolean(mode)}>
-          <div class="menu-title">Rollen-Modus</div>
-          <div class="build-modes switches">
-            ${BUILD_MODES.map((m) => html`<${Switch} key=${m.value} checked=${mode === m.value}
-              onChange=${(on) => setBuildMode(on ? m.value : '')} tip=${advancedTips ? MODE_TIPS[m.value] : undefined}>${m.label}<//>`)}
-          </div>
-        <//>
       </div>
     </header>
     <${BuildChampion} data=${data} />

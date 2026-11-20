@@ -21,28 +21,28 @@ Ziehen umordnen, und wer eines auf die Item-Liste zieht, entfernt es aus dem Bui
 
 Boots, Support-Item, Jungle-Pet und jedes fertige Item passen je nur einmal in den Build (Komponenten auch mehrfach),
 Trinkets und Verbrauchsgegenstände gar nicht; solche Items sind im Auswahlfenster und bei „Zum Build hinzufügen“
-ausgegraut und lassen sich nicht hineinziehen. Die Schalter „Jungle“, „Mid“, „ADC“ und „Support“ stehen im Menü
-(drei Punkte) rechts neben „Leeren“; ein Punkt am Menü zeigt, dass einer an ist. Höchstens
-einer davon ist an:
+ausgegraut und lassen sich nicht hineinziehen. Die Rolle (Feld neben der Champion-Auswahl, siehe unten) stellt den
+Build-Rechner ein; Top ändert nichts:
 
 - **ADC:** 6 normale Items, Boots liegen auf einem festen 7. Platz und zählen in allen Berechnungen mit. „+“ auf dem
   leeren Boots-Platz öffnet die Auswahl mit den Boots.
-- **Mid:** Boots werden zur aufgewerteten Variante, beim Ausschalten wieder zur normalen. Aufgewertete Boots lassen
-  sich nur mit „Mid“ hinzufügen (von der Rolle oder von Hand eingeschaltet).
-- **Support:** World Atlas und Runic Compass werden zu Bounty of Worlds, beim Ausschalten wieder zu World Atlas; eine
-  gewählte Endstufe bleibt. Kommt ein Support-Item in den Build, geht „Support“ von selbst an.
+- **Mid:** Boots werden zur aufgewerteten Variante, bei einer anderen Rolle wieder zur normalen. Aufgewertete Boots
+  lassen sich nur mit Mid hinzufügen.
+- **Support:** World Atlas und Runic Compass werden zu Bounty of Worlds, bei einer anderen Rolle wieder zu World Atlas;
+  eine gewählte Endstufe bleibt. Ohne Champion stellt ein Support-Item die Rolle von selbst auf Support.
 - **Jungle:** Nur dann lässt sich ein Jungle-Pet (Scorchclaw Pup, Gustwalker Hatchling, Mosstomper Seedling) in den
   Build legen, höchstens eins. Es kommt nie von selbst hinein, weil es sich im Spielverlauf auflöst und den Platz
-  freigibt. Geht „Jungle“ aus, auch weil die Rolle nicht mehr Jungle ist, wird das Pet entfernt.
+  freigibt. Bei einer anderen Rolle wird das Pet entfernt.
 
 ## Champion und Rolle
 
-Über dem Build lässt sich der Champion wählen, auf den der Build angewendet wird. Seine Rolle (von Hand gewählt, sonst
-die häufigste Rolle aus bereits geladener, notfalls älterer Statistik; es wird dafür nichts abgerufen) stellt den
-passenden Schalter ein. Bleibt die Rolle unbekannt, gehen alle Schalter aus. „In Build-Rechner“ bei einer Runenseite
-im Champions-Tab übernimmt auch den Champion, „Champion entfernen“ neben „Leeren“ setzt ihn zurück; beide Knöpfe und die Auswahl „Kein Champion“ stellen alle
-Rollen-Schalter auf aus. Mit Champion
-lassen sich Support-Items nur in der Rolle Support hinzufügen, bei einer anderen Rolle werden sie entfernt.
+Über dem Build lässt sich der Champion wählen, auf den der Build angewendet wird, daneben die Rolle. Mit Champion gilt
+„Auto“ (die häufigste Rolle aus bereits geladener, notfalls älterer Statistik; es wird dafür nichts abgerufen) oder
+eine von Hand gewählte Rolle, die auch im Champions-Tab gilt. Bleibt die Rolle unbekannt, wirkt sie wie Top. Ohne
+Champion wählt das Feld die Rolle direkt („Top / keine Rolle“, Jungle, Mid, ADC, Support). „In Build-Rechner“ bei
+einer Runenseite im Champions-Tab übernimmt auch den Champion, „Champion entfernen“ neben „Leeren“ setzt ihn zurück;
+beide Knöpfe und die Auswahl „Kein Champion“ stellen die Rolle auf „Top / keine Rolle“. Mit Champion lassen sich
+Support-Items nur in der Rolle Support hinzufügen, bei einer anderen Rolle werden sie entfernt.
 
 ## Baupfad, Goldwert und Goldeffizienz
 

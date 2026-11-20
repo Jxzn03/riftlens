@@ -546,7 +546,6 @@ table.data.compact td { padding: 3px 10px 3px 0; font-size: 12.5px; }
 .build-slot:not(.filled) { background: none; cursor: pointer; transition: border-color var(--ease), color var(--ease); }
 .build-slot:not(.filled):hover { border-color: var(--accent); color: var(--accent); }
 .build-slot.boots.filled { border-color: var(--gold, var(--line-2)); }
-.build-modes { display: flex; flex-direction: column; gap: 10px; }
 .build-champion {display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .build-champion .icon-link img { border-radius: 6px; display: block; }
 .build-champion-empty { width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; border-radius: 6px; border: 1px dashed var(--line-2); color: var(--text-3); }
@@ -1085,12 +1084,10 @@ button.tag.fearless:hover, button.tag.fearless:focus-visible { background: color
 .item-passive strong { color: var(--text); font-weight: 600; }
 .passive-cd { color: var(--text-3); font-size: 12px; }
 
-/* Nur-Icon-Variante des MenuButton (drei Punkte), z. B. Rollen-Modus im Build-Rechner */
+/* Nur-Icon-Variante des MenuButton (ohne label, z. B. drei Punkte) */
 .menu-trigger.icon-only { padding: 0 6px; }
 .menu-trigger.icon-only.open { color: var(--accent); }
 .menu-dot { position: absolute; top: 3px; right: 3px; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
-.build-mode-menu .menu-panel { width: 190px; padding: 10px 12px; }
-.menu-title { font-size: 11.5px; font-weight: 600; color: var(--text-3); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 8px; }
 .cost-analysis.no-tree { margin-top: 0; }
 
 /* Stats-Tabellen der Champions-Übersicht: Pfeil unter der Tabelle zeigt alle Werte */

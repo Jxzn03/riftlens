@@ -145,8 +145,8 @@ export function MenuButton({ icon, label, badge = 0, title, tip, children, cls =
   </div>`;
 }
 
-export function Select({ value, onChange, options, label, cls = '' }) {
-  return html`<select class=${`select ${cls}`} value=${value} aria-label=${label} onChange=${(e) => onChange(e.currentTarget.value)}>
+export function Select({ value, onChange, options, label, cls = '', tip }) {
+  return html`<select class=${`select ${cls}`} value=${value} aria-label=${label} data-tip=${tip} onChange=${(e) => onChange(e.currentTarget.value)}>
     ${options.map((o) => html`<option key=${o.value} value=${o.value}>${o.label}</option>`)}
   </select>`;
 }
