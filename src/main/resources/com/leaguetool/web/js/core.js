@@ -455,13 +455,14 @@ function itemForMode(data, mode, id) {
   return (mode === 'support' ? supportUpgrade(data, boots) : supportDowngrade(data, boots)) ?? boots;
 }
 
-/** Modus nach dem Hinzufügen: aufgewertete Boots schalten Mid ein, ein Support-Item Support. */
+/** Modus nach dem Hinzufügen: ein Support-Item schaltet Support ein (aufgewertete Boots gibt es nur mit Mid). */
 function modeAfterAdding(state, item) {
-  if (state.data && item && bootsDowngrade(state.data, item.id) !== null) {
-    return 'mid';
-  }
   return isSupportItem(item) ? 'support' : state.buildMode;
 }
+
+/** Aufgewertete Boots (Stufe 3) nur im Modus Mid, egal ob von der Rolle oder von Hand eingeschaltet. */
+export const upgradedBootsLocked = (state, item) => Boolean(state.data && item)
+  && state.buildMode !== 'mid' && bootsDowngrade(state.data, item.id) !== null;
 
 /** Mit Build-Champion nur als Support Support-Items (unbekannte Rolle zählt nicht als Support); ohne Champion frei. */
 export const supportLocked = (state) => Boolean(state.buildChampion) && state.buildRole !== 'UTILITY';
@@ -478,7 +479,7 @@ export function canAddToBuild(state, item) {
   if ((isBoots(item) && has(isBoots)) || (isSupportItem(item) && has(isSupportItem))) {
     return false;
   }
-  if (isSupportItem(item) && supportLocked(state)) {
+  if ((isSupportItem(item) && supportLocked(state)) || upgradedBootsLocked(state, item)) {
     return false;
   }
   if (isJunglePet(item)) {

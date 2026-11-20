@@ -2,7 +2,7 @@
 import { html, useMemo, useEffect, useState, useRef } from '/vendor/htm-preact.js';
 import {
   useStore, useViewState, useFetch, select, go, normalize, sortRows, addToBuild, removeFromBuild, moveInBuild, store,
-  MAX_BUILD, runePageRunes, useBuildItems, canAddToBuild, setBuildMode, isBoots, isJunglePet, isSupportItem, supportLocked, api, useStatsUrl, useChampionRole,
+  MAX_BUILD, runePageRunes, useBuildItems, canAddToBuild, setBuildMode, isBoots, isJunglePet, isSupportItem, supportLocked, upgradedBootsLocked, api, useStatsUrl, useChampionRole,
   applyBuildRole, BUILD_ROLES, BUILD_MODES,
 } from './core.js';
 import {
@@ -203,7 +203,7 @@ export function ItemsView({ id }) {
 
 const MODE_TIPS = {
   adc: 'ADC: 6 normale Items, Boots auf einem festen 7. Platz',
-  mid: 'Mid: Boots aufgewertet; geht an, wenn aufgewertete Boots dazukommen',
+  mid: 'Mid: Boots aufgewertet; aufgewertete Boots gibt es nur hier',
   support: 'Support: World Atlas und Runic Compass werden zu Bounty of Worlds; geht an, wenn ein Support-Item dazukommt',
   jungle: 'Jungle: erlaubt ein Jungle-Pet im Build (kommt nicht von selbst hinein); beim Ausschalten wird es entfernt',
 };
@@ -701,7 +701,8 @@ function ItemDetail({ item, data }) {
   const notBuildable = item.tags.includes('Trinket') || item.tags.includes('Consumable');
   const inBuild = useStore((s) => item.completed && s.build.concat(s.buildBoots ?? []).includes(item.id));
   const supLocked = useStore((s) => isSupportItem(item) && supportLocked(s));
-  const addLabel = notBuildable ? 'Nicht für den Build' : inBuild ? 'Schon im Build' : supLocked ? 'Nur als Support' : petLocked ? 'Nur mit „Jungle“' : toBootsSlot ? 'Auf den Boots-Platz' : 'Zum Build hinzufügen';
+  const bootsLocked = useStore((s) => upgradedBootsLocked(s, item));
+  const addLabel = notBuildable ? 'Nicht für den Build' : inBuild ? 'Schon im Build' : supLocked ? 'Nur als Support' : bootsLocked ? 'Nur mit „Mid“' : petLocked ? 'Nur mit „Jungle“' : toBootsSlot ? 'Auf den Boots-Platz' : 'Zum Build hinzufügen';
   // Bei SR-Items keine Modus-Varianten verlinken (Data Dragon listet sie mit im Baupfad).
   const linked = (ids) => (item.rift ? ids.filter((id) => (data.itemById.get(id) || {}).rift) : ids);
   const from = linked(item.from);

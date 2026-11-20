@@ -27,8 +27,8 @@ einer davon ist an:
 
 - **ADC:** 6 normale Items, Boots liegen auf einem festen 7. Platz und zählen in allen Berechnungen mit. „+“ auf dem
   leeren Boots-Platz öffnet die Auswahl mit den Boots.
-- **Mid:** Boots werden zur aufgewerteten Variante, beim Ausschalten wieder zur normalen. Kommen aufgewertete Boots
-  in den Build, geht „Mid“ von selbst an.
+- **Mid:** Boots werden zur aufgewerteten Variante, beim Ausschalten wieder zur normalen. Aufgewertete Boots lassen
+  sich nur mit „Mid“ hinzufügen (von der Rolle oder von Hand eingeschaltet).
 - **Support:** World Atlas und Runic Compass werden zu Bounty of Worlds, beim Ausschalten wieder zu World Atlas; eine
   gewählte Endstufe bleibt. Kommt ein Support-Item in den Build, geht „Support“ von selbst an.
 - **Jungle:** Nur dann lässt sich ein Jungle-Pet (Scorchclaw Pup, Gustwalker Hatchling, Mosstomper Seedling) in den
