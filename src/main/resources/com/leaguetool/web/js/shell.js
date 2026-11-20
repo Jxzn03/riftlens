@@ -142,10 +142,12 @@ function StatusBar() {
   const status = useStore((s) => s.status);
   const busy = useStore((s) => s.busy);
   const connected = useStore((s) => s.connected);
+  const appVersion = useStore((s) => s.data?.appVersion);
   return html`<footer class="statusbar">
     <span class="status-busy">${busy > 0 ? html`<${Spinner} small />` : null}</span>
     <span class="status-text">${status}</span>
     ${connected ? null : html`<span class="bad">Verbindung zum Programm getrennt</span>`}
+    ${appVersion ? html`<span class="status-version">RiftLens ${appVersion}</span>` : null}
   </footer>`;
 }
 

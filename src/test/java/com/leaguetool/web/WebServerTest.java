@@ -150,6 +150,8 @@ class WebServerTest {
         assertEquals(200, response.statusCode(), response.body());
         JsonNode data = json.readTree(response.body());
         assertEquals(PATCH, data.path("patch").asText());
+        // Programmversion kommt per Resource-Filtering aus der pom.xml, nie als unersetzter Platzhalter.
+        assertTrue(data.path("appVersion").asText().matches("\\d+\\.\\d+\\.\\d+.*"), data.path("appVersion").asText());
         assertEquals(3, data.path("champions").size());
         assertTrue(data.path("items").size() > 0);
         assertTrue(data.path("runeTrees").size() > 0);

@@ -45,6 +45,7 @@ import com.leaguetool.stats.SkillPath;
 import com.leaguetool.stats.StatLine;
 import com.leaguetool.stats.StatRanking;
 import com.leaguetool.stats.WinStats;
+import com.leaguetool.util.AppVersion;
 import com.leaguetool.util.Text;
 
 import java.time.Instant;
@@ -114,6 +115,7 @@ final class Dto {
         List<Item> riftItems = Item.summonersRiftItems(data.items());
         return obj(
                 "version", version,
+                "appVersion", AppVersion.get(),
                 "patch", patch,
                 "offline", data.offline(),
                 "patchChange", patchChange == null ? null : obj("from", patchChange.previous(), "to", patchChange.current(),

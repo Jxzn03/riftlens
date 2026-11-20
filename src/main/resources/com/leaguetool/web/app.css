@@ -256,6 +256,7 @@ button.patch-chip:hover, button.patch-chip.active { border-color: var(--accent);
 }
 .status-busy { width: 14px; display: inline-flex; }
 .status-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; }
+.status-version { flex: none; white-space: nowrap; }
 
 /* Steuerelemente */
 .btn {
