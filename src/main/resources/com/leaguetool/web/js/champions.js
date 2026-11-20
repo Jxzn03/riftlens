@@ -240,13 +240,14 @@ function ChampionDetail({ champion, tab, onTab }) {
 }
 
 /**
- * Zusatzwerte, die eine Stats-Tabelle erst nach Klick auf den Pfeil darunter zeigt (Regeneration, Reichweite,
+ * Zusatzwerte, die eine Stats-Tabelle erst nach Klick auf den Pfeil darunter zeigt (Regeneration, Angriffstempo, Reichweite,
  * Wiki-Zusatzdaten, spezielle Haste, Lebensraub usw.); die Kernwerte stehen immer da.
  */
-const EXTRA_STATS = new Set(['Reichweite', 'Angriffstempo-Ratio', 'Windup', 'Haste Grundfähigkeiten', 'Haste Ultimate',
+const EXTRA_STATS = new Set(['Angriffstempo', 'Reichweite', 'Angriffstempo-Ratio', 'Windup', 'Haste Grundfähigkeiten', 'Haste Ultimate',
   'Haste Immobilisierungen', 'Haste Beschwörerzauber', 'Heil- und Schildstärke', 'Lebensraub', 'Zähigkeit',
   'Verlangsamungsresistenz', 'Eff. Leben (physisch)', 'Eff. Leben (magisch)']);
-const isExtraStat = (row) => EXTRA_STATS.has(row.label) || row.label.includes('Reg. (5 s)');
+// Regeneration je 5 s: „Lebensreg. (5 s)“ ebenso wie „Mana-Reg. (5 s)“ (Groß-/Kleinschreibung egal).
+const isExtraStat = (row) => EXTRA_STATS.has(row.label) || row.label.toLowerCase().includes('reg. (5 s)');
 
 /** Stats-Tabelle mit den Kernwerten; der Pfeil darunter erweitert sie um alle übrigen Werte. */
 function StatTable({ head, rows, cells }) {
