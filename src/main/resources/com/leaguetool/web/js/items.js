@@ -297,7 +297,7 @@ function BuildChampion({ data }) {
         tip=${advancedTips ? ROLE_TIP : undefined} options=${[{ value: '', label: autoLabel }, ...BUILD_ROLES]} />`
       : html`<${Select} label="Rolle für den Build" value=${roleForMode(mode)} onChange=${(role) => setBuildMode(modeForRole(role))}
         tip=${advancedTips ? ROLE_TIP : undefined}
-        options=${[{ value: '', label: 'Top / keine Rolle' }, ...BUILD_ROLES.filter((r) => modeForRole(r.value))]} />`}
+        options=${[{ value: '', label: 'Top' }, ...BUILD_ROLES.filter((r) => modeForRole(r.value))]} />`}
   </div>`;
 }
 

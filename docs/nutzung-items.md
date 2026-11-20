@@ -39,9 +39,9 @@ Build-Rechner ein; Top ändert nichts:
 Über dem Build lässt sich der Champion wählen, auf den der Build angewendet wird, daneben die Rolle. Mit Champion gilt
 „Auto“ (die häufigste Rolle aus bereits geladener, notfalls älterer Statistik; es wird dafür nichts abgerufen) oder
 eine von Hand gewählte Rolle, die auch im Champions-Tab gilt. Bleibt die Rolle unbekannt, wirkt sie wie Top. Ohne
-Champion wählt das Feld die Rolle direkt („Top / keine Rolle“, Jungle, Mid, ADC, Support). „In Build-Rechner“ bei
+Champion wählt das Feld die Rolle direkt (Top, Jungle, Mid, ADC, Support). „In Build-Rechner“ bei
 einer Runenseite im Champions-Tab übernimmt auch den Champion, „Champion entfernen“ neben „Leeren“ setzt ihn zurück;
-beide Knöpfe und die Auswahl „Kein Champion“ stellen die Rolle auf „Top / keine Rolle“. Mit Champion lassen sich
+beide Knöpfe und die Auswahl „Kein Champion“ stellen die Rolle auf Top. Mit Champion lassen sich
 Support-Items nur in der Rolle Support hinzufügen, bei einer anderen Rolle werden sie entfernt.
 
 ## Baupfad, Goldwert und Goldeffizienz
