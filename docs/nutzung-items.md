@@ -5,6 +5,7 @@ Ergänzt [`nutzung.md`](nutzung.md).
 ## Item-Liste
 
 Die Suche findet Items nach Name und Kategorie (z. B. „boots“), ohne auf Groß- und Kleinschreibung zu achten.
+„support“ findet die Support-Items (World Atlas mit allen Stufen und Endstufen).
 „Nur fertige Items“ blendet Boots, Support-Items und Jungle-Pets aus. Die Spalten „Goldwert“ und „Effizienz“ zeigen den
 Goldwert der Stats und die Goldeffizienz (siehe unten; grün ab 100 %). Eine eigene Kategorien-Spalte gibt es nicht,
 sortieren lässt sich nach Kategorie über den Knopf „Kategorie“ (erneut klicken kehrt die Richtung um). Die Spalte

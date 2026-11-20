@@ -18,14 +18,20 @@ const STAT_TAGS = new Set([
   'MagicPenetration', 'NonbootsMovement', 'Tenacity',
 ]);
 // Korrekturen an den Data-Dragon-Kategorien (nur Anzeige, Suche und Filter): falsch zugeordnete Tags entfernen,
-// „Jungle“ nur für die Jungle-Pets, „Stealth“ entfällt (Vision reicht), lesbare Namen.
-const CATEGORY_LABELS = { OnHit: 'On-Hit', GoldPer: 'Gold-Per' };
-const WRONG_TAGS = { 4646: ['GoldPer'], 2031: ['Active'], 6697: ['Active'], 6699: ['Active'] }; // Stormsurge, Refillable Potion, Hubris, Voltaic Cyclosword
-const categoriesOf = (item) => item.tags.filter((t) => !STAT_TAGS.has(t) && t !== 'Stealth'
-  && !(WRONG_TAGS[item.id] || []).includes(t)
-  && !(t === 'Jungle' && !isJunglePet(item))
-  && !(t === 'Active' && item.tags.includes('Trinket')))
-  .map((t) => CATEGORY_LABELS[t] || t);
+// „Jungle“ nur für die Jungle-Pets, „Stealth“ entfällt (Vision reicht), lesbare Namen. „GoldPer“ wird zu „Support“,
+// aber nur für die Support-Items selbst (isSupportItem): Data Dragon vergibt den Tag auch an Stormsurge und Your Cut.
+const CATEGORY_LABELS = { OnHit: 'On-Hit', GoldPer: 'Support' };
+const WRONG_TAGS = { 2031: ['Active'], 6697: ['Active'], 6699: ['Active'] }; // Refillable Potion, Hubris, Voltaic Cyclosword
+const categoriesOf = (item) => {
+  const categories = item.tags.filter((t) => !STAT_TAGS.has(t) && t !== 'Stealth'
+    && !(WRONG_TAGS[item.id] || []).includes(t)
+    && !(t === 'GoldPer' && !isSupportItem(item))
+    && !(t === 'Jungle' && !isJunglePet(item))
+    && !(t === 'Active' && item.tags.includes('Trinket')))
+    .map((t) => CATEGORY_LABELS[t] || t);
+  // Support-Items ohne den Tag (falls Data Dragon ihn einmal weglässt) bekommen die Kategorie trotzdem.
+  return isSupportItem(item) && !categories.includes('Support') ? [...categories, 'Support'] : categories;
+};
 
 // Stat-Namen in der Data-Dragon-Sprache (Bootstrap `statNames`, Schlüssel = StatType); Kurzname für die Tabelle.
 const statName = (names, s) => (names && names[s.key]) || { label: s.label, short: s.label };
