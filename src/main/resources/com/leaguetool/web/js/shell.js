@@ -380,7 +380,7 @@ function SettingsDialog() {
         lolalyticsEnabled: form.lolalyticsEnabled,
         riotEnabled: form.riotEnabled, platform: form.platform, lcuFolder: form.lcuFolder || '',
         draftArchiveLimit: Number(form.draftArchiveLimit), fearlessSeriesLimit: Number(form.fearlessSeriesLimit),
-        updateCheck: form.updateCheck,
+        updateCheck: form.updateCheck, updatePrerelease: form.updatePrerelease,
       };
       if (key.trim() !== '' || form.clearKey) {
         body.riotApiKey = key.trim();
@@ -415,6 +415,8 @@ function SettingsDialog() {
           options=${form.fearlessSeriesLimits.map((n) => ({ value: String(n), label: `Letzte ${n} beendete Serien behalten${n === form.fearlessSeriesDefault ? ' (Standard)' : ''}` }))} /></label>
       <div class="divider"></div>
       <${Switch} checked=${form.updateCheck} onChange=${(updateCheck) => set({ updateCheck })}>Beim Start nach Updates suchen (GitHub-Releases)<//>
+      <${Switch} checked=${form.updatePrerelease} onChange=${(updatePrerelease) => set({ updatePrerelease })}
+        tip="Testversionen sind noch nicht für die allgemeine Nutzung gedacht. Ausschalten stuft eine installierte Testversion nicht zurück, das nächste stabile Release wird dann normal angeboten.">Auch Testversionen (Pre-Releases) installieren<//>
       <${UpdateSetting} />
       <div class="divider"></div>
       <${Switch} checked=${form.riotEnabled} onChange=${(riotEnabled) => set({ riotEnabled })}>Riot-API verwenden (Summoner-Abfrage, Verifizierung)<//>

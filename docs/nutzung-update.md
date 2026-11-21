@@ -31,6 +31,9 @@ Ein vorhandener Ordner `<ordner>.old`, der nicht von RiftLens stammt, wird nicht
 
 ## Einstellungen
 - „Beim Start nach Updates suchen (GitHub-Releases)“: Standard an. Aus = keine Anfrage beim Start.
+- „Auch Testversionen (Pre-Releases) installieren“: Standard aus = nur stabile Releases. An = auch Testversionen
+  werden angeboten und installiert. Beim Umschalten sucht RiftLens sofort neu. Ausschalten stuft eine installierte
+  Testversion nicht zurück, das nächste stabile Release wird dann normal angeboten.
 - „Jetzt nach Updates suchen“: Suche von Hand, auch wenn die Suche beim Start aus ist.
 - Im Offline-Modus wird nicht gesucht und nichts geladen.
 

@@ -621,7 +621,7 @@ final class ApiRoutes {
                 "draftArchiveDefault", AppSettings.DRAFT_ARCHIVE_DEFAULT,
                 "fearlessSeriesLimit", s.fearlessSeriesLimit(), "fearlessSeriesLimits", AppSettings.FEARLESS_SERIES_LIMITS,
                 "fearlessSeriesDefault", AppSettings.FEARLESS_SERIES_DEFAULT,
-                "updateCheck", s.updateCheckEnabled(),
+                "updateCheck", s.updateCheckEnabled(), "updatePrerelease", s.updatePrereleaseEnabled(),
                 "lcuDetected", ctx.lcuLocator().detectedInstallFolder().map(Path::toString).orElse(null),
                 "file", s.file().toString());
     }
@@ -663,8 +663,16 @@ final class ApiRoutes {
         if (n.path("updateCheck").isBoolean()) {
             s.setUpdateCheckEnabled(n.path("updateCheck").asBoolean());
         }
+        boolean channelChanged = n.path("updatePrerelease").isBoolean()
+                && n.path("updatePrerelease").asBoolean() != s.updatePrereleaseEnabled();
+        if (channelChanged) {
+            s.setUpdatePrereleaseEnabled(n.path("updatePrerelease").asBoolean());
+        }
         s.save();
         ctx.updates().settingsChanged();
+        if (channelChanged && !s.offline()) {
+            ctx.updates().check(); // Ergebnis des anderen Kanals (stabil bzw. Pre-Release) sofort ersetzen
+        }
         ctx.rebuildServices();
         ctx.reload();
         return settings();

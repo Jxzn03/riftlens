@@ -145,6 +145,20 @@ class WebServerTest {
     }
 
     @Test
+    void preReleaseChannelIsOffByDefaultAndSwitchable() throws Exception {
+        assertFalse(json.readTree(get("/api/settings", true).body()).path("updatePrerelease").asBoolean(true));
+        HttpResponse<String> saved = send("POST", "/api/settings", "{\"offline\":true,\"updatePrerelease\":true}");
+        assertEquals(200, saved.statusCode(), saved.body());
+        assertTrue(json.readTree(saved.body()).path("updatePrerelease").asBoolean());
+        assertTrue(AppSettings.load(home).updatePrereleaseEnabled());
+        // Ohne Feld (ältere Oberfläche) bleibt der Kanal unverändert.
+        send("POST", "/api/settings", "{\"offline\":true}");
+        assertTrue(AppSettings.load(home).updatePrereleaseEnabled());
+        send("POST", "/api/settings", "{\"offline\":true,\"updatePrerelease\":false}");
+        assertFalse(AppSettings.load(home).updatePrereleaseEnabled());
+    }
+
+    @Test
     void releaseNotesOfAFreshInstallCountAsSeenAndSeenIsStored() throws Exception {
         // setUp legt die Einstellungsdatei erst nach dem Laden an: Erststart einer Neuinstallation, kein Popup.
         HttpResponse<String> response = get("/api/release-notes", true);

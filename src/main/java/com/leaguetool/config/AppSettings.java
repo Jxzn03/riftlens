@@ -164,8 +164,8 @@ public final class AppSettings {
     }
 
     /**
-     * Testschalter: Update-Suche berücksichtigt auch Pre-Releases. Nur von Hand in {@code settings.properties}
-     * ({@code update.prerelease=true}), keine Oberfläche. Standard: aus.
+     * Update-Suche berücksichtigt auch Pre-Releases (Testversionen). Schalter in den Einstellungen
+     * ({@code update.prerelease}). Standard: aus, nur stabile Releases.
      */
     public synchronized boolean updatePrereleaseEnabled() {
         return Boolean.parseBoolean(props.getProperty("update.prerelease", "false"));
