@@ -80,8 +80,8 @@ Die Software wird ohne Gewährleistung bereitgestellt (siehe [Lizenz](LICENSE)).
 Voraussetzung: JDK 21 oder neuer. Maven wird vom Wrapper selbst geladen.
 
 ```powershell
-.\start-modern.cmd             # bauen und starten
-.\start-modern.cmd --rebuild   # nach Änderungen neu bauen (App vorher schließen)
+.\riftlens-build.cmd             # bauen und starten
+.\riftlens-build.cmd --rebuild   # nach Änderungen neu bauen (App vorher schließen)
 .\mvnw.cmd clean verify        # bauen und alle Tests ausführen
 ```
 

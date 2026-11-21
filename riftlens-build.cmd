@@ -1,6 +1,6 @@
 @echo off
 rem Startet die App in einem eigenen Prozess.
-rem "start-modern.cmd --rebuild" baut dist\league-tool-modern.jar neu.
+rem "riftlens-build.cmd --rebuild" baut dist\league-tool-modern.jar neu.
 rem "--no-launch" (an beliebiger Stelle) baut nur, ohne die App zu starten.
 setlocal
 cd /d "%~dp0"

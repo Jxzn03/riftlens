@@ -1,0 +1,141 @@
+[
+  {
+    "version": "2.1.1",
+    "date": "2026-11-21",
+    "title": "Versionshinweise",
+    "sections": [
+      {
+        "kind": "new",
+        "items": [
+          "Versionshinweise: Nach einem Update zeigt RiftLens einmal die Neuerungen",
+          "Versionshinweise: Klick auf „aktuell“ unten rechts oder in den Einstellungen zeigt alle Versionen"
+        ]
+      }
+    ]
+  },
+  {
+    "version": "2.1.0",
+    "date": "2026-11-20",
+    "title": "Auto-Update",
+    "sections": [
+      {
+        "kind": "new",
+        "items": [
+          "Update: Suche beim Start (abschaltbar) oder per Klick auf die Version unten rechts",
+          "Update: Ein Klick installiert die neue Version und startet RiftLens neu, bei Fehlern kommt die alte zurück",
+          "Update: Nur digital signierte Pakete werden installiert"
+        ]
+      },
+      {
+        "kind": "improved",
+        "items": [
+          "Einstellungen, Cache, Draft-Archiv und Fearless-Serien bleiben beim Update erhalten"
+        ]
+      }
+    ]
+  },
+  {
+    "version": "2.0.1",
+    "date": "2026-11-20",
+    "title": "Bugfixes & App-Version",
+    "sections": [
+      {
+        "kind": "new",
+        "items": [
+          "Statusleiste: Programmversion unten rechts"
+        ]
+      },
+      {
+        "kind": "improved",
+        "items": [
+          "Build-Rechner: Rolle auch ohne Champion wählbar (zeigt dann „Top“)",
+          "Items: Kategorie „Support“ statt „Gold-Per“"
+        ]
+      },
+      {
+        "kind": "fixed",
+        "items": [
+          "Statistik: Hauptlane wird mit Lane abgefragt, Cache wird beim Start aufgeräumt"
+        ]
+      }
+    ]
+  },
+  {
+    "version": "2.0.0",
+    "date": "2026-11-20",
+    "title": "Patch-Notes, Items-Tab & Build-Rechner",
+    "sections": [
+      {
+        "kind": "new",
+        "items": [
+          "Patch-Notes: Änderungen aus dem LoL-Wiki mit Buff/Nerf-Kennzeichnung, die letzten 10 Patches zur Auswahl",
+          "Champions: Patch-Historie und Änderungen des aktuellen Patches je Champion",
+          "Items: Tabelle mit Stat-Filter, Goldwert und Goldeffizienz",
+          "Items: Baupfad als Baum wie im Spiel, Abklingzeiten aus dem Wiki",
+          "Build-Rechner: Items per „+“ oder Drag & Drop, Rollen-Modi ADC, Mid, Support und Jungle"
+        ]
+      },
+      {
+        "kind": "improved",
+        "items": [
+          "Champions: Basiswerte aus dem LoL-Wiki, „Werte mit Build“ vollständig",
+          "Champions: Stats-Tabellen zeigen zuerst die Kernwerte",
+          "Draft: Modus-Kacheln und Menü „Draft-Optionen“ statt Schalterleiste",
+          "Oberfläche: Statusleiste aufgeräumt, viele Layout-Feinschliffe"
+        ]
+      }
+    ]
+  },
+  {
+    "version": "1.3.0",
+    "date": "2026-11-19",
+    "title": "Leistung & Cache",
+    "sections": [
+      {
+        "kind": "improved",
+        "items": [
+          "Draft: Analyse schneller, das letzte Ergebnis erscheint beim Zurückwechseln sofort",
+          "Champions: Statistik aus dem Cache sofort, ältere Daten werden im Hintergrund erneuert",
+          "Champions: Core-Build mit drei Builds plus meistgespieltem, sechs Boots in zwei Spalten",
+          "Summoner: Match-Verlauf zeigt zuerst 50 Spiele, die Auswertung zählt weiter alle"
+        ]
+      }
+    ]
+  },
+  {
+    "version": "1.2.0",
+    "date": "2026-11-18",
+    "title": "Fearless-Serien & Draft-Archiv",
+    "sections": [
+      {
+        "kind": "new",
+        "items": [
+          "Fearless: Serien (Bo3, Bo5, offen), Champions früherer Games sind für beide Teams gesperrt",
+          "Fearless: Archiv mit Games laden, umsortieren, Ergebnis und Rollen ändern, Papierkorb"
+        ]
+      },
+      {
+        "kind": "improved",
+        "items": [
+          "Archiv: Teams nach Rollen sortiert, Rollen gespeicherter Drafts änderbar",
+          "Archiv: standardmäßig 100 Drafts (bis 1000 wählbar)",
+          "Draft: „Beste Picks“ beginnt immer beim eigenen Team"
+        ]
+      }
+    ]
+  },
+  {
+    "version": "1.0.0",
+    "date": "2026-11-15",
+    "title": "Erste Version",
+    "sections": [
+      {
+        "kind": "new",
+        "items": [
+          "Tabs Draft, Champions, Items, Runen, Abilities und Summoner",
+          "Lizenzen und Quellenangaben (Riot Games, Lolalytics, LoL-Wiki) in den Einstellungen"
+        ]
+      }
+    ]
+  }
+]

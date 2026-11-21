@@ -1,6 +1,6 @@
 // Start der Oberfläche.
 import { html, render } from '/vendor/htm-preact.js';
-import { store, loadData, loadUiState, startRouter, setUpdate, loadUpdate } from './core.js';
+import { store, loadData, loadUiState, startRouter, setUpdate, loadUpdate, showNewReleaseNotes } from './core.js';
 import { installTooltips } from './ui.js';
 import { App } from './shell.js';
 
@@ -40,6 +40,7 @@ async function start() {
   connectEvents();
   loadData();
   loadUpdate();
+  showNewReleaseNotes();
 }
 
 start();

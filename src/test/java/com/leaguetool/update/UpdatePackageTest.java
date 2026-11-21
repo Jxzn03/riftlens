@@ -157,7 +157,7 @@ class UpdatePackageTest {
         Files.createDirectories(dir.resolve("runtime"));
         assertEquals(dir.toAbsolutePath().normalize(), UpdateInstaller.installDirOf(jar).orElseThrow());
         Path loose = Files.write(tmp.resolve("league-tool-modern.jar"), appJar("2.0.1"));
-        assertTrue(UpdateInstaller.installDirOf(loose).isEmpty(), "loses Jar (start-modern.cmd) ist keine Installation");
+        assertTrue(UpdateInstaller.installDirOf(loose).isEmpty(), "loses Jar (riftlens-build.cmd) ist keine Installation");
     }
 
     @Test

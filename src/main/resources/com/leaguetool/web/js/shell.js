@@ -1,7 +1,7 @@
 // App-Rahmen: Navigation, Filterleiste, Schnellsuche, Dialoge, Statuszeile.
 import { html, useState, useEffect, useMemo, useRef } from '/vendor/htm-preact.js';
 import { store, useStore, useFetch, useStatsUrl, api, go, normalize, percent, toast, setPref, clearFavorites, TIERS, gamePatch,
-  checkUpdate, installUpdate, updateLabel } from './core.js';
+  checkUpdate, installUpdate, updateLabel, showReleaseHistory, closeReleaseNotes } from './core.js';
 import { Icon, Img, Button, Select, Segmented, Switch, Spinner, Loading, ErrorNote, ConfirmHost, confirmDialog } from './ui.js';
 import { ChampionsView } from './champions.js';
 import { ItemsView, BuildRoleSync } from './items.js';
@@ -63,6 +63,7 @@ export function App() {
     </div>
     ${palette ? html`<${Palette} data=${data} />` : null}
     ${dialog === 'settings' ? html`<${SettingsDialog} />` : null}
+    <${ReleaseNotesDialog} />
     <${Toast} />
     <${ConfirmHost} />
     <${BuildRoleSync} />
@@ -182,7 +183,8 @@ function UpdateStatus({ version }) {
       <${Icon} name="download" size=${13} />${update.latest.version} auf GitHub
     </a>`;
   } else if (update?.latest && !update.error) {
-    extra = html`<span class="status-update latest" data-tip=${updateLabel(update)}><${Icon} name="ok" size=${12} />aktuell</span>`;
+    extra = html`<button type="button" class="status-update latest" onClick=${showReleaseHistory}
+      data-tip=${`${updateLabel(update)}. Klick zeigt die Versionshinweise.`}><${Icon} name="ok" size=${12} />aktuell</button>`;
   }
   return html`<span class="status-version-group">
     <button type="button" class="status-version" disabled=${busy} onClick=${checkUpdate}
@@ -207,8 +209,49 @@ function UpdateSetting() {
       ${!busy && update?.available && update.canInstall ? html`<${Button} kind="primary" icon="download" onClick=${() => installUpdate(confirmDialog)}>Aktualisieren<//>` : null}
       ${!busy && update?.available && !update.canInstall ? html`<a class="btn" href=${update.latest.url} target="_blank" rel="noopener"><${Icon} name="download" size=${16} /><span>Auf GitHub öffnen</span></a>` : null}
       <${Button} icon="refresh" disabled=${busy} onClick=${checkUpdate}>Jetzt nach Updates suchen<//>
+      <${Button} icon="list" onClick=${showReleaseHistory}>Versionshinweise<//>
     </span>
   </div>`;
+}
+
+const NOTE_KINDS = { new: 'Neu', improved: 'Verbessert', fixed: 'Behoben' };
+
+/** „Bereich: Text“ → Bereich fett; ohne kurzen Bereich vorn bleibt der Text, wie er ist. */
+function NoteItem({ text }) {
+  const colon = text.indexOf(': ');
+  return colon > 0 && colon <= 24
+    ? html`<li><strong>${text.slice(0, colon)}:</strong> ${text.slice(colon + 2)}</li>`
+    : html`<li>${text}</li>`;
+}
+
+/**
+ * Versionshinweise der App: nach einem Update als Popup mit den neuen Versionen (beim Schließen gelten sie als gezeigt),
+ * über „aktuell“ in der Statusleiste oder die Einstellungen als Verlauf aller Versionen.
+ */
+function ReleaseNotesDialog() {
+  const notes = useStore((s) => s.releaseNotes);
+  if (!notes) {
+    return null;
+  }
+  const fresh = notes.mode === 'new';
+  const title = fresh ? `Neu in RiftLens ${notes.current}` : 'Versionshinweise';
+  const footer = html`${fresh ? html`<${Button} kind="ghost" icon="list" onClick=${showReleaseHistory}>Alle Versionen<//>` : null}
+    <${Button} kind="primary" onClick=${closeReleaseNotes}>${fresh ? 'Los geht’s' : 'Schließen'}<//>`;
+  return html`<${Modal} key=${notes.mode} title=${title} onClose=${closeReleaseNotes} footer=${footer} cls="release-notes">
+    ${notes.releases.length === 0 ? html`<p class="muted">Keine Versionshinweise vorhanden.</p>` : null}
+    ${notes.releases.map((r) => html`<section key=${r.version} class="release">
+      <header class="release-head">
+        <h3>RiftLens ${r.version}</h3>
+        ${r.version === notes.current ? html`<span class="release-installed">installiert</span>` : null}
+        <span class="release-title">${r.title}</span>
+        <time class="muted small">${new Date(r.date).toLocaleDateString('de-DE', { day: 'numeric', month: 'short', year: 'numeric' })}</time>
+      </header>
+      ${r.sections.map((s) => html`<div key=${s.kind} class=${`release-section ${s.kind}`}>
+        <span class="release-kind">${NOTE_KINDS[s.kind] || s.kind}</span>
+        <ul>${s.items.map((t, i) => html`<${NoteItem} key=${i} text=${t} />`)}</ul>
+      </div>`)}
+    </section>`)}
+  <//>`;
 }
 
 function Toast() {
@@ -277,7 +320,7 @@ function Palette({ data }) {
 
 // ------------------------------------------------------------------ Dialoge
 
-function Modal({ title, children, onClose, footer }) {
+function Modal({ title, children, onClose, footer, cls = '' }) {
   useEffect(() => {
     const onKey = (e) => {
       if (e.key === 'Escape') {
@@ -288,7 +331,7 @@ function Modal({ title, children, onClose, footer }) {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
   return html`<div class="overlay" onMouseDown=${(e) => e.target === e.currentTarget && onClose()}>
-    <div class="modal" role="dialog" aria-modal="true" aria-label=${title}>
+    <div class=${`modal ${cls}`} role="dialog" aria-modal="true" aria-label=${title}>
       <header class="modal-head"><h2>${title}</h2><${Button} icon="x" kind="icon" title="Schließen" onClick=${onClose} /></header>
       <div class="modal-body">${children}</div>
       ${footer ? html`<footer class="modal-foot">${footer}</footer>` : null}

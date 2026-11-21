@@ -268,6 +268,23 @@ button.patch-chip:hover, button.patch-chip.active { border-color: var(--accent);
   background: var(--accent); color: var(--accent-ink); text-decoration: none;
 }
 .status-update.available:hover { filter: brightness(1.08); }
+button.status-update.latest { background: none; border: 0; padding: 0; cursor: pointer; }
+button.status-update.latest:hover { text-decoration: underline; }
+
+/* Versionshinweise der App (Popup nach Update, Verlauf) */
+.modal.release-notes { width: min(600px, 100%); }
+.release + .release { border-top: 1px solid var(--line); padding-top: 12px; }
+.release-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 8px; margin-bottom: 6px; }
+.release-head h3 { font-size: 15px; font-weight: 700; }
+.release-title { color: var(--text-2); }
+.release-head time { margin-left: auto; }
+.release-installed { font-size: 11px; font-weight: 600; padding: 1px 6px; border-radius: 5px; background: var(--accent-soft); color: var(--accent); }
+.release-section { display: grid; grid-template-columns: 86px 1fr; gap: 8px; padding: 3px 0; }
+.release-kind { align-self: start; margin-top: 2px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; text-align: center; padding: 2px 0; border-radius: 5px; }
+.release-section.new .release-kind { color: var(--good); background: color-mix(in srgb, var(--good) 14%, transparent); }
+.release-section.improved .release-kind { color: var(--accent-2); background: color-mix(in srgb, var(--accent-2) 14%, transparent); }
+.release-section.fixed .release-kind { color: var(--warn); background: color-mix(in srgb, var(--warn) 14%, transparent); }
+.release-section ul { margin: 0; padding-left: 16px; display: flex; flex-direction: column; gap: 3px; line-height: 1.4; }
 .setting-actions { display: inline-flex; flex-wrap: wrap; gap: 8px; }
 
 /* Steuerelemente */

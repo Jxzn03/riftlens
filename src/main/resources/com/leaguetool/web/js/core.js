@@ -49,6 +49,7 @@ export const store = createStore({
   connected: true,
   toast: null,
   update: null, // Stand der Update-Prüfung (`/api/update`)
+  releaseNotes: null, // geöffnete Versionshinweise: { mode: 'new' | 'history', current, releases }
 });
 
 /** Abonniert einen Ausschnitt des Stores; rendert nur neu, wenn sich dieser Ausschnitt ändert. */
@@ -323,6 +324,40 @@ export function setUpdate(update) {
     }
   } else if (previous?.phase !== 'idle' && update.phase === 'idle' && update.errorKind === 'install' && previous?.error !== update.error) {
     toast(update.error, 'error');
+  }
+}
+
+// ------------------------------------------------------------------ Versionshinweise
+
+/**
+ * Zeigt beim Start einmal die Hinweise der Versionen, die seit dem letzten Start neu sind (nach einem Update). Wird
+ * vor den Icons angefragt, sonst wartet die Anfrage hinter ihnen; der Dialog erscheint mit der fertigen Oberfläche.
+ */
+export function showNewReleaseNotes() {
+  return api.get('/api/release-notes').then((notes) => {
+    const fresh = notes.releases.filter((r) => notes.unseen.includes(r.version));
+    if (fresh.length > 0) {
+      store.set({ releaseNotes: { mode: 'new', current: notes.current, releases: fresh } });
+    }
+  }).catch(() => {});
+}
+
+/** Öffnet den Verlauf aller Versionshinweise (aus dem Popup heraus gelten dessen Hinweise als gezeigt). */
+export function showReleaseHistory() {
+  if (store.get().releaseNotes?.mode === 'new') {
+    api.post('/api/release-notes/seen').catch(() => {});
+  }
+  return api.get('/api/release-notes').then((notes) => {
+    store.set({ releaseNotes: { mode: 'history', current: notes.current, releases: notes.releases } });
+  }).catch((e) => toast(`Versionshinweise nicht verfügbar: ${e.message}`, 'error'));
+}
+
+/** Schließt die Versionshinweise; nach dem Popup gelten sie als gezeigt. */
+export function closeReleaseNotes() {
+  const open = store.get().releaseNotes;
+  store.set({ releaseNotes: null });
+  if (open?.mode === 'new') {
+    api.post('/api/release-notes/seen').catch(() => {});
   }
 }
 

@@ -145,6 +145,25 @@ class WebServerTest {
     }
 
     @Test
+    void releaseNotesOfAFreshInstallCountAsSeenAndSeenIsStored() throws Exception {
+        // setUp legt die Einstellungsdatei erst nach dem Laden an: Erststart einer Neuinstallation, kein Popup.
+        HttpResponse<String> response = get("/api/release-notes", true);
+        assertEquals(200, response.statusCode(), response.body());
+        JsonNode notes = json.readTree(response.body());
+        String current = notes.path("current").asText();
+        assertTrue(notes.path("releases").size() > 0);
+        assertEquals(0, notes.path("unseen").size());
+        assertEquals(current, AppSettings.load(home).releaseNotesSeen());
+
+        settings.setReleaseNotesSeen("1.0.0");
+        assertTrue(json.readTree(get("/api/release-notes", true).body()).path("unseen").size() > 0);
+        assertEquals(200, send("POST", "/api/release-notes/seen", null).statusCode());
+        assertEquals(current, AppSettings.load(home).releaseNotesSeen());
+        assertEquals(0, json.readTree(get("/api/release-notes", true).body()).path("unseen").size());
+        assertEquals(404, send("POST", "/api/release-notes/other", null).statusCode());
+    }
+
+    @Test
     void bootstrapDeliversGameData() throws Exception {
         HttpResponse<String> response = get("/api/bootstrap", true);
         assertEquals(200, response.statusCode(), response.body());

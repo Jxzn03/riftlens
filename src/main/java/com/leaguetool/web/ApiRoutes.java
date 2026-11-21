@@ -32,6 +32,8 @@ import com.leaguetool.model.Champion;
 import com.leaguetool.model.ChampionDetail;
 import com.leaguetool.model.Item;
 import com.leaguetool.model.Role;
+import com.leaguetool.update.ReleaseNotes;
+import com.leaguetool.util.AppVersion;
 import com.leaguetool.util.AtomicFiles;
 
 import java.io.IOException;
@@ -115,6 +117,8 @@ final class ApiRoutes {
             case "POST lcu" -> ClientSyncEndpoint.set(ctx, parse(body));
             case "GET update" -> ctx.updates().state();
             case "POST update" -> update(path);
+            case "GET release-notes" -> releaseNotes();
+            case "POST release-notes" -> releaseNotesSeen(path);
             default -> throw new ApiException(404, "Unbekannter Endpunkt");
         };
     }
@@ -701,6 +705,35 @@ final class ApiRoutes {
         } catch (IllegalStateException e) {
             throw new ApiException(409, e.getMessage());
         }
+    }
+
+    /**
+     * {@code GET release-notes}: alle Versionshinweise und die nach einem Update noch nicht gezeigten Versionen
+     * ({@code unseen}). Beim ersten Start einer Neuinstallation gilt die aktuelle Version gleich als gezeigt.
+     */
+    private Object releaseNotes() throws IOException {
+        AppSettings s = ctx.settings();
+        String current = AppVersion.get();
+        List<ReleaseNotes.Release> all = ReleaseNotes.all();
+        List<String> unseen = ReleaseNotes.unseen(all, s.releaseNotesSeen(), current, s.existedOnLoad());
+        if (unseen.isEmpty() && s.releaseNotesSeen().isEmpty() && !current.isEmpty()) {
+            s.setReleaseNotesSeen(current);
+            s.save();
+        }
+        return Map.of("current", current, "releases", all, "unseen", unseen);
+    }
+
+    /** {@code POST release-notes/seen}: Hinweise der aktuellen Version wurden gezeigt. */
+    private Object releaseNotesSeen(List<String> path) throws IOException {
+        if (path.size() != 2 || !"seen".equals(path.get(1))) {
+            throw new ApiException(404, "Unbekannter Endpunkt");
+        }
+        String current = AppVersion.get();
+        if (!current.isEmpty()) {
+            ctx.settings().setReleaseNotesSeen(current);
+            ctx.settings().save();
+        }
+        return Map.of("ok", true);
     }
 
     // ------------------------------------------------------------------ Oberflächen-Zustand

@@ -42,6 +42,8 @@ public final class AppSettings {
 
     private final Path home;
     private final Properties props = new Properties();
+    /** Gab es die Einstellungsdatei schon beim Start (bestehende Installation statt Erststart)? */
+    private boolean existedOnLoad;
 
     private AppSettings(Path home) {
         this.home = home;
@@ -65,6 +67,7 @@ public final class AppSettings {
         AppSettings settings = new AppSettings(home);
         Path file = settings.file();
         if (Files.isRegularFile(file)) {
+            settings.existedOnLoad = true;
             try (InputStream in = Files.newInputStream(file)) {
                 settings.props.load(in);
             }
@@ -144,6 +147,20 @@ public final class AppSettings {
 
     public synchronized void setUpdateCheckEnabled(boolean enabled) {
         props.setProperty("update.check", Boolean.toString(enabled));
+    }
+
+    /** Ob es die Einstellungsdatei beim Start schon gab; ohne sie ist es der erste Start dieser Installation. */
+    public boolean existedOnLoad() {
+        return existedOnLoad;
+    }
+
+    /** Zuletzt gezeigte Versionshinweise (Programmversion); leer, solange noch keine gezeigt wurden. */
+    public synchronized String releaseNotesSeen() {
+        return props.getProperty("notes.seen", "");
+    }
+
+    public synchronized void setReleaseNotesSeen(String version) {
+        props.setProperty("notes.seen", version);
     }
 
     /**

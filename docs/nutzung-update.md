@@ -7,7 +7,9 @@ Ergänzt [`nutzung.md`](nutzung.md).
   sofort nach einem Update.
 - Nach der Suche steht daneben „aktuell“ oder ein hervorgehobener Knopf „Update auf X.Y.Z“. Während eines Updates
   zeigt die Statusleiste den Fortschritt (Download in Prozent, Prüfen, Neustart).
-- Beim Start nach einem Update meldet RiftLens kurz, ob es geklappt hat.
+- Beim Start nach einem Update meldet RiftLens kurz, ob es geklappt hat, und zeigt einmal die Neuerungen der neuen
+  Version („Neu in RiftLens X.Y.Z“).
+- Klick auf „aktuell“ (oder „Versionshinweise“ in den Einstellungen) zeigt die Änderungen aller Versionen.
 
 ## Ablauf
 1. Klick auf „Update auf X.Y.Z“ (oder „Aktualisieren“ in den Einstellungen) und Rückfrage bestätigen.
@@ -34,7 +36,7 @@ Ein vorhandener Ordner `<ordner>.old`, der nicht von RiftLens stammt, wird nicht
 
 ## Wann nur ein Link erscheint
 Statt des Knopfs erscheint „X.Y.Z auf GitHub“ (öffnet die Release-Seite, der Grund steht im Hinweis), wenn
-- RiftLens nicht aus der entpackten `RiftLens.exe` läuft (z. B. aus dem Quellcode mit `start-modern.cmd`),
+- RiftLens nicht aus der entpackten `RiftLens.exe` läuft (z. B. aus dem Quellcode mit `riftlens-build.cmd`),
 - im Programmordner noch andere Dateien liegen, z. B. weil der Inhalt des ZIPs direkt auf den Desktop entpackt wurde.
   Das Update ersetzt den ganzen Ordner und würde sie löschen. Abhilfe: RiftLens in einen eigenen Ordner legen,
 - im Ordner über dem Programmordner keine Schreibrechte bestehen (z. B. unter `C:\Program Files`),
