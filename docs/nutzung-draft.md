@@ -15,11 +15,29 @@ Picks zeigen“ stattdessen die Mindestspiele, „Games“) zum schnellen Nachst
 „Nur Synergien und Matchups“ und „Seltene Picks zeigen“. Ist einer davon an, zeigt der Knopf ihre Anzahl, und über der
 Vorschlagsliste steht er als Tag; ✕ schaltet ihn wieder aus. Zeitraum und Rang-Bereich stellst du wie in den anderen Tabs oben in der Kopfleiste ein.
 
+**Favoriten:** In den **Optionen** stehen alle Favoriten (Stern im Champions-Tab oder „+“ hier). Ein Klick auf ein Icon
+öffnet darunter die Rollen (mehrere wählbar, z. B. Top und Mid), die Schalter **Üben** und **Off-Meta** (unkonventioneller
+Pick, etwa Off-Role) und „Entfernen“. Ein Favorit mit
+Rollen erscheint bei den Vorschlägen „Für mein Team“ nur auf diesen Rollen; ohne Rolle auf jeder. Die Buchstaben am Icon
+zeigen die Rollen (T, J, M, A, S). Favoriten zum Üben haben einen kräftig gestrichelten goldenen Rahmen, einen hohlen
+Stern und das Schild „Üben“; Off-Meta-Favoriten sind violett unterlegt mit dem Schild „Off-Meta“, beides zusammen
+violett gestrichelt. **Nur Favoriten** zeigt bei „Für mein Team“ nur Favoriten (auch die zum Üben und Off-Meta) auf
+ihren Rollen; die Champion-Auswahl beim Klick auf einen Platz bleibt vollständig. Favoriten unter der Pickrate-Grenze
+fehlen weiterhin (bei Off-Meta-Picks häufig), dann hilft eine niedrigere Pickrate oder „Seltene Picks zeigen“. Rollen,
+Üben und Off-Meta werden nur lokal mit den Favoriten gespeichert.
+
+**Marvins-Liste (besser nicht spielen):** In den **Optionen** steht unter den Schaltern die Marvins-Liste. „+“ öffnet die
+Champion-Auswahl (bleibt offen für mehrere), ein Klick auf ein Icon nimmt den Champion wieder heraus, „Marvins-Liste leeren“
+entfernt alle. Diese Champions sind im Draft rot unterlegt und mit „Besser nicht spielen“ markiert: im eigenen Team, in
+der Auswahl für einen eigenen Pick und bei den Vorschlägen „Für mein Team“. Beim Gegner, bei Bans und bei „Für den
+Gegner“ bleibt die Markierung weg. Sie ändert nur die Anzeige, nicht die Bewertung oder Reihenfolge. Gespeichert wird
+die Liste nur lokal im UI-Zustand, wie die Favoriten.
+
 **Draft-Analyse:** erwartete Winrate, Gesamteinschätzung, alle Matchups und Synergien, Schadensverteilung und Vorsprung
 nach Spieldauer.
 
-**Archiv und Fearless-Serien:** siehe [`nutzung-archiv.md`](nutzung-archiv.md) (Aufnahme, Papierkorb, Rollen nachträglich
-korrigieren, Hard Fearless).
+**Archiv:** siehe [`nutzung-archiv.md`](nutzung-archiv.md) (Aufnahme, Papierkorb, Rollen nachträglich korrigieren,
+Ergebnis). **Fearless-Serien:** siehe [`nutzung-fearless.md`](nutzung-fearless.md) (Hard Fearless).
 
 **Abgleich mit dem League-Client** (Kachel „League-Client“ im Draft-Tab, Standard aus, sein Stand bleibt über Neustarts erhalten;
 ausgeschaltet wird der Client nie abgefragt): Während der Champion-Auswahl übernimmt das

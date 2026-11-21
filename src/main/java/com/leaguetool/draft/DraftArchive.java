@@ -3,6 +3,7 @@ package com.leaguetool.draft;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.leaguetool.draft.FearlessSeries.Result;
 import com.leaguetool.draft.RolePredictor.Slot;
 import com.leaguetool.model.Role;
 import com.leaguetool.util.AtomicFiles;
@@ -65,11 +66,16 @@ public final class DraftArchive {
     /**
      * @param shownRoles Champion → Rolle, die das Brett beim Speichern automatisch zeigte (keine feste Rolle; nur zum
      *                   Ordnen Top bis Support, siehe {@link RoleOrder}); nur für Champions ohne feste Rolle
+     * @param result     Ergebnis aus Sicht von „Dein Team“, von Hand eingetragen; {@code null} = offen
      */
-    public record Entry(String id, Instant savedAt, String patch, Draft draft, Map<Integer, Role> shownRoles) {
+    public record Entry(String id, Instant savedAt, String patch, Draft draft, Map<Integer, Role> shownRoles, Result result) {
 
         public Entry {
             shownRoles = openShown(draft, shownRoles);
+        }
+
+        public Entry(String id, Instant savedAt, String patch, Draft draft, Map<Integer, Role> shownRoles) {
+            this(id, savedAt, patch, draft, shownRoles, null);
         }
     }
 
@@ -179,7 +185,7 @@ public final class DraftArchive {
         for (int i = 0; i < all.size(); i++) {
             Entry entry = all.get(i);
             if (entry.id().equals(id)) {
-                Entry updated = new Entry(entry.id(), entry.savedAt(), entry.patch(), withRoles(entry.draft(), ally, enemy), shownRoles);
+                Entry updated = new Entry(entry.id(), entry.savedAt(), entry.patch(), withRoles(entry.draft(), ally, enemy), shownRoles, entry.result());
                 all.set(i, updated);
                 write(all, trash);
                 return updated;
@@ -211,7 +217,7 @@ public final class DraftArchive {
             Draft updated = sameSides ? withRoles(entry.draft(), changed.ally(), changed.enemy())
                     : withRoles(entry.draft(), changed.enemy(), changed.ally());
             if (!updated.equals(entry.draft())) {
-                all.set(i, new Entry(entry.id(), entry.savedAt(), entry.patch(), updated, shownRoles));
+                all.set(i, new Entry(entry.id(), entry.savedAt(), entry.patch(), updated, shownRoles, entry.result()));
                 count++;
             }
         }
@@ -233,7 +239,9 @@ public final class DraftArchive {
         for (int i = 0; i < all.size(); i++) {
             Entry entry = all.get(i);
             if (changes(entry.draft(), before) == 0 && !(entry.draft().equals(after) && entry.shownRoles().equals(shownRoles))) {
-                all.set(i, new Entry(entry.id(), entry.savedAt(), entry.patch(), after, shownRoles));
+                // Liegt der Eintrag mit vertauschten Seiten vor, gilt sein Ergebnis für das andere Team: mit umdrehen.
+                Result result = sameChampions(entry.draft().ally(), before.ally()) ? entry.result() : flip(entry.result());
+                all.set(i, new Entry(entry.id(), entry.savedAt(), entry.patch(), after, shownRoles, result));
                 count++;
             }
         }
@@ -271,6 +279,31 @@ public final class DraftArchive {
         all.sort(Comparator.comparing(Entry::savedAt).reversed());
         write(all, trash);
         return entry;
+    }
+
+    /**
+     * Setzt das Ergebnis eines Eintrags (Sicht „Dein Team“, {@code null} = offen). Sonst bleibt alles gleich.
+     *
+     * @return der geänderte Eintrag oder {@code null}, wenn es ihn nicht gibt
+     */
+    public synchronized Entry updateResult(String id, Result result) throws IOException {
+        List<Entry> all = new ArrayList<>(load());
+        for (int i = 0; i < all.size(); i++) {
+            Entry entry = all.get(i);
+            if (entry.id().equals(id)) {
+                Entry updated = new Entry(entry.id(), entry.savedAt(), entry.patch(), entry.draft(), entry.shownRoles(), result);
+                if (!updated.equals(entry)) {
+                    all.set(i, updated);
+                    write(all, trash);
+                }
+                return updated;
+            }
+        }
+        return null;
+    }
+
+    private static Result flip(Result result) {
+        return result == null ? null : result == Result.WIN ? Result.LOSS : Result.WIN;
     }
 
     private static boolean sameChampions(List<Slot> a, List<Slot> b) {
@@ -501,6 +534,9 @@ public final class DraftArchive {
         node.put("savedAt", entry.savedAt().toString());
         node.put("patch", entry.patch());
         DraftJson.writeDraft(node, entry.draft(), entry.shownRoles());
+        if (entry.result() != null) {
+            node.put("result", entry.result().name());
+        }
         return node;
     }
 
@@ -512,7 +548,9 @@ public final class DraftArchive {
             if (draft == null || id.isEmpty()) {
                 return null;
             }
-            return new Entry(id, Instant.parse(node.path("savedAt").asText()), node.path("patch").asText(""), draft, DraftJson.readShownRoles(node));
+            JsonNode result = node.path("result");
+            return new Entry(id, Instant.parse(node.path("savedAt").asText()), node.path("patch").asText(""), draft, DraftJson.readShownRoles(node),
+                    result.isTextual() ? Result.valueOf(result.asText()) : null);
         } catch (RuntimeException e) {
             return null;
         }

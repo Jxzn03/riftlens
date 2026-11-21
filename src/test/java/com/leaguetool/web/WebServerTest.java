@@ -660,6 +660,26 @@ class WebServerTest {
     }
 
     @Test
+    void draftArchiveResultIsSetByHand() throws Exception {
+        java.nio.file.Files.writeString(home.resolve("draft-archive.json"), """
+                {"version":1,"entries":[{"id":"%s","savedAt":"2026-11-14T12:00:00Z","patch":"16.22.1",
+                 "ally":[{"champion":1},{"champion":2},{"champion":3},{"champion":4},{"champion":5}],
+                 "enemy":[{"champion":6},{"champion":7},{"champion":8},{"champion":9},{"champion":10}],"bans":[]}]}"""
+                .formatted(ARCHIVE_ID));
+        assertTrue(json.readTree(get("/api/draft-archive", true).body()).path("entries").get(0).path("result").isNull(), "Alte Datei: offen");
+
+        JsonNode won = json.readTree(send("PUT", "/api/draft-archive/" + ARCHIVE_ID, "{\"result\":\"WIN\"}").body());
+        assertEquals("WIN", won.path("entry").path("result").asText());
+        assertEquals("WIN", won.path("entries").get(0).path("result").asText());
+        assertEquals("WIN", json.readTree(get("/api/draft-archive", true).body()).path("entries").get(0).path("result").asText());
+
+        assertEquals(400, send("PUT", "/api/draft-archive/" + ARCHIVE_ID, "{\"result\":\"DRAW\"}").statusCode());
+        assertEquals(404, send("PUT", "/api/draft-archive/" + ARCHIVE_ID.replace('0', '1'), "{\"result\":\"LOSS\"}").statusCode());
+        JsonNode open = json.readTree(send("PUT", "/api/draft-archive/" + ARCHIVE_ID, "{\"result\":null}").body());
+        assertTrue(open.path("entry").path("result").isNull());
+    }
+
+    @Test
     void deletedArchiveDraftCanBeRestoredOrPurgedFromTrash() throws Exception {
         java.nio.file.Files.writeString(home.resolve("draft-archive.json"), """
                 {"version":1,"entries":[{"id":"%s","savedAt":"2026-11-14T12:00:00Z","patch":"16.22.1",

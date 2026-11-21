@@ -28,6 +28,7 @@
   --good: #4ade9a;
   --bad: #fb7f7f;
   --warn: #f6c35b;
+  --offmeta: #b78cff; /* Off-Meta-Favoriten */
   --dmg-physical: #ef5b5b;
   --dmg-magic: #4f8dff;
   --dmg-true: #9aa3b2;
@@ -74,6 +75,7 @@
   --good: #0f8a53;
   --bad: #c93636;
   --warn: #a8720c;
+  --offmeta: #7a46d8;
   --dmg-physical: #d63a3a;
   --dmg-magic: #2f6fe0;
   --dmg-true: #8a93a3;
@@ -950,6 +952,77 @@ table.data.compact td { padding: 3px 10px 3px 0; font-size: 12.5px; }
 .draft-ban.favorite { box-shadow: inset 0 0 0 2px var(--accent); }
 .draft-ban .fav-mark { position: absolute; top: 1px; right: 1px; filter: drop-shadow(0 0 2px rgba(0, 0, 0, .8)); }
 .draft-chip.favorite { box-shadow: inset 0 0 0 1px var(--accent); }
+/* Favoriten zum Üben: kräftig gestrichelter Goldrahmen, hohler Stern, Schild „Üben“ (Marvins-Liste hat Vorrang). */
+.fav-mark.practice svg { fill: none; }
+.draft-slot.favorite.practice:not(.avoid), .draft-picker-grid button.favorite.practice:not(.avoid) {
+  box-shadow: none; outline: 2px dashed var(--accent); outline-offset: -2px; }
+.draft-top-card.favorite.practice:not(.avoid) { box-shadow: none; outline: 3px dashed var(--accent); outline-offset: -3px; }
+.draft-row.favorite.practice:not(.avoid) td:first-child { box-shadow: inset 4px 0 0 var(--accent), inset 0 -1px 0 var(--accent); }
+/* Off-Meta-Favoriten: violett statt gold (unkonventioneller Pick); mit Üben violett gestrichelt. */
+.draft-slot.favorite.offmeta:not(.avoid), .draft-picker-grid button.favorite.offmeta:not(.avoid) {
+  background: color-mix(in srgb, var(--offmeta) 14%, transparent); box-shadow: inset 0 0 0 2px var(--offmeta); outline: none; }
+.draft-slot.favorite.offmeta.practice:not(.avoid), .draft-picker-grid button.favorite.offmeta.practice:not(.avoid) {
+  box-shadow: none; outline: 2px dashed var(--offmeta); outline-offset: -2px; }
+.draft-top-card.favorite.offmeta:not(.avoid) { border-color: var(--offmeta); box-shadow: inset 0 0 0 2px var(--offmeta); outline: none;
+  background-image: linear-gradient(color-mix(in srgb, var(--offmeta) 14%, transparent), color-mix(in srgb, var(--offmeta) 14%, transparent)); }
+.draft-top-card.favorite.offmeta.practice:not(.avoid) { box-shadow: none; outline: 3px dashed var(--offmeta); outline-offset: -3px; }
+.draft-row.favorite.offmeta:not(.avoid) td { background: color-mix(in srgb, var(--offmeta) 14%, transparent); border-top-color: var(--offmeta); box-shadow: inset 0 -1px 0 var(--offmeta); }
+.draft-row.favorite.offmeta:not(.avoid) td:first-child { box-shadow: inset 4px 0 0 var(--offmeta), inset 0 -1px 0 var(--offmeta); }
+/* Schilder „Üben“ und „Off-Meta“ am Namen */
+.draft-fav-tag { display: inline-flex; align-items: center; height: 16px; padding: 0 6px 1px; box-sizing: border-box; border-radius: 8px;
+  font-size: 10.5px; font-weight: 700; line-height: 1; white-space: nowrap; }
+.draft-fav-tag.practice { color: var(--accent); border: 1px dashed var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.draft-fav-tag.offmeta { color: var(--offmeta); border: 1px solid var(--offmeta); background: color-mix(in srgb, var(--offmeta) 16%, transparent); }
+.draft-tag-row { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.draft-cell-champion .draft-fav-tag { margin-left: 4px; }
+.draft-picker-tags { display: flex; flex-wrap: wrap; justify-content: center; gap: 3px; }
+.draft-picker-tags .draft-fav-tag { height: 14px; padding: 0 4px 1px; font-size: 9.5px; }
+/* Draft-Optionen kompakt: ohne Kopf, engere Zeilen */
+.draft-options-menu .menu-row { padding-top: 6px; padding-bottom: 6px; }
+.draft-options-menu .draft-avoid { gap: 6px; padding-top: 6px; padding-bottom: 6px; }
+.draft-options-menu .menu-foot { margin-top: 2px; padding-top: 6px; }
+/* Favoritenliste in den Draft-Optionen */
+.draft-avoid-item.draft-fav-item { box-shadow: inset 0 0 0 1px var(--accent); overflow: visible; }
+.draft-avoid-item.draft-fav-item img { border-radius: var(--radius-s); }
+.draft-avoid-item.draft-fav-item.practice { box-shadow: none; outline: 2px dashed var(--accent); outline-offset: -2px; }
+.draft-avoid-item.draft-fav-item.offmeta { box-shadow: inset 0 0 0 2px var(--offmeta); }
+.draft-avoid-item.draft-fav-item.offmeta.practice { box-shadow: none; outline: 2px dashed var(--offmeta); outline-offset: -2px; }
+.draft-fav-flags { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.draft-avoid-item.draft-fav-item.active { box-shadow: 0 0 0 2px var(--accent); }
+.draft-fav-item .draft-fav-roles { border-radius: 0 0 var(--radius-s) var(--radius-s); }
+.draft-fav-roles { position: absolute; left: 0; right: 0; bottom: 0; padding: 1px 0; font-size: 9px; font-weight: 700; line-height: 1;
+  letter-spacing: .04em; text-align: center; color: #fff; background: rgba(0, 0, 0, .65); }
+.draft-fav-editor { display: flex; flex-direction: column; gap: 6px; width: 100%; padding: 8px; border-radius: var(--radius-s); background: var(--surface-2); }
+.draft-fav-role-pick { display: flex; flex-wrap: wrap; gap: 4px; }
+.draft-fav-role-pick button { height: 24px; padding: 0 8px; border-radius: 12px; font-size: 12px; border: 1px solid var(--line); color: var(--text-2); }
+.draft-fav-role-pick button:hover { color: var(--text); border-color: var(--text-3); }
+.draft-fav-role-pick button.active { color: var(--accent-ink); background: var(--accent); border-color: var(--accent); font-weight: 600; }
+.draft-fav-editor-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+/* Marvins-Liste (besser nicht spielen): rot unterlegt, steht nach den Favoriten und hat so Vorrang. */
+.draft-avoid-tag { display: inline-flex; align-items: center; gap: 3px; height: 16px; padding: 0 6px 1px 4px; box-sizing: border-box;
+  border-radius: 8px; font-size: 10.5px; font-weight: 600; line-height: 1; white-space: nowrap; color: var(--bad);
+  background: color-mix(in srgb, var(--bad) 22%, transparent); }
+.draft-cell-champion .draft-avoid-tag { margin-left: 4px; }
+.draft-name-stack { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-width: 0; }
+.draft-name-stack .draft-name { max-width: 100%; }
+.draft-slot.avoid { background: color-mix(in srgb, var(--bad) 20%, var(--surface-2)); box-shadow: inset 0 0 0 1.5px var(--bad); }
+.draft-top-card.avoid { background-image: linear-gradient(color-mix(in srgb, var(--bad) 20%, transparent), color-mix(in srgb, var(--bad) 20%, transparent));
+  box-shadow: inset 0 0 0 2px var(--bad); }
+.draft-row.avoid td { background: color-mix(in srgb, var(--bad) 20%, transparent); border-top-color: var(--bad); box-shadow: inset 0 -1px 0 var(--bad); }
+.draft-row.avoid td:first-child { box-shadow: inset 3px 0 0 var(--bad), inset 0 -1px 0 var(--bad); }
+.draft-row.avoid:hover td { background: color-mix(in srgb, var(--bad) 28%, transparent); }
+.draft-picker-grid button.avoid { background: color-mix(in srgb, var(--bad) 20%, transparent); box-shadow: inset 0 0 0 1.5px var(--bad); }
+.draft-picker-grid .avoid-mark { position: absolute; top: 4px; left: 5px; display: inline-flex; color: var(--bad); }
+/* Pflege der Marvins-Liste im Menü „Draft-Optionen“ */
+.draft-avoid { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; padding: 8px 10px; }
+.draft-avoid-list { display: flex; flex-wrap: wrap; gap: 6px; max-width: 290px; }
+.draft-avoid-item { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px;
+  border-radius: var(--radius-s); overflow: hidden; box-shadow: inset 0 0 0 1px var(--bad); }
+.draft-avoid-item .draft-avoid-remove { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  color: #fff; background: color-mix(in srgb, var(--bad) 70%, transparent); opacity: 0; transition: opacity .12s; }
+.draft-avoid-item:hover .draft-avoid-remove, .draft-avoid-item:focus-visible .draft-avoid-remove { opacity: 1; }
+.draft-avoid-item.add { box-shadow: inset 0 0 0 1px var(--line); color: var(--text-3); }
+.draft-avoid-item.add:hover { color: var(--text); background: var(--row-hover); }
 .draft-picker-grid span { max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 @media (max-width: 1400px) {
   .draft-analysis-grid.three { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -987,6 +1060,21 @@ table.data.compact td { padding: 3px 10px 3px 0; font-size: 12.5px; }
 .draft-archive-entry.current { border-color: var(--accent-2); }
 .draft-archive-meta { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; }
 .draft-result-select { height: 26px; font-size: 12px; padding: 0 2px 0 6px; }
+.draft-archive-patch { display: inline-flex; align-items: center; gap: 5px; line-height: 14px; }
+/* Feste Höhe, Text per Flex mittig; unten 2 px mehr, weil die Schrift unter der Grundlinie Raum lässt (sonst sitzt sie zu tief). */
+.draft-result-dot { display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; height: 17px;
+  line-height: 1; padding: 0 8px 1px; border-radius: 999px;
+  flex: none; border: 1px solid transparent; background: transparent; font: inherit; font-size: 10.5px; font-weight: 600;
+  letter-spacing: .04em; text-transform: uppercase; text-align: center; vertical-align: middle;
+  transition: background .15s, border-color .15s, color .15s; -webkit-font-smoothing: antialiased; }
+.draft-result-dot.win { color: var(--good); border-color: color-mix(in srgb, var(--good) 40%, transparent); background: color-mix(in srgb, var(--good) 12%, transparent); }
+.draft-result-dot.loss { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 40%, transparent); background: color-mix(in srgb, var(--bad) 12%, transparent); }
+.draft-result-dot.open { color: var(--text-3); border-color: color-mix(in srgb, var(--text-3) 45%, transparent); font-weight: 500; }
+button.draft-result-dot { cursor: pointer; }
+button.draft-result-dot.win:hover { background: color-mix(in srgb, var(--good) 22%, transparent); border-color: color-mix(in srgb, var(--good) 65%, transparent); }
+button.draft-result-dot.loss:hover { background: color-mix(in srgb, var(--bad) 22%, transparent); border-color: color-mix(in srgb, var(--bad) 65%, transparent); }
+button.draft-result-dot.open:hover { color: var(--text-2, var(--text-3)); border-color: var(--text-3); }
+button.draft-result-dot:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .draft-archive-teams { display: flex; align-items: center; gap: 10px; }
 .draft-archive-team { display: flex; gap: 4px; padding-left: 6px; border-left: 3px solid var(--team-ally); }
 .draft-archive-team.enemy { border-left-color: var(--team-enemy); }

@@ -90,7 +90,8 @@ Voraussetzung: JDK 21 oder neuer. Maven wird vom Wrapper selbst geladen.
 - [Bedienung im Detail](docs/nutzung.md): Statistiken, Stärke-Formel, Summoner-Tab, Startparameter
 - [Items-Tab und Build-Rechner](docs/nutzung-items.md): Item-Liste, Hinzufügen per „+“ oder Ziehen, Schalter, Rolle
 - [Draft-Tab im Detail](docs/nutzung-draft.md): Rechenmodell, Vorschläge, Client-Abgleich
-- [Draft-Archiv und Fearless-Serien](docs/nutzung-archiv.md): Archiv, Papierkorb, Rollen korrigieren, Hard Fearless
+- [Draft-Archiv](docs/nutzung-archiv.md): Archiv, Papierkorb, Rollen korrigieren, Ergebnis
+- [Fearless-Serien](docs/nutzung-fearless.md): Hard Fearless, Serien-Archiv
 - [Konfiguration und Grenzen](docs/konfiguration.md): Speicherorte, Sicherheit, Architektur, bekannte Einschränkungen
 
 ## Lizenz

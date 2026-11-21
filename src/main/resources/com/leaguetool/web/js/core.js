@@ -40,6 +40,8 @@ export const store = createStore({
   split: {},
   prefs: { level: 1, haste: 0, previewLevel: 11, advancedTips: false },
   favorites: [], // Champion-Keys des eigenen Pools, nur lokal gespeichert
+  favoriteInfo: {}, // je Favorit (Champion-Key) feste Rollen, „Üben“ und „Off-Meta“, nur lokal gespeichert
+  avoid: [], // Marvins-Liste: Champion-Keys, die man besser nicht spielt (Draft-Optionen), nur lokal gespeichert
   views: {},
   meta: null,
   busy: 0,
@@ -866,16 +868,90 @@ export function useFavorites() {
 }
 
 export function toggleFavorite(key) {
-  const favorites = store.get().favorites;
-  store.set({ favorites: favorites.includes(key) ? favorites.filter((k) => k !== key) : [...favorites, key] });
+  const { favorites, favoriteInfo } = store.get();
+  if (favorites.includes(key)) {
+    // Rollen und „Üben“ gehören zum Favoriten und gehen mit ihm.
+    const { [key]: removed, ...rest } = favoriteInfo;
+    store.set({ favorites: favorites.filter((k) => k !== key), favoriteInfo: rest });
+  } else {
+    store.set({ favorites: [...favorites, key] });
+  }
 }
 
 export function clearFavorites() {
-  store.set({ favorites: [] });
+  store.set({ favorites: [], favoriteInfo: {} });
+}
+
+/**
+ * Rollen, „Üben“ und „Off-Meta“ je Favorit: Champion-Key → `{ roles, practice, offMeta }`. Ohne Rollen gilt der Favorit auf jeder Rolle;
+ * mit Rollen zeigt der Draft ihn nur dort als Vorschlag fürs eigene Team.
+ */
+export function useFavoriteInfo() {
+  return useStore((s) => s.favoriteInfo);
+}
+
+function updateFavoriteInfo(key, patch) {
+  const info = store.get().favoriteInfo;
+  const next = { roles: [], practice: false, offMeta: false, ...info[key], ...patch };
+  const rest = { ...info };
+  delete rest[key];
+  store.set({ favoriteInfo: next.roles.length || next.practice || next.offMeta ? { ...rest, [key]: next } : rest });
+}
+
+/** Off-Meta: unkonventioneller Pick (z. B. Off-Role), im Draft eigens markiert. */
+export function setFavoriteOffMeta(key, offMeta) {
+  updateFavoriteInfo(key, { offMeta: Boolean(offMeta) });
+}
+
+export function setFavoriteRoles(key, roles) {
+  updateFavoriteInfo(key, { roles: FAVORITE_ROLES.filter((r) => roles.includes(r)) });
+}
+
+export function setFavoritePractice(key, practice) {
+  updateFavoriteInfo(key, { practice: Boolean(practice) });
+}
+
+const FAVORITE_ROLES = ['TOP', 'JUNGLE', 'MIDDLE', 'BOTTOM', 'UTILITY'];
+
+function sanitizeFavoriteInfo(value, favorites) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return {};
+  }
+  const keep = new Set(favorites);
+  const result = {};
+  Object.entries(value).forEach(([key, info]) => {
+    if (!keep.has(Number(key)) || !info || typeof info !== 'object') {
+      return;
+    }
+    const roles = Array.isArray(info.roles) ? FAVORITE_ROLES.filter((r) => info.roles.includes(r)) : [];
+    const practice = info.practice === true;
+    const offMeta = info.offMeta === true;
+    if (roles.length || practice || offMeta) {
+      result[key] = { roles, practice, offMeta };
+    }
+  });
+  return result;
 }
 
 function sanitizeFavorites(value) {
   return Array.isArray(value) ? [...new Set(value.filter((k) => Number.isInteger(k)))].slice(0, MAX_FAVORITES) : [];
+}
+
+// ------------------------------------------------------------------ Marvins-Liste (besser nicht spielen)
+
+/** Champion-Keys der Marvins-Liste als Set; gepflegt in den Draft-Optionen, im Draft rot markiert. */
+export function useAvoid() {
+  const avoid = useStore((s) => s.avoid);
+  return useMemo(() => new Set(avoid), [avoid]);
+}
+
+export function toggleAvoid(key) {
+  const avoid = store.get().avoid;
+  store.set({ avoid: avoid.includes(key) ? avoid.filter((k) => k !== key) : [...avoid, key] });
+}
+
+export function clearAvoid() {
+  store.set({ avoid: [] });
 }
 
 // ------------------------------------------------------------------ Routing
@@ -942,7 +1018,7 @@ export function startRouter() {
 
 // ------------------------------------------------------------------ Zustand speichern
 
-const PERSISTED = ['theme', 'filter', 'dataSource', 'build', 'buildMode', 'buildBoots', 'buildChampion', 'buildRole', 'runePage', 'split', 'prefs', 'summonerRecent', 'favorites', 'window', 'draftDetailsOpen', 'draftOverviewOpen', 'draftFearlessLocksOpen'];
+const PERSISTED = ['theme', 'filter', 'dataSource', 'build', 'buildMode', 'buildBoots', 'buildChampion', 'buildRole', 'runePage', 'split', 'prefs', 'summonerRecent', 'favorites', 'favoriteInfo', 'avoid', 'window', 'draftDetailsOpen', 'draftOverviewOpen', 'draftFearlessLocksOpen'];
 let saveTimer = null;
 let lastSaved = null;
 
@@ -958,6 +1034,12 @@ export async function loadUiState() {
     });
     if (patch.favorites !== undefined) {
       patch.favorites = sanitizeFavorites(patch.favorites);
+    }
+    if (patch.favoriteInfo !== undefined) {
+      patch.favoriteInfo = sanitizeFavoriteInfo(patch.favoriteInfo, patch.favorites ?? store.get().favorites);
+    }
+    if (patch.avoid !== undefined) {
+      patch.avoid = sanitizeFavorites(patch.avoid);
     }
     if (Array.isArray(patch.build)) {
       patch.build = patch.build.filter((id) => Number.isInteger(id)).slice(0, MAX_BUILD);

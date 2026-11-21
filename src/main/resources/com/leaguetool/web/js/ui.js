@@ -43,9 +43,9 @@ export function Icon({ name, size = 18 }) {
     stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d=${ICONS[name]} /></svg>`;
 }
 
-/** Gefüllter Stern für Favoriten (nur Anzeige). */
-export function FavoriteMark({ size = 14, tip = 'Favorit' }) {
-  return html`<span class="fav-mark" data-tip=${tip || undefined} aria-label=${tip || undefined}><${Icon} name="star" size=${size} /></span>`;
+/** Gefüllter Stern für Favoriten (nur Anzeige); `cls="practice"` zeigt ihn hohl (Favorit zum Üben). */
+export function FavoriteMark({ size = 14, tip = 'Favorit', cls = '' }) {
+  return html`<span class=${`fav-mark ${cls}`} data-tip=${tip || undefined} aria-label=${tip || undefined}><${Icon} name="star" size=${size} /></span>`;
 }
 
 /** Stern zum Setzen und Entfernen eines Favoriten; der Klick wählt nicht zusätzlich die Tabellenzeile aus. */
@@ -118,15 +118,22 @@ export function Button({ icon, children, onClick, kind = '', disabled, tip, titl
  * Mit `label`: beschrifteter Knopf mit Pfeil (Draft-Optionen); ohne: nur das Icon (z. B. drei Punkte im
  * Build-Rechner). `badge` als Zahl zählt Einstellungen abseits des Standards, `true` zeigt nur einen Punkt.
  */
-export function MenuButton({ icon, label, badge = 0, title, tip, children, cls = '' }) {
+/**
+ * Knopf mit aufklappendem Menü; schließt bei Klick außerhalb oder Escape. `keepOpen`: solange wahr (z. B. eine aus dem
+ * Menü geöffnete Auswahl), bleibt es offen, damit man danach ohne erneuten Klick weitermachen kann.
+ */
+export function MenuButton({ icon, label, badge = 0, title, tip, children, cls = '', keepOpen = false }) {
   const [open, setOpen] = useState(false);
   const box = useRef();
+  // Als Ref, weil die Listener nur beim Öffnen angelegt werden und sonst den alten Wert sähen.
+  const keep = useRef(keepOpen);
+  keep.current = keepOpen;
   useEffect(() => {
     if (!open) {
       return undefined;
     }
-    const outside = (e) => !box.current?.contains(e.target) && setOpen(false);
-    const escape = (e) => e.key === 'Escape' && setOpen(false);
+    const outside = (e) => !keep.current && !box.current?.contains(e.target) && setOpen(false);
+    const escape = (e) => e.key === 'Escape' && !keep.current && setOpen(false);
     document.addEventListener('pointerdown', outside);
     document.addEventListener('keydown', escape);
     return () => {

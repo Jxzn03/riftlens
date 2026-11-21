@@ -5,6 +5,7 @@ import com.leaguetool.data.GameData;
 import com.leaguetool.draft.DraftArchive;
 import com.leaguetool.draft.DraftArchive.Draft;
 import com.leaguetool.draft.DraftArchive.Entry;
+import com.leaguetool.draft.FearlessSeries.Result;
 import com.leaguetool.draft.RoleOrder;
 import com.leaguetool.draft.RolePredictor.Slot;
 
@@ -77,6 +78,9 @@ final class DraftArchiveEndpoint {
         if (path.size() != 2 || !path.get(1).matches(Input.ID_PATTERN)) {
             throw new ApiException(404, "Unbekannter Endpunkt");
         }
+        if (body.has("result") && !body.has("ally")) {
+            return updateResult(path.get(1), body.path("result"));
+        }
         Entry updated;
         try {
             List<Slot> ally = DraftEndpoint.storedSlots(body.path("ally"));
@@ -92,6 +96,21 @@ final class DraftArchiveEndpoint {
         response.put("entry", entry(updated));
         // Gleiche Spiele einer Fearless-Serie bekommen die Rollen mit.
         response.put("seriesUpdated", series.apply(updated.draft()));
+        return response;
+    }
+
+    /**
+     * {@code PUT /api/draft-archive/<id> {result}}: Ergebnis von Hand setzen ({@code WIN|LOSS|null}, Sicht „Dein Team“).
+     * Nur lokal; der League-Client wird dafür nicht gefragt.
+     */
+    private Object updateResult(String id, JsonNode value) throws IOException {
+        Result result = value.isNull() || value.asText("").isEmpty() ? null : Input.enumValue(Result.class, value.asText(), "Ungültiges Ergebnis");
+        Entry updated = archive.updateResult(id, result);
+        if (updated == null) {
+            throw new ApiException(404, "Draft nicht im Archiv");
+        }
+        Map<String, Object> response = new java.util.LinkedHashMap<>(list());
+        response.put("entry", entry(updated));
         return response;
     }
 
@@ -128,6 +147,7 @@ final class DraftArchiveEndpoint {
     private static Map<String, Object> entry(Entry entry) {
         Draft draft = RoleOrder.sort(entry.draft(), entry.shownRoles());
         return Dto.obj("id", entry.id(), "savedAt", entry.savedAt().toString(), "patch", entry.patch(),
-                "ally", DraftEndpoint.slotsJson(draft.ally()), "enemy", DraftEndpoint.slotsJson(draft.enemy()), "bans", draft.bans());
+                "ally", DraftEndpoint.slotsJson(draft.ally()), "enemy", DraftEndpoint.slotsJson(draft.enemy()), "bans", draft.bans(),
+                "result", entry.result() == null ? null : entry.result().name());
     }
 }

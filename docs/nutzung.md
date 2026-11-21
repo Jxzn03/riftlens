@@ -1,6 +1,6 @@
 # RiftLens – Bedienung im Detail
 
-Ergänzt die [README](../README.md). Items-Tab und Build-Rechner: [`nutzung-items.md`](nutzung-items.md), Draft-Tab: [`nutzung-draft.md`](nutzung-draft.md), Archiv und Fearless: [`nutzung-archiv.md`](nutzung-archiv.md), Speicherorte und Grenzen: [`konfiguration.md`](konfiguration.md).
+Ergänzt die [README](../README.md). Items-Tab und Build-Rechner: [`nutzung-items.md`](nutzung-items.md), Draft-Tab: [`nutzung-draft.md`](nutzung-draft.md), Archiv: [`nutzung-archiv.md`](nutzung-archiv.md), Fearless: [`nutzung-fearless.md`](nutzung-fearless.md), Speicherorte und Grenzen: [`konfiguration.md`](konfiguration.md).
 
 ## Startparameter
 

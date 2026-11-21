@@ -411,4 +411,38 @@ class DraftArchiveTest {
         assertEquals("16.22.1", entry.patch(), "Patch und ID bleiben");
         assertEquals(2, archive().entries(LIMIT).size());
         assertEquals(0, archive.replaceMatching(numbered(0), changed, java.util.Map.of()), "Alter Stand nicht mehr da");
-    }}
+    }
+
+    @Test
+    void resultIsSetByHandAndSurvivesRoleChangesAndRestarts() throws IOException {
+        DraftArchive archive = archive();
+        String id = archive.record(numbered(0), "16.22.1", LIMIT).entry().id();
+        assertNull(archive.entries(LIMIT).get(0).result(), "Neu ohne Ergebnis");
+        assertFalse(Files.readString(file()).contains("result"), "Ohne Ergebnis kein Feld (alte Dateien bleiben gleich)");
+
+        DraftArchive.Entry won = archive.updateResult(id, FearlessSeries.Result.WIN);
+        assertEquals(FearlessSeries.Result.WIN, won.result());
+        assertEquals(numbered(0), won.draft(), "Sonst bleibt alles gleich");
+        assertEquals(FearlessSeries.Result.WIN, archive().entries(LIMIT).get(0).result(), "Übersteht einen Neustart");
+
+        List<Slot> ally = List.of(new Slot(1, Role.TOP), new Slot(2, null), new Slot(3, null), new Slot(4, null), new Slot(5, null));
+        assertEquals(FearlessSeries.Result.WIN, archive.updateRoles(id, ally, numbered(0).enemy()).result(), "Rollen ändern lässt das Ergebnis");
+
+        assertNull(archive.updateResult(id, null).result(), "Zurück auf offen");
+        assertNull(archive().entries(LIMIT).get(0).result());
+        assertNull(archive.updateResult("unbekannt", FearlessSeries.Result.LOSS));
+    }
+
+    @Test
+    void replacedDraftWithSwappedSidesFlipsItsResult() throws IOException {
+        DraftArchive archive = archive();
+        String id = archive.record(numbered(0), "", LIMIT).entry().id();
+        archive.updateResult(id, FearlessSeries.Result.WIN);
+
+        // Das Spiel sieht 6..10 als eigenes Team; nach dem Ersetzen gilt dessen Sicht, das Ergebnis dreht sich mit.
+        Draft before = draft(6, 7, 8, 9, 10, 1, 2, 3, 4, 5);
+        Draft after = draft(6, 7, 8, 9, 10, 31, 2, 3, 4, 5);
+        assertEquals(1, archive.replaceMatching(before, after, java.util.Map.of()));
+        assertEquals(FearlessSeries.Result.LOSS, archive().entries(LIMIT).get(0).result());
+    }
+}

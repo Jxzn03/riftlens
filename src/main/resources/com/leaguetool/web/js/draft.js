@@ -1,6 +1,6 @@
 // Draft-Assistent: Eingabe der Picks und Bans, die fünf besten nächsten Picks und die Gesamteinschätzung.
 import { html, useState, useEffect, useMemo, useRef } from '/vendor/htm-preact.js';
-import { store, useStore, useViewState, useSourceLabel, api, normalize, percent, sortRows, activeSort, useFavorites, openChampion, toast, gamePatch } from './core.js';
+import { store, useStore, useViewState, useSourceLabel, api, normalize, percent, sortRows, activeSort, useFavorites, useFavoriteInfo, toggleFavorite, setFavoriteRoles, setFavoritePractice, setFavoriteOffMeta, useAvoid, toggleAvoid, clearAvoid, openChampion, toast, gamePatch } from './core.js';
 import { Icon, Img, Button, Select, Segmented, Switch, Card, Empty, ErrorNote, Loading, Tag, Spinner, FavoriteMark, MoreToggle, MenuButton, confirmDialog } from './ui.js';
 
 const ROLES = [
@@ -47,7 +47,7 @@ const CLIENT_ID = crypto.randomUUID();
 const DEFAULTS = {
   ally: Array(TEAM_SIZE).fill(null), enemy: Array(TEAM_SIZE).fill(null), bans: [],
   side: 'ally', role: '', minGames: AUTO_MIN_GAMES, minPickRate: AUTO_MIN_GAMES, ignoreChampionWinRates: false, rarePicks: false,
-  tab: 'picks', picker: null,
+  tab: 'picks', picker: null, avoidPicker: false, favoritePicker: false, favoritesOnly: false,
   // Sperren eines aus dem Archiv geladenen Serienspiels ({ seriesId, label, game, locked }); null = keine.
   fearlessContext: null, archiveMode: 'drafts',
   // Aus „Drafts“ geladener Eintrag ({ id, ally, enemy }), dessen Rollen sich überschreiben lassen; null = keiner.
@@ -362,6 +362,8 @@ const limitedSeries = (series) => series.format !== 'OPEN' || series.maxGames < 
 const seriesFormatLabel = (series) => (series.format === 'OPEN' && limitedSeries(series)
   ? `${formatLabel(series.format)}, max. ${series.maxGames}` : formatLabel(series.format));
 const NO_LOCKS = [];
+const NO_PICKER_LOCKS = new Map(); // Auswahl ohne Fearless-Sperren (Marvins-Liste)
+const NO_AVOID = new Set();
 /** Ab so langer Pause ohne neues Spiel fragt der Tab, ob die Serie noch läuft. */
 const STALE_SERIES_MS = 12 * 60 * 60 * 1000;
 const SERIES_DATE = { dateStyle: 'medium', timeStyle: 'short' };
@@ -952,7 +954,7 @@ export function DraftView() {
           </div>
           <div class="draft-actions-side">
             <${QuickFilter} view=${view} setView=${setView} result=${result} />
-            <${DraftOptions} view=${view} setView=${setView} sourceLabel=${sourceLabel} />
+            <${DraftOptions} view=${view} setView=${setView} sourceLabel=${sourceLabel} data=${data} />
           </div>
         </div>
       </div>
@@ -981,9 +983,11 @@ export function DraftView() {
         ? html`<${Suggestions} result=${result} data=${data} view=${view} setView=${setView} onTake=${takeSuggestion} busy=${loading} owned=${owned} />`
         : html`<${Analysis} result=${result} data=${data} picks=${picks} />`}
 
-    ${view.picker ? html`<${ChampionPicker} data=${data} used=${used} locked=${locked}
+    ${view.picker ? html`<${ChampionPicker} data=${data} used=${used} locked=${locked} markAvoid=${view.picker.team === 'ally'}
       title=${view.picker.team === 'bans' ? 'Champion bannen' : view.picker.team === 'ally' ? 'Pick für dein Team' : 'Pick des Gegners'}
       onChoose=${(champion) => assign(view.picker, champion)} onClose=${() => setView({ picker: null })} />` : null}
+    ${view.avoidPicker ? html`<${AvoidPicker} data=${data} onClose=${() => setView({ avoidPicker: false })} />` : null}
+    ${view.favoritePicker ? html`<${FavoritePicker} data=${data} onClose=${() => setView({ favoritePicker: false })} />` : null}
   </div>`;
 }
 
@@ -1001,6 +1005,9 @@ function changedOptions(view) {
   }
   if (view.rarePicks) {
     changed.push({ key: 'rare', label: 'Seltene Picks', reset: { rarePicks: false } });
+  }
+  if (view.favoritesOnly) {
+    changed.push({ key: 'favorites', label: 'Nur Favoriten', reset: { favoritesOnly: false } });
   }
   return changed;
 }
@@ -1027,21 +1034,137 @@ function QuickFilter({ view, setView, result }) {
     </label>`;
 }
 
+/** Champion-Keys der Favoriten zum Üben (Set). */
+function usePractice() {
+  const info = useFavoriteInfo();
+  return useMemo(() => new Set(Object.entries(info).filter(([, i]) => i.practice).map(([key]) => Number(key))), [info]);
+}
+
+/** Champion-Keys der Off-Meta-Favoriten (Set). */
+function useOffMeta() {
+  const info = useFavoriteInfo();
+  return useMemo(() => new Set(Object.entries(info).filter(([, i]) => i.offMeta).map(([key]) => Number(key))), [info]);
+}
+
+/** Schilder „Üben“ (gold) und „Off-Meta“ (violett) am Namen eines Favoriten. */
+function FavTags({ practice = false, offMeta = false }) {
+  return html`${practice ? html`<span class="draft-fav-tag practice">Üben</span>` : null}${offMeta ? html`<span class="draft-fav-tag offmeta">Off-Meta</span>` : null}`;
+}
+
+/** Stern für Favoriten; zum Üben hohl statt gefüllt. */
+function FavMark({ practice = false, size = 14, tip }) {
+  return practice
+    ? html`<${FavoriteMark} size=${size} tip=${tip === '' ? '' : 'Favorit zum Üben'} cls="practice" />`
+    : html`<${FavoriteMark} size=${size} tip=${tip} />`;
+}
+
+/** Kurzform der Rollen für das Icon in der Favoritenliste. */
+const ROLE_LETTER = { TOP: 'T', JUNGLE: 'J', MIDDLE: 'M', BOTTOM: 'A', UTILITY: 'S' };
+
 /**
- * Menü „Draft-Optionen“ an der Stelle der früheren Quellenangabe: „Nur Synergien und Matchups“ und „Seltene Picks
- * zeigen“. Gilt nur im Draft-Tab, Zeitraum und Rang bleiben in der Kopfleiste.
+ * Favoriten in den Draft-Optionen: alle als Icons, „+“ fügt hinzu (Auswahl bleibt offen). Ein Klick aufs Icon öffnet
+ * darunter Rollen (Mehrfachwahl; ohne Rolle gilt jede), „Üben“ und „Off-Meta“. Mit Rollen zeigt der Draft den
+ * Favoriten fürs eigene Team nur auf diesen Rollen. Wirkt sofort, nur lokal.
  */
-function DraftOptions({ view, setView, sourceLabel }) {
+function FavoriteList({ data, setView }) {
+  const favorites = useStore((s) => s.favorites);
+  const info = useFavoriteInfo();
+  const [editing, setEditing] = useState(null);
+  const practiceCount = favorites.filter((key) => info[key]?.practice).length;
+  const offMetaCount = favorites.filter((key) => info[key]?.offMeta).length;
+  const counts = [practiceCount ? `${practiceCount} zum Üben` : '', offMetaCount ? `${offMetaCount} Off-Meta` : ''].filter(Boolean).join(', ');
+  const current = editing !== null && favorites.includes(editing) ? data.championByKey.get(editing) : null;
+  const roles = current ? info[editing]?.roles || [] : [];
+  const toggleRole = (role) => setFavoriteRoles(editing, roles.includes(role) ? roles.filter((r) => r !== role) : [...roles, role]);
+  return html`<div class="draft-avoid draft-favs">
+    <span class="menu-row-text"><span>Favoriten (${favorites.length}${counts ? `, davon ${counts}` : ''})</span>
+      <small class="muted">Klick aufs Icon: Rollen, Üben, Off-Meta</small></span>
+    <div class="draft-avoid-list">
+      ${favorites.map((key) => {
+        const champion = data.championByKey.get(key);
+        if (!champion) {
+          return null;
+        }
+        const own = info[key] || {};
+        const letters = (own.roles || []).map((r) => ROLE_LETTER[r]).join('');
+        return html`<button type="button" key=${key} aria-pressed=${editing === key}
+          class=${`draft-avoid-item draft-fav-item ${own.practice ? 'practice' : ''} ${own.offMeta ? 'offmeta' : ''} ${editing === key ? 'active' : ''}`}
+          aria-label=${`${champion.name}${own.practice ? ', zum Üben' : ''}${own.offMeta ? ', Off-Meta' : ''}${letters ? `, Rollen: ${own.roles.map(roleLabel).join(', ')}` : ''}: bearbeiten`}
+          onClick=${() => setEditing(editing === key ? null : key)}>
+          <${Img} src=${champion.icon} size=${30} />${letters ? html`<span class="draft-fav-roles">${letters}</span>` : null}
+        </button>`;
+      })}
+      <button type="button" class="draft-avoid-item add" aria-label="Champion zu den Favoriten hinzufügen" onClick=${() => setView({ favoritePicker: true })}>
+        <${Icon} name="plus" size=${15} />
+      </button>
+    </div>
+    ${current ? html`<div class="draft-fav-editor">
+      <strong>${current.name}</strong>
+      <div class="draft-fav-role-pick" role="group" aria-label=${`Rollen von ${current.name}`}>
+        ${ROLES.map((r) => html`<button type="button" key=${r.value} class=${`chip ${roles.includes(r.value) ? 'active' : ''}`}
+          aria-pressed=${roles.includes(r.value)} onClick=${() => toggleRole(r.value)}>${r.label}</button>`)}
+      </div>
+      <small class="muted">${roles.length ? 'Vorschläge fürs eigene Team nur auf diesen Rollen' : 'Keine Rolle gewählt: Vorschlag auf jeder Rolle'}</small>
+      <div class="draft-fav-editor-foot">
+        <div class="draft-fav-flags">
+          <${Switch} checked=${Boolean(info[editing]?.practice)} onChange=${(practice) => setFavoritePractice(editing, practice)}>Üben<//>
+          <${Switch} checked=${Boolean(info[editing]?.offMeta)} onChange=${(offMeta) => setFavoriteOffMeta(editing, offMeta)}>Off-Meta<//>
+        </div>
+        <${Button} kind="ghost" icon="trash" onClick=${() => { toggleFavorite(editing); setEditing(null); }}>Entfernen<//>
+      </div>
+    </div>` : null}
+  </div>`;
+}
+
+/** Rotes Kennzeichen der Marvins-Liste: Champion solltest du besser nicht spielen. */
+function AvoidTag() {
+  return html`<span class="draft-avoid-tag"><${Icon} name="x" size=${10} />Besser nicht spielen</span>`;
+}
+
+/**
+ * Marvins-Liste in den Draft-Optionen: Champions, die man besser nicht spielt. Anzeigen, per „+“ (Auswahl wie beim Pick)
+ * hinzufügen, per Klick aufs Icon entfernen. Wirkt sofort und nur lokal, wie die Favoriten.
+ */
+function AvoidList({ data, setView }) {
+  const avoid = useStore((s) => s.avoid);
+  const clear = async () => {
+    if (await confirmDialog({ title: `Alle ${avoid.length} Champions von der Marvins-Liste entfernen?`, confirmLabel: 'Entfernen', danger: true,
+      message: 'Im Draft wird danach kein Champion mehr als „Besser nicht spielen“ markiert.' })) {
+      clearAvoid();
+    }
+  };
+  return html`<div class="draft-avoid">
+    <span class="menu-row-text"><span>Besser nicht spielen (Marvins-Liste)</span>
+      <small class="muted">Im Draft rot markiert: dein Team, Picks, Vorschläge</small></span>
+    <div class="draft-avoid-list">
+      ${avoid.map((key) => {
+        const champion = data.championByKey.get(key);
+        return champion ? html`<button type="button" key=${key} class="draft-avoid-item" aria-label=${`${champion.name} von der Marvins-Liste entfernen`}
+          onClick=${() => toggleAvoid(key)}>
+          <${Img} src=${champion.icon} size=${30} /><span class="draft-avoid-remove"><${Icon} name="x" size=${14} /></span>
+        </button>` : null;
+      })}
+      <button type="button" class="draft-avoid-item add" aria-label="Champion zur Marvins-Liste hinzufügen" onClick=${() => setView({ avoidPicker: true })}>
+        <${Icon} name="plus" size=${15} />
+      </button>
+    </div>
+    ${avoid.length ? html`<${Button} kind="ghost" icon="trash" onClick=${clear}>Marvins-Liste leeren<//>` : null}
+  </div>`;
+}
+
+/**
+ * Menü „Draft-Optionen“ an der Stelle der früheren Quellenangabe: Schalter für die Vorschläge, Favoriten (mit Rollen
+ * und Üben) und Marvins-Liste. Gilt nur im Draft-Tab, Zeitraum und Rang bleiben in der Kopfleiste.
+ */
+function DraftOptions({ view, setView, sourceLabel, data }) {
   const advancedTips = useStore((s) => Boolean(s.prefs.advancedTips));
   const changed = changedOptions(view);
   const resetAll = () => setView(Object.assign({}, ...changed.map((c) => c.reset)));
   // Kurz „Optionen“: Mit der Pickrate davor passt die Zeile so neben „Draft leeren“; die Überschrift im Menü bleibt lang.
+  // Auswahl für Favoriten oder Marvins-Liste liegt außerhalb des Menüs: Es bleibt offen, bis sie geschlossen ist.
   return html`<${MenuButton} cls="draft-options-menu" icon="sliders" label="Optionen" badge=${changed.length} title="Draft-Optionen"
+    keepOpen=${Boolean(view.favoritePicker || view.avoidPicker)}
     tip=${advancedTips ? `Filter und Bewertung der Vorschläge. Daten: ${sourceLabel}` : undefined}>
-    <div class="menu-head">
-      <strong>Draft-Optionen</strong>
-      <span class="muted small">Filter und Bewertung der Vorschläge</span>
-    </div>
     <div class="menu-row">
       <${Switch} checked=${view.ignoreChampionWinRates} onChange=${(ignoreChampionWinRates) => setView({ ignoreChampionWinRates })}
         tip=${advancedTips ? 'Bewertet nur Synergien und Matchups, nicht die allgemeine Stärke der Champions' : undefined}>
@@ -1054,6 +1177,14 @@ function DraftOptions({ view, setView, sourceLabel }) {
         <span class="menu-row-text"><span>Seltene Picks zeigen</span><small class="muted">Auch Off-Role-Picks, Filter nach Spielzahl</small></span>
       <//>
     </div>
+    <div class="menu-row">
+      <${Switch} checked=${Boolean(view.favoritesOnly)} onChange=${(favoritesOnly) => setView({ favoritesOnly })}
+        tip=${advancedTips ? 'Beste Picks für dein Team zeigen nur Favoriten, auch die zum Üben, auf ihren Rollen. Die Champion-Auswahl bleibt vollständig.' : undefined}>
+        <span class="menu-row-text"><span>Nur Favoriten</span><small class="muted">Vorschläge fürs eigene Team nur aus deinen Favoriten</small></span>
+      <//>
+    </div>
+    <${FavoriteList} data=${data} setView=${setView} />
+    <${AvoidList} data=${data} setView=${setView} />
     <div class="menu-foot">
       <span class="muted small" data-tip=${advancedTips ? 'Zeitraum und Rang-Bereich stellst du oben in der Kopfleiste ein' : undefined}>${sourceLabel}</span>
       ${changed.length ? html`<${Button} kind="ghost" icon="undo" onClick=${resetAll}>Standard<//>` : null}
@@ -1147,6 +1278,9 @@ function RolePicker({ champion, slot, prediction, shares, pending, onChoose }) {
 function TeamColumn({ title, team, slots, result, data, pending, hints = [], onPick, onRole, onClear }) {
   const predicted = new Map((result?.slots[team] || []).map((s) => [s.champion, s]));
   const favorites = useFavorites();
+  const practice = usePractice();
+  const offMeta = useOffMeta();
+  const avoid = useAvoid();
   const advancedTips = useStore((s) => Boolean(s.prefs.advancedTips));
   return html`<section class=${`draft-team ${team}`}>
     <h3>${title}</h3>
@@ -1173,15 +1307,22 @@ function TeamColumn({ title, team, slots, result, data, pending, hints = [], onP
       // Eigenes Team: Build (Match-Statistik); Gegner: beste Picks dagegen (Counters).
       const ally = team === 'ally';
       const role = slot.role || current?.role || null;
-      return html`<div key=${index} class=${`draft-slot ${favorite ? 'favorite' : ''}`}>
+      // Marvins-Liste gilt nur für dich, also nur im eigenen Team.
+      const avoided = ally && avoid.has(slot.champion);
+      const practicing = favorite && practice.has(slot.champion);
+      const unusual = favorite && offMeta.has(slot.champion);
+      const tagged = avoided || practicing || unusual;
+      return html`<div key=${index} class=${`draft-slot ${favorite ? 'favorite' : ''} ${practicing ? 'practice' : ''} ${unusual ? 'offmeta' : ''} ${avoided ? 'avoid' : ''}`}>
         <button type="button" class="icon-link draft-slot-icon" onClick=${() => openChampion(champion, ally ? 'stats' : 'counters', role)}
           aria-label=${`${champion.name}: ${ally ? 'Match-Statistik' : 'Counters'} öffnen`}
           data-tip=${!advancedTips ? undefined : ally ? `Build von ${champion.name} öffnen (Match-Statistik)` : `Counters gegen ${champion.name} öffnen`}>
           <${Img} src=${champion.icon} size=${40} />
         </button>
         <button type="button" class="draft-slot-champion" onClick=${() => onPick(index)} data-tip=${advancedTips ? 'Champion ändern' : undefined}>
-          <span class="draft-name">${champion.name}</span>
-          ${favorite ? html`<${FavoriteMark} size=${14} />` : null}
+          ${tagged ? html`<span class="draft-name-stack"><span class="draft-name">${champion.name}</span>
+              <span class="draft-tag-row">${avoided ? html`<${AvoidTag} />` : null}<${FavTags} practice=${practicing} offMeta=${unusual} /></span></span>`
+            : html`<span class="draft-name">${champion.name}</span>`}
+          ${favorite ? html`<${FavMark} size=${14} practice=${practicing} />` : null}
         </button>
         <${RolePicker} champion=${champion} slot=${slot} prediction=${current} shares=${prediction?.shares}
           pending=${pending === `${team}:${slot.champion}`} onChoose=${(role) => onRole(team, index, role)} />
@@ -1207,9 +1348,27 @@ function BanRow({ bans, data, onAdd, onRemove }) {
   </div>`;
 }
 
-function ChampionPicker({ data, used, locked, title, onChoose, onClose }) {
+/** Auswahl für die Marvins-Liste: bleibt offen, damit sich mehrere Champions nacheinander hinzufügen lassen. */
+function AvoidPicker({ data, onClose }) {
+  const avoid = useAvoid();
+  return html`<${ChampionPicker} data=${data} used=${avoid} locked=${NO_PICKER_LOCKS} title="Besser nicht spielen: zur Marvins-Liste"
+    onChoose=${(key) => toggleAvoid(key)} onClose=${onClose} />`;
+}
+
+/** Auswahl für neue Favoriten; bleibt offen wie die der Marvins-Liste. */
+function FavoritePicker({ data, onClose }) {
+  const favorites = useFavorites();
+  return html`<${ChampionPicker} data=${data} used=${favorites} locked=${NO_PICKER_LOCKS} title="Zu den Favoriten"
+    onChoose=${(key) => toggleFavorite(key)} onClose=${onClose} />`;
+}
+
+function ChampionPicker({ data, used, locked, title, onChoose, onClose, markAvoid = false }) {
   const [query, setQuery] = useState('');
   const favorites = useFavorites();
+  const practice = usePractice();
+  const offMeta = useOffMeta();
+  const avoidAll = useAvoid();
+  const avoid = markAvoid ? avoidAll : NO_AVOID;
   const input = useRef();
   useEffect(() => input.current.focus(), []);
   const matches = useMemo(() => {
@@ -1241,10 +1400,13 @@ function ChampionPicker({ data, used, locked, title, onChoose, onClose }) {
           // Fearless-Sperre: nicht wählbar, aber mit Tooltip (deaktivierte Buttons zeigen keinen).
           const game = locked.get(c.key);
           return html`<button type="button" key=${c.key} disabled=${used.has(c.key)} aria-disabled=${game ? 'true' : undefined}
-            onClick=${() => !game && onChoose(c.key)} class=${`${favorites.has(c.key) ? 'favorite' : ''} ${game ? 'locked' : ''}`}
+            onClick=${() => !game && onChoose(c.key)}
+            class=${`${favorites.has(c.key) ? 'favorite' : ''} ${practice.has(c.key) ? 'practice' : ''} ${offMeta.has(c.key) ? 'offmeta' : ''} ${avoid.has(c.key) ? 'avoid' : ''} ${game ? 'locked' : ''}`}
             data-tip=${game ? `${c.name}: in Game ${game} gespielt (Fearless)` : undefined}>
             <${Img} src=${c.icon} size=${48} /><span>${c.name}</span>
-            ${favorites.has(c.key) ? html`<${FavoriteMark} size=${13} />` : null}
+            ${favorites.has(c.key) ? html`<${FavMark} size=${13} practice=${practice.has(c.key)} />` : null}
+            ${practice.has(c.key) || offMeta.has(c.key) ? html`<span class="draft-picker-tags"><${FavTags} practice=${practice.has(c.key)} offMeta=${offMeta.has(c.key)} /></span>` : null}
+            ${avoid.has(c.key) ? html`<span class="avoid-mark" aria-label="Besser nicht spielen"><${Icon} name="x" size=${12} /></span>` : null}
             ${game ? html`<span class="draft-lock-mark"><${Icon} name="lock" size=${12} /></span>` : null}
           </button>`;
         })}
@@ -1327,8 +1489,18 @@ function Suggestions({ result, data, view, setView, onTake, busy, owned }) {
   // Aus dem Client bekannt, welche Champions der eigene Account spielen darf; gilt nur für Vorschläge ans eigene Team.
   const canFilterOwned = owned.size > 0 && result.side === 'ally';
   const ownedOnly = canFilterOwned && view.ownedOnly !== false;
-  const rows = useMemo(() => result.suggestions.filter((s) => (!role || s.role === role) && (!ownedOnly || owned.has(s.champion))),
-    [result, role, ownedOnly, owned]);
+  const favorites = useFavorites();
+  const favoriteInfo = useFavoriteInfo();
+  const practice = usePractice();
+  const offMeta = useOffMeta();
+  // Nur für dein Team: Favoriten mit festen Rollen erscheinen nur dort; „Nur Favoriten“ blendet alle anderen aus.
+  const ally = result.side === 'ally';
+  const favoritesOnly = ally && Boolean(view.favoritesOnly);
+  const rows = useMemo(() => result.suggestions.filter((s) => {
+    const roles = ally && favorites.has(s.champion) ? favoriteInfo[s.champion]?.roles : null;
+    return (!role || s.role === role) && (!ownedOnly || owned.has(s.champion))
+      && (!roles || roles.length === 0 || roles.includes(s.role)) && (!favoritesOnly || favorites.has(s.champion));
+  }), [result, role, ownedOnly, owned, ally, favorites, favoriteInfo, favoritesOnly]);
   const top = rows.slice(0, TOP_PICKS);
   const columns = useMemo(() => suggestionColumns(data), [data]);
   const sort = activeSort(columns, { key: view.restSort || 'rank', dir: view.restDir || 1 });
@@ -1346,7 +1518,9 @@ function Suggestions({ result, data, view, setView, onTake, busy, owned }) {
     </th>`;
   };
   const advancedTips = useStore((st) => Boolean(st.prefs.advancedTips));
-  const favorites = useFavorites();
+  const avoidAll = useAvoid();
+  // Marvins-Liste nur bei Vorschlägen für dein Team: Gegner-Picks spielst nicht du.
+  const avoid = result.side === 'ally' ? avoidAll : NO_AVOID;
   const sideText = result.side === 'ally' ? 'dein Team' : 'den Gegner';
   const baseText = result.side === 'ally' ? 'deines Teams' : 'des Gegners';
 
@@ -1360,11 +1534,13 @@ function Suggestions({ result, data, view, setView, onTake, busy, owned }) {
         tip="Laut League-Client in dieser Auswahl spielbar (eigene und kostenlose Champions)">Nur spielbare Champions<//>` : null}
     </div>
     ${rows.length === 0 ? html`<${Empty} title="Keine Vorschläge">
-      ${result.openRoles.length === 0 ? 'Dieses Team ist vollständig.' : view.rarePicks ? 'Senke die Mindestspiele oder wähle eine andere Rolle.' : 'Senke die Pickrate, zeige seltene Picks oder wähle eine andere Rolle.'}<//>` : html`
+      ${result.openRoles.length === 0 ? 'Dieses Team ist vollständig.'
+        : favoritesOnly ? 'Kein Favorit unter den Vorschlägen. Schalte „Nur Favoriten“ in den Optionen aus, senke die Pickrate oder prüfe die Rollen deiner Favoriten.'
+        : view.rarePicks ? 'Senke die Mindestspiele oder wähle eine andere Rolle.' : 'Senke die Pickrate, zeige seltene Picks oder wähle eine andere Rolle.'}<//>` : html`
       <h3 class="draft-section-title">Top ${top.length} für ${sideText}${role ? ` auf ${roleLabel(role)}` : ''}</h3>
       <div class="draft-top">
         ${top.map((s, i) => html`<${TopCard} key=${`${s.champion}-${s.role}`} rank=${i + 1} suggestion=${s} data=${data} onTake=${onTake} baseText=${baseText}
-          favorite=${favorites.has(s.champion)} />`)}
+          favorite=${favorites.has(s.champion)} practicing=${practice.has(s.champion)} unusual=${offMeta.has(s.champion)} avoided=${avoid.has(s.champion)} />`)}
       </div>
       ${rest.length ? html`<${Card} title="Weitere Picks">
         <div class="grid-scroll"><table class="data draft-table">
@@ -1372,9 +1548,12 @@ function Suggestions({ result, data, view, setView, onTake, busy, owned }) {
           <tbody>${rest.map((s) => {
             const champion = data.championByKey.get(s.champion);
             const favorite = favorites.has(s.champion);
-            return html`<tr key=${`${s.champion}-${s.role}`} class=${`draft-row ${favorite ? 'favorite' : ''}`} onClick=${() => onTake(s)} data-tip=${advancedTips ? 'Pick übernehmen' : undefined}>
+            const avoided = avoid.has(s.champion);
+            const practicing = favorite && practice.has(s.champion);
+            const unusual = favorite && offMeta.has(s.champion);
+            return html`<tr key=${`${s.champion}-${s.role}`} class=${`draft-row ${favorite ? 'favorite' : ''} ${practicing ? 'practice' : ''} ${unusual ? 'offmeta' : ''} ${avoided ? 'avoid' : ''}`} onClick=${() => onTake(s)} data-tip=${advancedTips ? 'Pick übernehmen' : undefined}>
               <td class="muted">${s.rank}</td>
-              <td><span class="draft-cell-champion">${champion ? html`<${Img} src=${champion.icon} size=${26} />` : null}${champion?.name || s.champion}${favorite ? html`<${FavoriteMark} size=${13} />` : null}</span></td>
+              <td><span class="draft-cell-champion">${champion ? html`<${Img} src=${champion.icon} size=${26} />` : null}${champion?.name || s.champion}${favorite ? html`<${FavMark} size=${13} practice=${practicing} />` : null}<${FavTags} practice=${practicing} offMeta=${unusual} />${avoided ? html`<${AvoidTag} />` : null}</span></td>
               <td>${roleLabel(s.role)}</td><td><strong>${percent(s.winRate)}</strong></td>
               <td class=${toneOf(s.delta * 100)}>${signed(s.delta * 100)}</td>
               <td class=${toneOf(impact(s.championRating))}>${impactText(s.championRating)}</td>
@@ -1389,17 +1568,20 @@ function Suggestions({ result, data, view, setView, onTake, busy, owned }) {
   </div>`;
 }
 
-function TopCard({ rank, suggestion: s, data, onTake, baseText, favorite }) {
+function TopCard({ rank, suggestion: s, data, onTake, baseText, favorite, practicing = false, unusual = false, avoided = false }) {
   const advancedTips = useStore((st) => Boolean(st.prefs.advancedTips));
   const champion = data.championByKey.get(s.champion);
   const favorites = useFavorites();
   const details = [...s.details].sort((a, b) => Math.abs(b.rating) - Math.abs(a.rating)).slice(0, 3);
-  return html`<button type="button" class=${`draft-top-card ${rank === 1 ? 'best' : ''} ${favorite ? 'favorite' : ''}`} onClick=${() => onTake(s)}
+  const practice = favorite && practicing;
+  const offMeta = favorite && unusual;
+  return html`<button type="button" class=${`draft-top-card ${rank === 1 ? 'best' : ''} ${favorite ? 'favorite' : ''} ${practice ? 'practice' : ''} ${offMeta ? 'offmeta' : ''} ${avoided ? 'avoid' : ''}`} onClick=${() => onTake(s)}
     data-tip=${advancedTips ? `Pick übernehmen · Winrate ${baseText} mit diesem Pick` : undefined}>
     <span class="draft-rank">${rank}</span>
     <span class="draft-top-head">
       ${champion ? html`<${Img} src=${champion.icon} size=${48} />` : null}
-      <span class="draft-top-name"><strong>${champion?.name || s.champion}${favorite ? html` <${FavoriteMark} size=${14} />` : null}</strong><${Tag} kind="soft">${roleLabel(s.role)}<//></span>
+      <span class="draft-top-name"><strong>${champion?.name || s.champion}${favorite ? html` <${FavMark} size=${14} practice=${practice} />` : null}</strong><${Tag} kind="soft">${roleLabel(s.role)}<//>
+        ${practice || offMeta || avoided ? html`<span class="draft-tag-row"><${FavTags} practice=${practice} offMeta=${offMeta} />${avoided ? html`<${AvoidTag} />` : null}</span>` : null}</span>
     </span>
     <span class="draft-top-value">${percent(s.winRate)}<small class=${toneOf(s.delta * 100)}>${signed(s.delta * 100)}</small></span>
     <span class="draft-top-parts">
@@ -1858,6 +2040,21 @@ function Archive({ data, view, setView }) {
     </button>`;
   };
 
+  const setResult = (entry, result) => {
+    api.put(`/api/draft-archive/${entry.id}`, { result }).then((next) => setState({ list: next, error: null }))
+      .catch((error) => setState((previous) => ({ ...previous, error })));
+  };
+  // Gehört der Draft zu einem Fearless-Game, gilt dessen Ergebnis (dort geändert); sonst das eigene, per Klick wechselnd.
+  const resultDot = (entry) => {
+    const match = seriesGames.find(({ game }) => draftChanges(entry, game) === 0);
+    if (!match) {
+      return html`<${ResultDot} result=${entry.result} advancedTips=${advancedTips} onChange=${(result) => setResult(entry, result)} />`;
+    }
+    const result = sameSides(entry, match.game) ? match.game.result : flipResult(match.game.result);
+    return html`<${ResultDot} result=${result} advancedTips=${advancedTips}
+      tip=${result ? `${RESULT_LABEL[result]} (aus Fearless-Game ${match.game.number}, dort änderbar)` : null} />`;
+  };
+
   const load = (entry, without) => {
     // Gemerkt, damit spätere Rollen-Änderungen diesen Eintrag überschreiben können (nur bei gleichen Champions).
     const loadedDraft = { id: entry.id, ally: entry.ally, enemy: entry.enemy };
@@ -1931,7 +2128,7 @@ function Archive({ data, view, setView }) {
       ? html`<${Empty} title="Noch keine Drafts im Archiv">Vollständige Drafts erscheinen hier automatisch.<//>`
       : html`<ul class="draft-archive-list">
         ${list.entries.slice(0, shown).map((entry) => html`<${ArchiveEntry} key=${entry.id} entry=${entry} data=${data} advancedTips=${advancedTips}
-          badge=${fearlessBadge(entry)}
+          badge=${fearlessBadge(entry)} result=${resultDot(entry)}
           current=${boardComplete && draftChanges(entry, board) === 0} onLoad=${load} onRemove=${remove} />`)}
       </ul>
       <${ShowMore} shown=${shown} total=${list.entries.length} onMore=${() => setShown(shown + ARCHIVE_PAGE)} />`}
@@ -2273,7 +2470,7 @@ function SeriesList({ data, view, setView }) {
         ${!open ? null : series.games.length === 0 ? html`<p class="muted small">Noch kein Game abgeschlossen.</p>` : html`<ul class="draft-archive-list">
           ${series.games.map((game) => html`<${ArchiveEntry} key=${game.number} data=${data} advancedTips=${advancedTips}
             domId=${seriesGameId(series.id, game.number)} focus=${Boolean(focus) && focus.seriesId === series.id && focus.game === game.number}
-            entry=${{ ...game, savedAt: game.playedAt }} heading=${`Game ${game.number}`}
+            entry=${{ ...game, savedAt: game.playedAt }} heading=${`Game ${game.number}`} result=${html`<${ResultDot} result=${game.result} advancedTips=${advancedTips} />`}
             badge=${html`<${Select} label=${`Ergebnis von Game ${game.number}`} cls="draft-result-select" value=${game.result || ''}
               options=${RESULT_OPTIONS} onChange=${(value) => setResult(series, game, value)} />`}
             current=${boardComplete && Boolean(context) && context.seriesId === series.id && context.game === game.number && draftChanges(game, board) === 0}
@@ -2358,7 +2555,36 @@ function AddGamePicker({ series, allSeries, data, busy, onAdd, onClose }) {
   </div>`;
 }
 
-function ArchiveEntry({ entry, data, advancedTips, current, onLoad, onRemove, heading = null, badge = null, domId, focus = false, actions = null }) {
+const RESULT_LABEL = { WIN: 'Sieg', LOSS: 'Niederlage' };
+const NEXT_RESULT = { '': 'WIN', WIN: 'LOSS', LOSS: '' };
+const flipResult = (result) => (result === 'WIN' ? 'LOSS' : result === 'LOSS' ? 'WIN' : null);
+/** Gleiche Seiten wie {@code b} (nicht vertauscht): Dann gilt dessen Ergebnis unverändert. */
+const sameSides = (a, b) => {
+  const champions = new Set(a.ally.map((s) => s.champion));
+  return b.ally.every((s) => champions.has(s.champion));
+};
+
+const RESULT_TEXT = { WIN: 'Win', LOSS: 'Loss' };
+
+/**
+ * Ergebnis neben dem Patch: „Win“ grün, „Loss“ rot (Sicht „Dein Team“). Mit {@code onChange} ein Knopf, der
+ * offen → Win → Loss → offen wechselt (offen = „Offen“, ausgegraut); ohne nur Anzeige, offen dann unsichtbar.
+ * Tooltip nur bei „Show Advanced Tooltips“.
+ */
+function ResultDot({ result, onChange = null, tip = null, advancedTips = false }) {
+  const label = result ? RESULT_LABEL[result] : 'Ohne Ergebnis';
+  const cls = `draft-result-dot ${result ? result.toLowerCase() : 'open'}`;
+  const text = result ? RESULT_TEXT[result] : 'Offen';
+  if (!onChange) {
+    return result ? html`<span class=${cls} aria-label=${label} data-tip=${advancedTips ? tip || label : undefined}>${text}</span>` : null;
+  }
+  const next = NEXT_RESULT[result || ''];
+  const action = `${label} – Klick: ${next ? RESULT_LABEL[next] : 'ohne Ergebnis'}`;
+  return html`<button type="button" class=${cls} aria-label=${`Ergebnis: ${action}`} data-tip=${advancedTips ? action : undefined}
+    onClick=${() => onChange(next || null)}>${text}</button>`;
+}
+
+function ArchiveEntry({ entry, data, advancedTips, current, onLoad, onRemove, heading = null, badge = null, result = null, domId, focus = false, actions = null }) {
   const pick = (slot, team) => {
     const champion = data.championByKey.get(slot.champion);
     if (!champion) {
@@ -2374,7 +2600,7 @@ function ArchiveEntry({ entry, data, advancedTips, current, onLoad, onRemove, he
   return html`<li id=${domId} class=${`draft-archive-entry ${current ? 'current' : ''} ${focus ? 'focus' : ''}`}>
     <div class="draft-archive-meta">
       <strong>${heading || new Date(entry.savedAt).toLocaleString('de-DE', ARCHIVE_DATE)}</strong>
-      <span class="muted small">${patchLabel(entry.patch)}</span>
+      <span class="draft-archive-patch"><span class="muted small">${patchLabel(entry.patch)}</span>${result}</span>
       ${badge}
       ${current ? html`<${Tag}>Auf dem Brett<//>` : null}
     </div>

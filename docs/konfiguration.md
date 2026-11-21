@@ -32,7 +32,7 @@ stammen. Dabei wird nichts abgerufen.
 | `cache/_global/riot/history/…` | Match-Historie je Spieler (gzip, Summoner-Tab) |
 | `cache/_global/riot/match/…` | Früherer Match-Cache; wird nur noch gelesen und in die Historie übernommen |
 | `cache/_global/item-passives/` | Stand und Verlauf der automatischen Item-Passiv-Updates |
-| `modern-ui/` | UI-Zustand (`ui-state.json`) und Browserprofil |
+| `modern-ui/` | UI-Zustand (`ui-state.json`, u. a. Favoriten und Marvins-Liste des Draft-Tabs) und Browserprofil |
 | `draft-archive.json` | Draft-Archiv (nur Champions, Rollen, Bans; Anzahl in den Einstellungen) |
 | `update/` | Automatisches Update: `update.log`, Updater-Skript mit Auftrag (`update-params.json`), Sperrdatei; Download und entpackte Version nur während eines Updates |
 

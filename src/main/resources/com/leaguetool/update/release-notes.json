@@ -1,5 +1,30 @@
 [
   {
+    "version": "2.2.0",
+    "date": "2026-11-21",
+    "title": "Favoriten, Marvins-Liste & Ergebnisse",
+    "sections": [
+      {
+        "kind": "new",
+        "items": [
+          "Draft: Favoriten in den Optionen anzeigen, hinzufügen und entfernen",
+          "Draft: Rollen je Favorit, z. B. Aatrox nur Top; Vorschläge fürs eigene Team nur auf diesen Rollen",
+          "Draft: Favoriten als „Üben“ oder „Off-Meta“ kennzeichnen, im Draft eigens markiert",
+          "Draft: Schalter „Nur Favoriten“ für die Vorschläge fürs eigene Team",
+          "Draft: Marvins-Liste für Champions, die man besser nicht spielt, im Draft rot markiert",
+          "Archiv: Ergebnis Win/Loss je Draft per Klick neben dem Patch, bei Fearless-Games aus der Serie"
+        ]
+      },
+      {
+        "kind": "improved",
+        "items": [
+          "Draft: Optionen-Menü kompakter und bleibt nach einer Champion-Auswahl offen",
+          "Hilfe: Nutzer-Doku zu Archiv und Fearless-Serien in zwei Dateien aufgeteilt"
+        ]
+      }
+    ]
+  },
+  {
     "version": "2.1.0",
     "date": "2026-11-21",
     "title": "Auto-Update & Versionshinweise",
