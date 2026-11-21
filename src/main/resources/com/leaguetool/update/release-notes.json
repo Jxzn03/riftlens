@@ -1,29 +1,18 @@
 [
   {
-    "version": "2.1.1",
-    "date": "2026-11-21",
-    "title": "Versionshinweise",
-    "sections": [
-      {
-        "kind": "new",
-        "items": [
-          "Versionshinweise: Nach einem Update zeigt RiftLens einmal die Neuerungen",
-          "Versionshinweise: Klick auf „aktuell“ unten rechts oder in den Einstellungen zeigt alle Versionen"
-        ]
-      }
-    ]
-  },
-  {
     "version": "2.1.0",
-    "date": "2026-11-20",
-    "title": "Auto-Update",
+    "date": "2026-11-21",
+    "title": "Auto-Update & Versionshinweise",
     "sections": [
       {
         "kind": "new",
         "items": [
           "Update: Suche beim Start (abschaltbar) oder per Klick auf die Version unten rechts",
           "Update: Ein Klick installiert die neue Version und startet RiftLens neu, bei Fehlern kommt die alte zurück",
-          "Update: Nur digital signierte Pakete werden installiert"
+          "Update: Nur digital signierte Pakete werden installiert",
+          "Update: Testversionen (Pre-Releases) auf Wunsch in den Einstellungen zulassen, Standard aus",
+          "Versionshinweise: Nach einem Update zeigt RiftLens einmal die Neuerungen",
+          "Versionshinweise: Klick auf „aktuell“ unten rechts oder in den Einstellungen zeigt alle Versionen"
         ]
       },
       {
