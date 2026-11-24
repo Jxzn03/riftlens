@@ -1,5 +1,43 @@
 [
   {
+    "version": "2.3.0",
+    "date": "2026-11-24",
+    "title": "Summoners",
+    "sections": [
+      {
+        "kind": "new",
+        "items": [
+          "Summoner: Meine und gegnerische Champions mit Matchups gegen den direkten Lane-Gegner",
+          "Summoner: Bereiche Spielstil (Wochentag, Uhrzeit, Seiten, Leistungsmetriken) und Mastery Points",
+          "Summoner: Live-Spiel des angezeigten Summoners beim Öffnen des Bereichs",
+          "Summoner: Mehrere eigene Konten festlegen; der Draft zeigt deine Bilanz gegen den Lane-Gegner über alle Konten",
+          "Summoner: „Alle meine Konten“ zeigt Übersicht, Champions, Spielstil und Mastery Points aller eigenen Konten zusammen",
+          "Summoner: Empfohlene Champions mit neun Picks und drei empfohlenen Bans",
+          "Summoner: Auswertung auf die letzten N Spiele begrenzen, unabhängig von der Anzahl abgerufener Matches",
+          "Summoner: Mehrere Spielmodi zugleich filtern, dazu „Summoner's Rift“ für alle Spiele mit direktem Gegner",
+          "Summoner: Letzte Suche samt Matchanzahl bleibt nach einem Neustart erhalten",
+          "Summoner: Weitere Ranked-Warteschlangen wie Teamranked 5v5"
+        ]
+      },
+      {
+        "kind": "improved",
+        "items": [
+          "Summoner: Tabellen sortierbar (sortieren, umdrehen, zurücksetzen) mit Platznummern",
+          "Summoner: Empfehlungen nach Nähe zu deinen erfolgreichen Champions, Bans nach deiner Bilanz gegen den Gegner",
+          "Summoner: Ränge in Rang-Farbe, kompakter und nur in der Übersicht",
+          "Summoner: Spiele ohne Lane-Gegner (Arena, ARAM, URF) werden bei den Matchups ausgewiesen"
+        ]
+      },
+      {
+        "kind": "fixed",
+        "items": [
+          "Summoner: Remakes werden durch ältere Matches ersetzt, damit die gewünschte Anzahl gewerteter Spiele zusammenkommt",
+          "Summoner: Teamranked-Spiele zählen für Empfehlungen und die Bilanz im Draft"
+        ]
+      }
+    ]
+  },
+  {
     "version": "2.2.0",
     "date": "2026-11-21",
     "title": "Favoriten, Marvins-Liste & Ergebnisse",

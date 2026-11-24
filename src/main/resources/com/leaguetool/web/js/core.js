@@ -28,6 +28,7 @@ export const store = createStore({
   dataSource: { period: '30', tier: 'emerald_plus' },
   avgWinRate: null,
   summonerRecent: [],
+  summonerLast: null, // zuletzt gesuchter Summoner mit Matchanzahl und Auswertungsfenster
   summonerProgress: null,
   draftProgress: null,
   build: [],
@@ -1018,7 +1019,7 @@ export function startRouter() {
 
 // ------------------------------------------------------------------ Zustand speichern
 
-const PERSISTED = ['theme', 'filter', 'dataSource', 'build', 'buildMode', 'buildBoots', 'buildChampion', 'buildRole', 'runePage', 'split', 'prefs', 'summonerRecent', 'favorites', 'favoriteInfo', 'avoid', 'window', 'draftDetailsOpen', 'draftOverviewOpen', 'draftFearlessLocksOpen'];
+const PERSISTED = ['theme', 'filter', 'dataSource', 'build', 'buildMode', 'buildBoots', 'buildChampion', 'buildRole', 'runePage', 'split', 'prefs', 'summonerRecent', 'summonerLast', 'favorites', 'favoriteInfo', 'avoid', 'window', 'draftDetailsOpen', 'draftOverviewOpen', 'draftFearlessLocksOpen'];
 let saveTimer = null;
 let lastSaved = null;
 

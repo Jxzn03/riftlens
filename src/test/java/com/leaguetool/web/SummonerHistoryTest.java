@@ -80,6 +80,34 @@ class SummonerHistoryTest {
     }
 
     @Test
+    void laneOpponentNeedsExactlyOneEnemyOnTheSamePosition() {
+        ObjectNode info = info(1, List.of("a", "b", "c", "d"), List.of("e", "f", "g", "h", "i"));
+        ArrayNode p = (ArrayNode) info.path("participants");
+        String[] positions = {"MIDDLE", "TOP", "JUNGLE", "BOTTOM", "UTILITY", "MIDDLE", "TOP", "JUNGLE", "BOTTOM", "UTILITY"};
+        for (int i = 0; i < 10; i++) {
+            ((ObjectNode) p.get(i)).put("teamPosition", positions[i]).put("championId", 100 + i);
+        }
+        assertEquals(105, SummonerHistory.laneOpponent(p, p.get(0), 0).orElseThrow().path("championId").asInt());
+
+        ((ObjectNode) p.get(6)).put("teamPosition", "MIDDLE");
+        assertTrue(SummonerHistory.laneOpponent(p, p.get(0), 0).isEmpty(), "zwei Gegner auf Mid: kein eindeutiger Gegner");
+        ((ObjectNode) p.get(0)).put("teamPosition", "");
+        assertTrue(SummonerHistory.laneOpponent(p, p.get(0), 0).isEmpty(), "ohne Position (ARAM, Arena)");
+    }
+
+    @Test
+    void oldFormatStaysReadableButCountsAsStale() throws Exception {
+        SummonerHistory history = new SummonerHistory(ME);
+        history.add("ALT", info(1, List.of(), List.of()), 1);
+        history.add("NEU", info(2, List.of(), List.of()));
+        SummonerHistory read = SummonerHistory.read(ME, history.changedGzip());
+        assertFalse(read.contains("ALT"), "Schema 1 wird neu geladen");
+        assertTrue(read.match("ALT").isPresent(), "bleibt bis dahin lesbar");
+        assertTrue(read.contains("NEU"));
+        assertEquals(0, read.match("NEU").orElseThrow().path("tk").asInt(), "Team-Kills werden gezählt (hier 0)");
+    }
+
+    @Test
     void newestRiotIdWinsAndForeignFilesAreIgnored() throws Exception {
         SummonerHistory history = new SummonerHistory(ME);
         ObjectNode later = info(200, List.of("duo"), List.of());

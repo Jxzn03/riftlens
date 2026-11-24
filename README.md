@@ -87,7 +87,8 @@ Voraussetzung: JDK 21 oder neuer. Maven wird vom Wrapper selbst geladen.
 
 ## Weitere Details
 
-- [Bedienung im Detail](docs/nutzung.md): Statistiken, Stärke-Formel, Summoner-Tab, Startparameter
+- [Bedienung im Detail](docs/nutzung.md): Statistiken, Stärke-Formel, Startparameter
+- [Summoner-Tab](docs/nutzung-summoner.md): Champions und Matchups, Spielstil, Meisterschaft, Live-Spiel, eigenes Konto. Eigene Konten und „Alle meine Konten“: [nutzung-summoner-konten.md](docs/nutzung-summoner-konten.md).
 - [Items-Tab und Build-Rechner](docs/nutzung-items.md): Item-Liste, Hinzufügen per „+“ oder Ziehen, Schalter, Rolle
 - [Draft-Tab im Detail](docs/nutzung-draft.md): Rechenmodell, Vorschläge, Client-Abgleich
 - [Draft-Archiv](docs/nutzung-archiv.md): Archiv, Papierkorb, Rollen korrigieren, Ergebnis

@@ -58,7 +58,7 @@ class SummonerLookupTest {
         http.respond(EUROPE + "/riot/account/v1/accounts/by-riot-id/Ich/EUW", "{\"puuid\":\"p1\",\"gameName\":\"Ich\",\"tagLine\":\"EUW\"}")
                 .respond(PLATFORM + "summoner/v4/summoners/by-puuid/p1", "{\"summonerLevel\":30,\"profileIconId\":1}")
                 .respond(PLATFORM + "league/v4/entries/by-puuid/p1", "[]")
-                .respond(PLATFORM + "champion-mastery/v4/champion-masteries/by-puuid/p1/top?count=10", "[]");
+                .respond(PLATFORM + "champion-mastery/v4/champion-masteries/by-puuid/p1", "[]");
     }
 
     private void respondIds(int start, int count, String... ids) throws Exception {
@@ -111,6 +111,23 @@ class SummonerLookupTest {
         int before = http.requests().size();
         lookup().lookup("Ich#EUW", 150);
         assertEquals(before + 6, http.requests().size(), "zweiter Abruf: 4 Profil-Aufrufe und 2 Seiten, keine Matches");
+    }
+
+    @Test
+    void remakesAreReplacedByOlderMatchesUpToTheRequestedCount() throws Exception {
+        respondProfile();
+        respondIds(0, 3, "EUW1_1", "EUW1_2", "EUW1_3");
+        respondIds(3, 1, "EUW1_4");
+        http.respond(MATCHES + "EUW1_1", match("EUW1_1", true, 1800))
+                .respond(MATCHES + "EUW1_2", match("EUW1_2", false, 120))
+                .respond(MATCHES + "EUW1_3", match("EUW1_3", true, 1800))
+                .respond(MATCHES + "EUW1_4", match("EUW1_4", false, 1700));
+
+        List<Map<String, Object>> rows = list(lookup().lookup("Ich#EUW", 3), "matches");
+
+        assertEquals(4, rows.size(), "Remake bleibt in der Liste, ein älteres Spiel kommt dazu");
+        assertEquals(3, rows.stream().filter(r -> !(Boolean) r.get("remake")).count());
+        assertEquals(1, requests("?start=3&count=1"));
     }
 
     @Test
@@ -194,10 +211,90 @@ class SummonerLookupTest {
         Map<String, Object> result = lookup().lookup("Ich#EUW", 3);
 
         assertEquals(3, list(result, "matches").size());
-        assertTrue(http.requests().stream().noneMatch(u -> u.startsWith(MATCHES + "L")), "kein erneuter Abruf");
+        assertEquals(1, requests("/L1"), "erst Riot fragen: der alte Cache kennt keine Positionen und Gegner");
+        assertFalse(list(result, "matches").getFirst().containsKey("opponent"), "Ersatz aus dem alten Cache ohne Details");
         assertEquals("Alt", list(result, "mates").getFirst().get("name"));
         lookup().lookup("Ich#EUW", 3);
+        assertEquals(1, requests("/L1"), "Riot kennt das Match nicht mehr: kein zweiter Versuch");
         assertEquals(1, requests("/by-puuid/old-duo"), "nachgetragener Name wird gespeichert");
+    }
+
+    /** Volles 5-gegen-5-Match: p1 Ahri (Mid, Team 100) gegen Talon (Mid, Team 200), dazu je vier weitere Spieler. */
+    private static String fullMatch(boolean win) throws Exception {
+        ObjectNode info = JSON.createObjectNode().put("queueId", 420).put("gameMode", "CLASSIC").put("gameDuration", 1800)
+                .put("gameCreation", 1_700_000_000_000L).put("gameEndTimestamp", 1_700_001_800_000L);
+        ArrayNode participants = info.putArray("participants");
+        ObjectNode own = participants.addObject().put("puuid", "p1").put("teamId", 100).put("teamPosition", "MIDDLE")
+                .put("championId", 103).put("championName", "Ahri").put("win", win).put("kills", 6).put("deaths", 2)
+                .put("assists", 4).put("totalDamageDealtToChampions", 30000).put("visionScore", 25).put("goldEarned", 12000)
+                .put("doubleKills", 2).put("visionWardsBoughtInGame", 3);
+        own.putObject("challenges").put("killParticipation", 0.5).put("teamDamagePercentage", 0.31)
+                .put("laningPhaseGoldExpAdvantage", 1).put("soloKills", 2);
+        String[] positions = {"TOP", "JUNGLE", "BOTTOM", "UTILITY"};
+        for (int i = 0; i < 4; i++) {
+            participants.addObject().put("puuid", "ally-" + i).put("teamId", 100).put("teamPosition", positions[i])
+                    .put("championId", 10 + i).put("kills", 3);
+        }
+        participants.addObject().put("puuid", "foe-mid").put("teamId", 200).put("teamPosition", "MIDDLE")
+                .put("championId", 91).put("championName", "Talon").put("kills", 4);
+        for (int i = 0; i < 4; i++) {
+            participants.addObject().put("puuid", "foe-" + i).put("teamId", 200).put("teamPosition", positions[i])
+                    .put("championId", 20 + i);
+        }
+        ObjectNode root = JSON.createObjectNode();
+        root.set("info", info);
+        return JSON.writeValueAsString(root);
+    }
+
+    @Test
+    void matchRowsCarryLaneOpponentAndOpggStyleDetails() throws Exception {
+        respondProfile();
+        respondIds(0, 1, "F1");
+        http.respond(MATCHES + "F1", fullMatch(false));
+
+        Map<String, Object> row = list(lookup().lookup("Ich#EUW", 1), "matches").getFirst();
+
+        assertEquals(Map.of("key", 91, "name", "Talon"), row.get("opponent"));
+        assertEquals("blue", row.get("side"));
+        assertEquals(0.5, row.get("kp"));
+        assertEquals(0.31, row.get("damageShare"));
+        assertEquals(30000L, row.get("damage"));
+        assertEquals(true, row.get("laneLead"));
+        assertEquals(List.of(2, 0, 0, 0), row.get("multi"));
+        assertEquals(3, row.get("controlWards"));
+        assertEquals(2, row.get("soloKills"));
+        assertEquals(1_700_000_000_000L, row.get("startedAt"));
+    }
+
+    @Test
+    void staleMatchesFromTheOldFormatAreReloadedOnce() throws Exception {
+        respondProfile();
+        respondIds(0, 1, "F1");
+        http.respond(MATCHES + "F1", fullMatch(true));
+        // Historie im alten Format: Match ohne Schema, Lane-Gegner und Details.
+        SummonerHistory old = new SummonerHistory("p1");
+        old.add("F1", JSON.readTree(fullMatch(true)).path("info"), 1);
+        cache().writeBytes(FileCache.GLOBAL, SummonerHistory.cacheKey("p1"), old.changedGzip());
+
+        Map<String, Object> first = lookup().lookup("Ich#EUW", 1);
+        lookup().lookup("Ich#EUW", 1);
+
+        assertEquals(1, requests("/F1"), "einmal neu geladen, danach aus dem Cache");
+        assertTrue(list(first, "matches").getFirst().containsKey("opponent"));
+    }
+
+    @Test
+    void allMasteriesKeepGradesAndProgress() throws Exception {
+        var rows = SummonerLookup.mastery(JSON.readTree("[{\"championId\":412,\"championLevel\":20,\"championPoints\":236876,"
+                + "\"lastPlayTime\":1,\"championPointsSinceLastLevel\":51276,\"championPointsUntilNextLevel\":-40276,"
+                + "\"milestoneGrades\":[\"A-\",\"S\"],\"championSeasonMilestone\":2,"
+                + "\"nextSeasonMilestone\":{\"requireGradeCounts\":{\"A-\":1},\"rewardMarks\":1}}]"));
+        Map<String, Object> row = rows.getFirst();
+        assertEquals(412, row.get("championKey"));
+        assertEquals(List.of("A-", "S"), row.get("grades"));
+        assertEquals(-40276L, row.get("untilNext"));
+        assertEquals(2, row.get("seasonMilestone"));
+        assertEquals(Map.of("A-", 1), row.get("required"));
     }
 
     @Test
@@ -214,6 +311,53 @@ class SummonerLookupTest {
         assertTrue(SummonerHistory.read("p1", Files.readAllBytes(file)).contains("OK1"));
     }
 
+
+    /** Gespeicherte Historie für {@code puuid} aus Matches im Format von {@link #match}. */
+    private void storeHistory(String puuid, Map<String, String> matches) throws Exception {
+        SummonerHistory history = new SummonerHistory(puuid);
+        for (Map.Entry<String, String> e : matches.entrySet()) {
+            assertTrue(history.add(e.getKey(), JSON.readTree(e.getValue().replace("\"p1\"", "\"" + puuid + "\"")).path("info")));
+        }
+        cache().writeBytes(FileCache.GLOBAL, SummonerHistory.cacheKey(puuid), history.changedGzip());
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void combinedViewMergesAllOwnAccountsFromTheCache() throws Exception {
+        storeHistory("p1", Map.of("EUW1_A1", match("EUW1_A1", true, 1800, "duo"), "EUW1_A2", match("EUW1_A2", false, 1800, "duo"),
+                "EUW1_S", match("EUW1_S", true, 1800, "duo", "p2")));
+        // Zweitkonto: ein eigenes Spiel mit dem Duo und dasselbe Spiel wie oben aus seiner Sicht (mit p1 im Team).
+        storeHistory("p2", Map.of("EUW1_B1", match("EUW1_B1", true, 1800, "duo"), "EUW1_S", match("EUW1_S", true, 1800, "own1")
+                .replace("\"own1\"", "\"p1\"").replace("\"Own1\"", "\"Ich\"")));
+
+        Map<String, Object> result = SummonerLookup.combinedMatches(cache(), List.of("p1", "p2"));
+
+        List<Map<String, Object>> rows = list(result, "matches");
+        assertEquals(5, rows.size(), "gemeinsames Spiel zählt für beide Konten");
+        assertEquals(5, rows.stream().map(r -> r.get("id")).distinct().count(), "eindeutige Zeilen-IDs");
+        assertEquals(List.of(0, 1), rows.stream().map(r -> r.get("account")).distinct().sorted().toList());
+        assertTrue(rows.stream().map(r -> ((Number) r.get("startedAt")).longValue()).toList()
+                .equals(rows.stream().map(r -> ((Number) r.get("startedAt")).longValue()).sorted(Collections.reverseOrder()).toList()));
+        List<Map<String, Object>> mates = list(result, "mates");
+        assertEquals(List.of("Duo"), mates.stream().map(m -> m.get("name")).toList(), "eigene Konten sind keine Mitspieler");
+        assertEquals(4, rows.stream().filter(r -> ((List<Integer>) r.get("mates")).contains(0)).count());
+    }
+
+    @Test
+    void combinedMasterySumsPointsAndKeepsTheHighestLevel() {
+        Map<String, Object> main = Dto.obj("championKey", 157, "level", 12, "points", 150_000L, "lastPlayed", 10L, "untilNext", -5L);
+        Map<String, Object> smurf = Dto.obj("championKey", 157, "level", 4, "points", 20_000L, "lastPlayed", 99L, "untilNext", 1_000L);
+        Map<String, Object> other = Dto.obj("championKey", 1, "level", 5, "points", 30_000L, "lastPlayed", 5L, "untilNext", 0L);
+
+        List<Map<String, Object>> merged = SummonerLookup.combinedMastery(List.of(List.of(main, other), List.of(smurf)));
+
+        assertEquals(List.of(157, 1), merged.stream().map(m -> m.get("championKey")).toList());
+        assertEquals(170_000L, merged.getFirst().get("points"));
+        assertEquals(12, merged.getFirst().get("level"));
+        assertEquals(-5L, merged.getFirst().get("untilNext"), "Fortschritt vom Konto mit der höchsten Stufe");
+        assertEquals(99L, merged.getFirst().get("lastPlayed"));
+        assertEquals(2, merged.getFirst().get("accounts"));
+    }
     @Test
     void durationIsNormalizedToSeconds() {
         ObjectNode info = new ObjectMapper().createObjectNode();
@@ -229,6 +373,14 @@ class SummonerLookupTest {
     void arenaIsRecognisedByGameModeForAnyQueueNumber() {
         assertEquals("Arena", SummonerLookup.modeLabel(1750, "CHERRY"));
         assertEquals("Arena", SummonerLookup.modeLabel(1700, "CHERRY"));
+    }
+
+    @Test
+    void rankedQueuesBeyondSoloAndFlexAreLabelled() {
+        assertEquals("Solo/Duo", SummonerLookup.queueLabel("RANKED_SOLO_5x5"));
+        assertEquals("Flex", SummonerLookup.queueLabel("RANKED_FLEX_SR"));
+        assertEquals("Teamranked 5v5", SummonerLookup.queueLabel("RANKED_TEAM_5x5"));
+        assertEquals("Flex tt", SummonerLookup.queueLabel("RANKED_FLEX_TT"));
     }
 
     @Test

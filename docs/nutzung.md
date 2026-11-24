@@ -83,27 +83,5 @@ höchstens 0,2 % oder keine Spiele haben.
 
 ### Summoner-Tab (Riot-API)
 
-**Eingabe:** Riot-ID (`Name#TAG`), Region und Anzahl der Matches (20, 50, 100, 200, 300, 500 oder 1000). Ein API-Key in den
-Optionen ist nötig, und die Riot-Abfragen müssen in den Einstellungen aktiviert sein (Standard: aus). Die Region ist
-standardmäßig `EUW1`. Schlägt eine Abfrage fehl, steht unter dem Fehler eine Anleitung für einen neuen Dev-Key.
-
-**Anzeige:** Ränge, meistgespielte Champions mit Winrate, KDA und CS/Min, häufige Mitspieler, Spielmodi, Rollen,
-Meisterschaft und Match-Verlauf. Ein Klick auf einen Spielmodus filtert die Auswertung. Der Match-Verlauf zeigt zuerst
-50 Spiele, darunter laden „weitere anzeigen“ und „Alle anzeigen“ den Rest. Die Auswertung zählt immer alle abgerufenen
-Matches.
-
-**Häufige Mitspieler (Duo):** Riot meldet keine Premades. Als Mitspieler gilt, wer in der Auswahl mindestens dreimal im
-eigenen Team war (Arena: im selben Zweierteam). Angezeigt werden Spiele und Winrate zusammen, die eigene Winrate in den
-übrigen Spielen und die Differenz. Ein Klick auf den Namen fragt diesen Spieler ab.
-
-**Hinweise**
-
-- Winrates beziehen sich auf die abgerufenen Matches, Remakes zählen nicht mit.
-- Riot liefert höchstens 100 Match-IDs je Aufruf; größere Mengen werden seitenweise geholt.
-- Je Spieler liegt eine gzip-Datei `cache/_global/riot/history/<puuid>.json.gz` mit der eigenen Zeile je Match und
-  den Teamkollegen (PUUID, Riot-ID), etwa 100–150 KB für 500 und 200–300 KB für 1000 Spiele (höchstens 1200 Matches
-  je Spieler). Weitere Abfragen laden nur neue Spiele.
-- Mit einem Dev- oder Personal-Key gelten 100 Anfragen in 2 Minuten. Der erste Abruf dauert dadurch bei 500 Matches
-  etwa 10, bei 1000 etwa 20 Minuten; für 1000 erscheint ein eigener Warnhinweis. Die Anzeige schätzt die Restzeit.
-  Zwischendurch wird gespeichert, ein Abbruch verliert nichts. Riot hält Matches nur etwa zwei Jahre vor.
-
+Abfrage eines Spielers mit Rängen, Champions und Matchups, Spielstil, Meisterschaften und Live-Spiel; ein Konto lässt
+sich als eigenes festlegen, dann zeigt der Draft deine Matchup-Bilanz: [`nutzung-summoner.md`](nutzung-summoner.md).

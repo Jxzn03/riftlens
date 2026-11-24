@@ -147,6 +147,26 @@ public final class RiotApiClient implements RiotApi {
                 + segment(puuid) + "/top?count=" + count);
     }
 
+    /** champion-mastery-v4: alle Meisterschaften des Kontos, Punkte absteigend (ein Aufruf). */
+    public JsonNode championMasteries(String puuid) throws IOException {
+        return getJson(platform.platformBaseUrl() + "/lol/champion-mastery/v4/champion-masteries/by-puuid/" + segment(puuid));
+    }
+
+    /**
+     * spectator-v5 {@code /lol/spectator/v5/active-games/by-summoner/{puuid}}: laufendes Spiel des Spielers oder leer,
+     * wenn er gerade nicht spielt (HTTP 404).
+     */
+    public Optional<JsonNode> activeGame(String puuid) throws IOException {
+        try {
+            return Optional.of(getJson(platform.platformBaseUrl() + "/lol/spectator/v5/active-games/by-summoner/" + segment(puuid)));
+        } catch (RiotApiException e) {
+            if (e.isNotFound()) {
+                return Optional.empty();
+            }
+            throw e;
+        }
+    }
+
     /** account-v1 {@code /riot/account/v1/accounts/by-puuid/{puuid}}: aktuelle Riot-ID zu einer PUUID. */
     public RiotAccount accountByPuuid(String puuid) throws IOException {
         JsonNode root = getJson(platform.accountBaseUrl() + "/riot/account/v1/accounts/by-puuid/" + segment(puuid));

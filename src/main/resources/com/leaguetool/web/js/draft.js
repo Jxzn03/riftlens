@@ -850,6 +850,7 @@ export function DraftView() {
     };
   }, [result, loading]);
   const sourceLabel = useSourceLabel();
+  const ownMatchups = useOwnMatchups();
   const client = useClientSync(view, setView, data);
   const owned = useMemo(() => new Set(client.champSelect ? client.lcu.pickable : []), [client.champSelect, client.lcu]);
   const hints = useMemo(() => {
@@ -977,6 +978,7 @@ export function DraftView() {
       ${view.tab === 'archive' ? null : html`<${ActiveOptions} view=${view} setView=${setView} />`}
     </div>
 
+    ${view.tab !== 'archive' ? html`<${OwnMatchupCard} own=${ownMatchups} view=${view} result=${loading ? null : result} hints=${hints.ally} data=${data} />` : null}
     ${view.tab === 'archive' ? html`<${Archive} data=${data} view=${view} setView=${setView} />`
       : !result ? (loading ? null : html`<${Empty} title="Noch keine Daten" />`)
       : view.tab === 'picks'
@@ -1696,6 +1698,76 @@ function minuteLabel(starts, i) {
  * `store[storeKey]` und gilt auch beim Wechsel zwischen Tabs. Steht der Schlüssel in PERSISTED (`core.js`), bleibt er
  * über Neustarts erhalten (so `draftDetailsOpen` und `draftOverviewOpen`).
  */
+// ------------------------------------------------------------------ Eigene Bilanz (Mein Konto)
+
+/**
+ * Eigene Matchup-Bilanz aus den gespeicherten Matches des eigenen Kontos (Summoner-Tab). Nur lesen, kein Riot-Abruf
+ * und keine Daten anderer Spieler: Gezeigt werden allein deine Ergebnisse gegen die Champions auf dem Brett.
+ */
+function useOwnMatchups() {
+  const [own, setOwn] = useState(null);
+  useEffect(() => {
+    api.get('/api/summoner/own').then(setOwn).catch(() => setOwn(null));
+  }, []);
+  return own;
+}
+
+const OWN_TOP_CHAMPIONS = 3;
+
+function record(games, wins) {
+  return games ? `${wins}S ${games - wins}N` : '–';
+}
+
+function OwnRecord({ games, wins }) {
+  if (!games) {
+    return html`<span class="muted">keine Spiele</span>`;
+  }
+  const wr = wins / games;
+  return html`<span><strong class=${wr >= 0.52 ? 'good' : wr < 0.48 ? 'bad' : ''}>${percent(wr, 0)}</strong> <span class="muted">${record(games, wins)}</span></span>`;
+}
+
+function OwnMatchupCard({ own, view, result, hints, data }) {
+  if (!own || !own.accounts || own.accounts.length === 0 || !own.matchups) {
+    return null;
+  }
+  const { matchups, accounts } = own;
+  const accountLabel = accounts.length === 1 ? accounts[0].riotId : `${accounts.length} Konten`;
+  const roleOf = (team, slot) => slot && (slot.role || (result?.slots[team] || []).find((s) => s.champion === slot.champion)?.role) || null;
+  const localIndex = hints.findIndex((h) => h && h.local);
+  const mySlot = localIndex >= 0 ? view.ally[localIndex] : null;
+  const myChampion = mySlot ? mySlot.champion : localIndex >= 0 ? hints[localIndex].intent || null : null;
+  const myRole = roleOf('ally', mySlot);
+  const enemies = view.enemy.filter(Boolean).map((slot) => ({ slot, role: roleOf('enemy', slot) }));
+  const label = (key) => data.championByKey.get(key)?.name || `Champion ${key}`;
+  const icon = (key, size = 26) => {
+    const c = data.championByKey.get(key);
+    return c ? html`<${Img} src=${c.icon} size=${size} cls="round" tip=${c.name} />` : html`<span>${label(key)}</span>`;
+  };
+  const ownTotal = myChampion ? matchups.own[myChampion] : null;
+  return html`<${Card} cls="draft-own-card" title="Deine Bilanz"
+    aside=${html`<span class="muted" data-tip=${`Aus den gespeicherten Matches deiner eigenen Konten (Summoner-Tab), alle zusammengezählt: ${accounts.map((a) => a.riotId).join(', ')}. Gezählt werden Spiele auf Summoner's Rift gegen den direkten Lane-Gegner, ohne Remakes. Neue Spiele kommen mit der nächsten Abfrage im Summoner-Tab dazu.`}>
+      ${accountLabel} · ${matchups.games} Spiele mit Lane-Gegner</span>`}>
+    ${myChampion ? html`<p class="own-line">${icon(myChampion, 22)} <span>Du mit <strong>${label(myChampion)}</strong>${myRole ? ` (${roleLabel(myRole)})` : ''}:</span>
+      ${ownTotal ? html`<${OwnRecord} games=${ownTotal.games} wins=${ownTotal.wins} />` : html`<span class="muted">noch keine Spiele</span>`}</p>` : null}
+    ${enemies.length === 0 ? html`<p class="muted small">Sobald Gegner gewählt sind, steht hier deine Bilanz gegen jeden von ihnen.</p>` : html`<table class="data compact">
+      <thead><tr><th>Gegner</th><th>Deine Bilanz dagegen</th>${myChampion ? html`<th>mit ${label(myChampion)}</th>` : null}<th>Deine Champions dagegen</th></tr></thead>
+      <tbody>${enemies.map(({ slot, role }) => {
+        const vs = matchups.vs[slot.champion];
+        const lane = myRole && role === myRole;
+        const mine = vs && myChampion ? vs.champions.find((c) => c.key === myChampion) : null;
+        return html`<tr key=${slot.champion} class=${lane ? 'own-lane' : ''}>
+          <td><span class="own-enemy">${icon(slot.champion)}<span>${label(slot.champion)}${role ? html`<small class="muted"> ${roleLabel(role)}</small>` : null}${lane ? html` <${Tag}>Lane<//>` : null}</span></span></td>
+          <td><${OwnRecord} games=${vs ? vs.games : 0} wins=${vs ? vs.wins : 0} /></td>
+          ${myChampion ? html`<td>${mine ? html`<${OwnRecord} games=${mine.games} wins=${mine.wins} />` : html`<span class="muted">–</span>`}</td>` : null}
+          <td><span class="own-champs">${vs ? vs.champions.slice(0, OWN_TOP_CHAMPIONS).map((c) => html`<span key=${c.key} class="own-champ"
+            data-tip=${`${label(c.key)} gegen ${label(slot.champion)}: ${record(c.games, c.wins)}, KDA ${c.deaths ? ((c.kills + c.assists) / c.deaths).toFixed(2) : 'Perfekt'}`}>
+            ${icon(c.key, 20)}<small class=${c.wins / c.games >= 0.52 ? 'good' : c.wins / c.games < 0.48 ? 'bad' : ''}>${c.wins}:${c.games - c.wins}</small></span>`) : html`<span class="muted">–</span>`}</span></td>
+        </tr>`;
+      })}</tbody>
+    </table>`}
+  <//>`;
+}
+
 function Section({ title, storeKey, defaultOpen = false, children }) {
   const open = useStore((s) => s[storeKey] ?? defaultOpen);
   return html`

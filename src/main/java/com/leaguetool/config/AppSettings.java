@@ -247,6 +247,53 @@ public final class AppSettings {
         props.setProperty(KEY_PLATFORM, platform);
     }
 
+    /** Höchstzahl eigener Konten (Haupt- und Zweitkonten). */
+    public static final int MAX_OWN_ACCOUNTS = 10;
+
+    /**
+     * Eigene Konten (Summoner-Tab „Mein Konto“, eigene Matchups im Draft) in der gespeicherten Reihenfolge: Riot-ID
+     * {@code Name#TAG}, Plattform und PUUID. Gespeichert als {@code riot.own.<n>.*}; der frühere Einzeleintrag
+     * {@code riot.own.riotId} wird als erstes Konto gelesen. Nur lokal, nie aus dem League-Client gelesen.
+     */
+    public synchronized java.util.List<OwnAccount> ownAccounts() {
+        java.util.List<OwnAccount> accounts = new java.util.ArrayList<>();
+        ownAccount("riot.own.").ifPresent(accounts::add);
+        for (int i = 1; i <= MAX_OWN_ACCOUNTS; i++) {
+            ownAccount("riot.own." + i + ".").filter(a -> !accounts.contains(a)).ifPresent(accounts::add);
+        }
+        return java.util.List.copyOf(accounts.subList(0, Math.min(MAX_OWN_ACCOUNTS, accounts.size())));
+    }
+
+    private Optional<OwnAccount> ownAccount(String prefix) {
+        String riotId = props.getProperty(prefix + "riotId", "");
+        String puuid = props.getProperty(prefix + "puuid", "");
+        if (riotId.isBlank() || puuid.isBlank()) {
+            return Optional.empty();
+        }
+        return Optional.of(new OwnAccount(riotId, props.getProperty(prefix + "platform", platform()), puuid));
+    }
+
+    /** Ersetzt alle eigenen Konten (höchstens {@link #MAX_OWN_ACCOUNTS}); räumt den früheren Einzeleintrag mit ab. */
+    public synchronized void setOwnAccounts(java.util.List<OwnAccount> accounts) {
+        for (String field : java.util.List.of("riotId", "platform", "puuid")) {
+            props.remove("riot.own." + field);
+            for (int i = 1; i <= MAX_OWN_ACCOUNTS; i++) {
+                props.remove("riot.own." + i + "." + field);
+            }
+        }
+        for (int i = 0; i < Math.min(MAX_OWN_ACCOUNTS, accounts.size()); i++) {
+            OwnAccount a = accounts.get(i);
+            String prefix = "riot.own." + (i + 1) + ".";
+            props.setProperty(prefix + "riotId", a.riotId());
+            props.setProperty(prefix + "platform", a.platform());
+            props.setProperty(prefix + "puuid", a.puuid());
+        }
+    }
+
+    /** Eigenes Konto; {@code platform} wie {@link #platform()}, z. B. {@code euw1}. */
+    public record OwnAccount(String riotId, String platform, String puuid) {
+    }
+
     /** In den Einstellungen gespeicherter Key (kann leer sein). */
     public synchronized String storedRiotApiKey() {
         return props.getProperty(KEY_RIOT_API_KEY, "");

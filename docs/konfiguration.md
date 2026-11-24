@@ -48,6 +48,9 @@ Nur für den Summoner-Tab und die optionale Verifizierung nötig.
 - Den Key in den Einstellungen eintragen oder die Umgebungsvariable `RIOT_API_KEY` setzen.
 - Der Key wird nie ins Repository geschrieben, nur lokal in `settings.properties`.
 - Kostenlose Dev-Keys laufen nach 24 h ab. Für dauerhafte Nutzung einen Personal-Key beantragen.
+- Eigene Konten (Summoner-Tab „Als mein Konto festlegen“, bis zu 10): `riot.own.<n>.riotId`, `riot.own.<n>.platform`
+  und `riot.own.<n>.puuid` (n = 1, 2, …) in `settings.properties`, nur lokal; Grundlage für das Live-Spiel ohne Eingabe
+  und „Deine Bilanz“ im Draft. Ein früherer Einzeleintrag `riot.own.riotId` wird als erstes Konto übernommen.
 
 ## Sicherheit
 
@@ -63,7 +66,7 @@ Pakete unter `com.leaguetool`:
 |---|---|
 | `data.ddragon` | Data-Dragon-Client und -Parser (versions, champion, champion/{id}, item, runesReforged, summoner) |
 | `data.wiki` | MediaWiki-Client (`wiki.leagueoflegends.com/en-us/api.php`): Base-Stats, Ability-Details |
-| `data.riot` | Riot-API-Client (league-v4, summoner-v4, account-v1, match-v5), Rate-Limiter, Verifizierung |
+| `data.riot` | Riot-API-Client (league-v4, summoner-v4, account-v1, match-v5, champion-mastery-v4, spectator-v5), Rate-Limiter, Verifizierung |
 | `data.http` | HTTP-Abstraktion (testbar mit Fakes), Offline-Schalter |
 | `data.lcu` | Lesender Abgleich mit der Champion-Auswahl des League-Clients |
 | `cache` | Datei-Cache pro Patch-Version |

@@ -74,6 +74,7 @@ final class ApiRoutes {
     private final DraftEndpoint draft;
     private final DraftArchiveEndpoint archive;
     private final FearlessEndpoint fearless;
+    private final SummonerEndpoint summoner;
 
     ApiRoutes(WebContext ctx, ObjectMapper json) {
         this.ctx = ctx;
@@ -81,6 +82,7 @@ final class ApiRoutes {
         this.draft = new DraftEndpoint(ctx);
         this.archive = new DraftArchiveEndpoint(ctx);
         this.fearless = new FearlessEndpoint(ctx, archive.drafts());
+        this.summoner = new SummonerEndpoint(ctx);
     }
 
     /** Antwort eines Endpunkts: ein zu serialisierendes Objekt oder fertige JSON-Bytes. */
@@ -98,7 +100,7 @@ final class ApiRoutes {
             case "PUT ui-state" -> writeUiState(body);
             case "GET build" -> Dto.buildTotals(BuildCalculator.totals(items(params)));
             case "POST verify" -> verify();
-            case "GET summoner" -> summoner(params);
+            case "GET summoner", "POST summoner" -> summoner(method, path, params, body);
             case "GET stats" -> stats(path, params);
             case "GET champions" -> champion(path, params);
             case "GET items" -> itemWiki(path);
@@ -582,14 +584,31 @@ final class ApiRoutes {
                 .map(c -> Dto.obj("name", c.name(), "ok", c.ok(), "detail", c.detail())).toList());
     }
 
-    private Object summoner(Map<String, String> params) throws IOException {
+    private Object summoner(String method, List<String> path, Map<String, String> params, byte[] body) throws IOException {
+        String sub = path.size() > 1 ? path.get(1) : "";
+        // Die eigene Bilanz liest nur den Cache und braucht keinen Key (Draft).
+        if ("GET".equals(method) && "own".equals(sub)) {
+            return summoner.own();
+        }
+        // Alle eigenen Konten zusammen: Matches aus dem Cache auch ohne Key, Ränge und Meisterschaft nur mit Key.
+        if ("GET".equals(method) && "combined".equals(sub)) {
+            return summoner.combined(statTier(params.get("laTier")));
+        }
+        JsonNode request = "POST".equals(method) ? parse(body) : null;
+        // Entfernen des eigenen Kontos geht auch ohne Key.
+        if (request != null && "own".equals(sub) && request.path("remove").asBoolean(false)) {
+            return summoner.setOwn(request);
+        }
         requireRiotConfigured();
-        Platform platform = Platform.fromId(params.get("platform")).orElseGet(ctx::platform);
-        int count = Math.max(1, Math.min(SummonerLookup.MAX_MATCHES, (int) doubleParam(params, "count", 50)));
-        return new SummonerLookup(ctx.riotClient(platform), ctx.cache(), ctx.awaitData().patch(),
-                (done, total, cached) -> ctx.publish("summoner-progress",
-                        Dto.obj("done", done, "total", total, "cached", cached)))
-                .lookup(params.get("riotId"), count);
+        return switch (method + " " + sub) {
+            case "GET " -> {
+                int count = Math.max(1, Math.min(SummonerLookup.MAX_MATCHES, (int) doubleParam(params, "count", 50)));
+                yield summoner.lookup(params, count, statTier(params.get("laTier")));
+            }
+            case "POST own" -> summoner.setOwn(request);
+            case "GET live" -> path.size() > 2 ? summoner.liveChampion(path) : summoner.live(params);
+            default -> throw new ApiException(404, "Unbekannter Endpunkt");
+        };
     }
 
     // ------------------------------------------------------------------ Einstellungen

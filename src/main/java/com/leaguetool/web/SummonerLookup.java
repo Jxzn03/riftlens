@@ -12,10 +12,14 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ExecutionException;
@@ -45,7 +49,6 @@ final class SummonerLookup {
     private static final int SAVE_EVERY = 50;
     /** Matches unter dieser Dauer (Sekunden) gelten als Remake. */
     private static final int MIN_DURATION_SEC = 300;
-    private static final int MASTERY_COUNT = 10;
     private static final int PARALLEL_DOWNLOADS = 4;
     private static final int PRACTICE_TOOL_QUEUE = 3140;
     /** Nach Riots offizieller Liste (static.developer.riotgames.com/docs/lol/queues.json). */
@@ -85,13 +88,13 @@ final class SummonerLookup {
             RiotAccount account = account(id[0], id[1]);
             JsonNode summoner = summoner(account);
             List<LeagueEntry> ranked = api.leagueEntriesByPuuid(account.puuid());
-            JsonNode masteries = api.topChampionMasteries(account.puuid(), MASTERY_COUNT);
+            JsonNode masteries = api.championMasteries(account.puuid());
             Matches matches = matches(account.puuid(), matchCount);
             return Dto.obj(
                     "gameName", account.gameName(), "tagLine", account.tagLine(), "platform", api.platform().id(),
                     "level", summoner.path("summonerLevel").asInt(),
                     "icon", Dto.patchIcon(patch, "profileicon", summoner.path("profileIconId").asInt() + ".png"),
-                    "ranked", ranked.stream().filter(e -> RANKED_QUEUES.containsKey(e.queueType())).map(SummonerLookup::ranked).toList(),
+                    "ranked", ranked.stream().filter(e -> e.queueType() != null && e.queueType().startsWith("RANKED_")).map(SummonerLookup::ranked).toList(),
                     "mastery", mastery(masteries),
                     "matches", matches.rows(), "mates", matches.mates(), "minSharedGames", MIN_SHARED_GAMES);
         } catch (RiotApiException e) {
@@ -132,20 +135,137 @@ final class SummonerLookup {
         }
     }
 
-    private static Map<String, Object> ranked(LeagueEntry e) {
+    /**
+     * Anzeigename einer Ranked-Warteschlange: Solo/Duo und Flex fest, Team-Warteschlangen (z. B. 5v5 Teamranked) als
+     * „Teamranked 5v5“, andere lesbar aus dem Riot-Namen. Liefert league-v4 sie mit, erscheinen sie ohne weiteren Aufruf.
+     */
+    static String queueLabel(String queueType) {
+        String known = RANKED_QUEUES.get(queueType);
+        if (known != null) {
+            return known;
+        }
+        if (queueType.contains("TEAM")) {
+            return "Teamranked 5v5";
+        }
+        String name = queueType.replaceFirst("^RANKED_", "").replace('_', ' ').toLowerCase(Locale.ROOT);
+        return name.isEmpty() ? queueType : Character.toUpperCase(name.charAt(0)) + name.substring(1);
+    }
+
+    static Map<String, Object> ranked(LeagueEntry e) {
         int games = e.wins() + e.losses();
-        return Dto.obj("queue", RANKED_QUEUES.get(e.queueType()), "tier", e.tier() == null ? "" : e.tier().label(),
+        return Dto.obj("queue", queueLabel(e.queueType()), "tier", e.tier() == null ? "" : e.tier().label(),
                 "division", e.tier() != null && e.tier().isApex() ? "" : e.rank(), "lp", e.leaguePoints(),
                 "wins", e.wins(), "losses", e.losses(), "winRate", games == 0 ? 0 : (double) e.wins() / games);
     }
 
-    private static List<Map<String, Object>> mastery(JsonNode masteries) {
+    /**
+     * Alle Meisterschaften des Kontos, wie Riot sie liefert (Punkte absteigend, wie bei op.gg). {@code grades} sind
+     * die Noten der laufenden Saison-Meilensteine, {@code untilNext} wird nach Stufe 10 negativ (Punkte über der Stufe).
+     */
+    static List<Map<String, Object>> mastery(JsonNode masteries) {
         List<Map<String, Object>> rows = new ArrayList<>();
         for (JsonNode m : masteries) {
+            List<String> grades = new ArrayList<>();
+            m.path("milestoneGrades").forEach(g -> grades.add(g.asText()));
+            JsonNode next = m.path("nextSeasonMilestone");
+            Map<String, Integer> required = new java.util.TreeMap<>();
+            next.path("requireGradeCounts").fields().forEachRemaining(e -> required.put(e.getKey(), e.getValue().asInt()));
             rows.add(Dto.obj("championKey", m.path("championId").asInt(), "level", m.path("championLevel").asInt(),
-                    "points", m.path("championPoints").asLong(), "lastPlayed", m.path("lastPlayTime").asLong()));
+                    "points", m.path("championPoints").asLong(), "lastPlayed", m.path("lastPlayTime").asLong(),
+                    "sinceLevel", m.path("championPointsSinceLastLevel").asLong(),
+                    "untilNext", m.path("championPointsUntilNextLevel").asLong(),
+                    "tokens", m.path("tokensEarned").asInt(), "seasonMilestone", m.path("championSeasonMilestone").asInt(),
+                    "grades", grades, "required", required, "rewardMarks", next.path("rewardMarks").asInt(0)));
         }
         return rows;
+    }
+
+    // ------------------------------------------------------------------ Alle eigenen Konten
+
+    /**
+     * Match-Zeilen aller eigenen Konten nur aus dem Cache, neueste zuerst. Jede Zeile trägt die Kontonummer
+     * ({@code account}) und eine eindeutige {@code id} (ein Spiel zweier eigener Konten zusammen zählt für beide).
+     * Mitspieler werden über alle Konten nach PUUID zusammengezählt; eigene Konten zählen nicht als Mitspieler.
+     */
+    static Map<String, Object> combinedMatches(FileCache cache, List<String> puuids) {
+        List<Map<String, Object>> rows = new ArrayList<>();
+        List<List<String>> rowMates = new ArrayList<>();
+        Map<String, Integer> games = new HashMap<>();
+        Map<String, SummonerHistory.Mate> known = new HashMap<>();
+        for (int a = 0; a < puuids.size(); a++) {
+            SummonerHistory history = loadHistory(cache, puuids.get(a));
+            for (JsonNode m : history.matches()) {
+                if (isExcluded(m.path("queueId").asInt())) {
+                    continue;
+                }
+                String id = m.path("id").asText("");
+                Map<String, Object> row = matchRow(id + "-" + a, m, m.path("p"));
+                row.put("account", a);
+                List<String> mates = new ArrayList<>();
+                for (JsonNode ref : m.path("mates")) {
+                    SummonerHistory.Mate mate = history.mate(ref.asInt());
+                    if (mate == null || mate.puuid().isBlank() || puuids.contains(mate.puuid())) {
+                        continue;
+                    }
+                    mates.add(mate.puuid());
+                    known.merge(mate.puuid(), mate, (old, now) -> old.name().isBlank() ? now : old);
+                    if (!(Boolean) row.get("remake")) {
+                        games.merge(mate.puuid(), 1, Integer::sum);
+                    }
+                }
+                rows.add(row);
+                rowMates.add(mates);
+            }
+        }
+        List<String> selected = games.entrySet().stream()
+                .filter(e -> e.getValue() >= MIN_SHARED_GAMES)
+                .sorted(Map.Entry.<String, Integer>comparingByValue().reversed().thenComparing(Map.Entry.comparingByKey()))
+                .limit(MAX_MATES).map(Map.Entry::getKey).toList();
+        Map<String, Integer> position = new HashMap<>();
+        List<Map<String, Object>> mates = new ArrayList<>();
+        for (String puuid : selected) {
+            position.put(puuid, mates.size());
+            SummonerHistory.Mate mate = known.get(puuid);
+            mates.add(Dto.obj("name", mate.name(), "tag", mate.tag()));
+        }
+        for (int i = 0; i < rows.size(); i++) {
+            rows.get(i).put("mates", rowMates.get(i).stream().map(position::get).filter(Objects::nonNull).toList());
+        }
+        rows.sort(Comparator.comparingLong((Map<String, Object> r) -> ((Number) r.get("startedAt")).longValue()).reversed());
+        return Dto.obj("matches", rows, "mates", mates, "minSharedGames", MIN_SHARED_GAMES);
+    }
+
+    /**
+     * Meisterschaft mehrerer Konten je Champion: Punkte zusammengezählt, Stufe, Fortschritt und Noten vom Konto mit der
+     * höchsten Stufe (bei Gleichstand mehr Punkte), zuletzt gespielt das jüngste Datum. Sortiert nach Punkten.
+     */
+    static List<Map<String, Object>> combinedMastery(List<List<Map<String, Object>>> perAccount) {
+        Map<Integer, Map<String, Object>> best = new HashMap<>();
+        Map<Integer, Long> points = new HashMap<>();
+        Map<Integer, Long> lastPlayed = new HashMap<>();
+        Map<Integer, Integer> accounts = new HashMap<>();
+        Comparator<Map<String, Object>> rank = Comparator.<Map<String, Object>>comparingInt(m -> (Integer) m.get("level"))
+                .thenComparingLong(m -> ((Number) m.get("points")).longValue());
+        for (List<Map<String, Object>> list : perAccount) {
+            for (Map<String, Object> m : list) {
+                int key = (Integer) m.get("championKey");
+                best.merge(key, m, (old, now) -> rank.compare(now, old) > 0 ? now : old);
+                points.merge(key, ((Number) m.get("points")).longValue(), Long::sum);
+                lastPlayed.merge(key, ((Number) m.get("lastPlayed")).longValue(), Math::max);
+                accounts.merge(key, 1, Integer::sum);
+            }
+        }
+        List<Map<String, Object>> out = new ArrayList<>();
+        best.forEach((key, m) -> {
+            Map<String, Object> row = new LinkedHashMap<>(m);
+            row.put("points", points.get(key));
+            row.put("lastPlayed", lastPlayed.get(key));
+            row.put("accounts", accounts.get(key));
+            out.add(row);
+        });
+        out.sort(Comparator.comparingLong((Map<String, Object> m) -> ((Number) m.get("points")).longValue()).reversed()
+                .thenComparingInt(m -> (Integer) m.get("championKey")));
+        return out;
     }
 
     // ------------------------------------------------------------------ Matches
@@ -154,17 +274,32 @@ final class SummonerLookup {
     private record Matches(List<Map<String, Object>> rows, List<Map<String, Object>> mates) {
     }
 
+    /**
+     * Remakes und Übungstool zählen nicht zur Wertung: Für jedes solche Spiel wird ein älteres nachgeladen, damit die
+     * angefragte Anzahl gewerteter Spiele zusammenkommt (höchstens {@value #MAX_TOP_UP} zusätzliche Matches). Von Riot
+     * nicht mehr gelieferte Matches (404) werden nicht ersetzt.
+     */
+    static final int MAX_TOP_UP = 30;
+
     private Matches matches(String puuid, int count) throws IOException {
-        List<String> ids = matchIds(puuid, count);
-        SummonerHistory history = loadHistory(puuid);
-        List<String> missing = new ArrayList<>();
-        for (String id : ids) {
-            if (!history.contains(id) && !adoptLegacy(history, id)) {
-                missing.add(id);
-            }
-        }
+        SummonerHistory history = loadHistory(cache, puuid);
+        List<String> ids = new ArrayList<>();
         try {
-            download(history, missing, ids.size() - missing.size());
+            boolean more = fetch(history, puuid, ids, count);
+            int extra = 0;
+            int need = count - ids.size() + skipped(history, ids);
+            while (more && need > 0 && extra < MAX_TOP_UP) {
+                int size = Math.min(need, MAX_TOP_UP - extra);
+                int before = ids.size();
+                try {
+                    more = fetch(history, puuid, ids, size);
+                } catch (IOException e) {
+                    // Nachladen ist nur eine Ergänzung: die bisherigen Matches reichen für die Antwort.
+                    break;
+                }
+                extra += ids.size() - before;
+                need = count - ids.size() + skipped(history, ids);
+            }
         } catch (IOException | RuntimeException e) {
             // Bereits geladene Matches nicht verlieren, z. B. wenn der Key mitten im Abruf abläuft.
             try {
@@ -187,17 +322,42 @@ final class SummonerLookup {
         return new Matches(rows, mates);
     }
 
+    /**
+     * Die nächsten {@code size} Match-IDs ab {@code ids.size()} anhängen und fehlende Matches laden.
+     * @return ob Riot volle Seiten geliefert hat, es also ältere Matches geben kann
+     */
+    private boolean fetch(SummonerHistory history, String puuid, List<String> ids, int size) throws IOException {
+        List<String> page = matchIds(puuid, ids.size(), size);
+        List<String> fresh = page.stream().filter(id -> !ids.contains(id)).toList();
+        ids.addAll(fresh);
+        List<String> missing = fresh.stream().filter(id -> !history.contains(id)).toList();
+        download(history, new ArrayList<>(missing), ids.size() - missing.size());
+        return page.size() == size;
+    }
+
+    /** Geladene Matches ohne Wertung (Remake oder Übungstool). */
+    private static int skipped(SummonerHistory history, List<String> ids) {
+        int skipped = 0;
+        for (String id : ids) {
+            JsonNode m = history.match(id).orElse(null);
+            if (m != null && (isExcluded(m.path("queueId").asInt()) || isRemake(m, m.path("p")))) {
+                skipped++;
+            }
+        }
+        return skipped;
+    }
+
     /** Übungstool (PRACTICETOOL, Queue 3140) zählt nicht zur Wertung und erscheint weder in Spielen noch bei Mitspielern. */
     static boolean isExcluded(int queueId) {
         return queueId == PRACTICE_TOOL_QUEUE;
     }
 
-    /** Neueste Match-IDs, seitenweise zu je {@value #PAGE_SIZE} (Riots Obergrenze je Aufruf). */
-    private List<String> matchIds(String puuid, int count) throws IOException {
+    /** Match-IDs ab {@code start}, seitenweise zu je {@value #PAGE_SIZE} (Riots Obergrenze je Aufruf). */
+    private List<String> matchIds(String puuid, int start, int count) throws IOException {
         Set<String> ids = new LinkedHashSet<>();
-        for (int start = 0; start < count; start += PAGE_SIZE) {
-            int size = Math.min(PAGE_SIZE, count - start);
-            List<String> page = api.recentMatchIds(puuid, start, size);
+        for (int offset = 0; offset < count; offset += PAGE_SIZE) {
+            int size = Math.min(PAGE_SIZE, count - offset);
+            List<String> page = api.recentMatchIds(puuid, start + offset, size);
             ids.addAll(page);
             if (page.size() < size) {
                 break;
@@ -206,7 +366,19 @@ final class SummonerLookup {
         return ids.stream().limit(count).toList();
     }
 
-    private SummonerHistory loadHistory(String puuid) {
+    /** Match-Zeilen eines Kontos nur aus dem Cache (ohne Übungstool), z. B. weitere eigene Konten für Empfehlungen. */
+    static List<Map<String, Object>> cachedRows(FileCache cache, String puuid) {
+        List<Map<String, Object>> rows = new ArrayList<>();
+        for (JsonNode m : loadHistory(cache, puuid).matches()) {
+            if (!isExcluded(m.path("queueId").asInt())) {
+                rows.add(matchRow("", m, m.path("p")));
+            }
+        }
+        return rows;
+    }
+
+    /** Gespeicherte Historie des Spielers (ohne Abruf) oder eine leere. */
+    static SummonerHistory loadHistory(FileCache cache, String puuid) {
         Optional<Path> file = cache.file(FileCache.GLOBAL, SummonerHistory.cacheKey(puuid));
         if (file.isPresent()) {
             try {
@@ -233,12 +405,13 @@ final class SummonerLookup {
 
     /**
      * Übernimmt ein Match aus dem früheren Cache (eine Datei je Match, alle Teilnehmer ohne Riot-ID). Dort wird
-     * nichts mehr geschrieben; die Dateien bleiben für die Historien anderer Spieler lesbar.
+     * nichts mehr geschrieben; die Dateien bleiben für die Historien anderer Spieler lesbar. Nur noch Ersatz, wenn Riot
+     * das Match nicht mehr liefert: Der alte Cache kennt weder Positionen noch Teams (Schema 1, ohne Lane-Gegner).
      */
     private boolean adoptLegacy(SummonerHistory history, String id) {
         try {
             Optional<String> legacy = cache.readText(FileCache.GLOBAL, SummonerHistory.LEGACY_PREFIX + id + ".json");
-            return legacy.isPresent() && history.add(id, Json.MAPPER.readTree(legacy.get()));
+            return legacy.isPresent() && history.add(id, Json.MAPPER.readTree(legacy.get()), 1);
         } catch (IOException e) {
             return false;
         }
@@ -281,6 +454,10 @@ final class SummonerLookup {
         } catch (RiotApiException e) {
             if (!e.isNotFound()) {
                 throw e;
+            }
+            // Riot kennt das Match nicht mehr: ein vorhandener (veralteter) Eintrag oder der alte Cache bleibt lesbar.
+            if (history.match(id).isEmpty()) {
+                adoptLegacy(history, id);
             }
             history.markGone(id);
         }
@@ -378,9 +555,14 @@ final class SummonerLookup {
         return seconds ? value : value / 1000;
     }
 
+    /** Remake: unter 5 Minuten oder vorzeitig aufgegeben; zählt in keiner Wertung. */
+    static boolean isRemake(JsonNode info, JsonNode p) {
+        return Math.max(0, durationSeconds(info)) < MIN_DURATION_SEC || p.path("gameEndedInEarlySurrender").asBoolean(false);
+    }
+
     private static Map<String, Object> matchRow(String id, JsonNode info, JsonNode p) {
         long duration = Math.max(0, durationSeconds(info));
-        boolean remake = duration < MIN_DURATION_SEC || p.path("gameEndedInEarlySurrender").asBoolean(false);
+        boolean remake = isRemake(info, p);
         int queue = info.path("queueId").asInt();
         long ended = info.path("gameEndTimestamp").asLong(info.path("gameCreation").asLong() + duration * 1000);
         List<Integer> items = new ArrayList<>();
@@ -396,14 +578,53 @@ final class SummonerLookup {
                 spells.add(p.path(field).asInt());
             }
         }
-        return Dto.obj("id", id, "queueId", queue, "mode", modeLabel(queue, info.path("gameMode").asText("")),
+        Map<String, Object> row = Dto.obj("id", id, "queueId", queue, "mode", modeLabel(queue, info.path("gameMode").asText("")),
                 "remake", remake, "championKey", p.path("championId").asInt(), "championName", p.path("championName").asText(""),
                 "win", p.path("win").asBoolean(), "kills", p.path("kills").asInt(), "deaths", p.path("deaths").asInt(),
                 "assists", p.path("assists").asInt(),
                 "cs", p.path("totalMinionsKilled").asInt() + p.path("neutralMinionsKilled").asInt(),
-                "durationSec", duration, "endedAt", ended,
+                "durationSec", duration, "endedAt", ended, "startedAt", info.path("gameCreation").asLong(),
                 "position", POSITIONS.getOrDefault(p.path("teamPosition").asText(""), ""),
                 "items", items, "spells", spells);
+        if (info.path("x").asInt() >= SummonerHistory.SCHEMA) {
+            row.putAll(details(info, p));
+        }
+        return row;
+    }
+
+    /**
+     * Werte für Champions-Tabelle und Spielstil (wie op.gg): Seite, Kill-Beteiligung, Schaden und Anteil, Sicht,
+     * Gold, Mehrfachkills, Lane-Vorsprung und der Champion des Lane-Gegners. Fehlende Riot-Felder bleiben {@code null}.
+     */
+    static Map<String, Object> details(JsonNode info, JsonNode p) {
+        JsonNode c = p.path("c");
+        int teamKills = info.path("tk").asInt();
+        // Ausdrücklich Double: ein gemischter Bedingungsausdruck würde null in double auspacken.
+        Double kp = null;
+        if (c.path("killParticipation").isNumber()) {
+            kp = Math.min(1, c.path("killParticipation").asDouble());
+        } else if (teamKills > 0) {
+            kp = Math.min(1, (double) (p.path("kills").asInt() + p.path("assists").asInt()) / teamKills);
+        }
+        Double damageShare = c.path("teamDamagePercentage").isNumber() ? Double.valueOf(c.path("teamDamagePercentage").asDouble()) : null;
+        Integer soloKills = c.path("soloKills").isNumber() ? Integer.valueOf(c.path("soloKills").asInt()) : null;
+        Boolean laneLead = info.path("o").isObject() && c.path("laningPhaseGoldExpAdvantage").isNumber()
+                ? Boolean.valueOf(c.path("laningPhaseGoldExpAdvantage").asInt() > 0) : null;
+        JsonNode opponent = info.path("o");
+        int team = p.path("teamId").asInt();
+        return Dto.obj("side", team == 100 ? "blue" : team == 200 ? "red" : "",
+                "kp", kp,
+                "damage", p.path("totalDamageDealtToChampions").asLong(),
+                "damageShare", damageShare,
+                "damageTaken", p.path("totalDamageTaken").asLong(), "gold", p.path("goldEarned").asLong(),
+                "vision", p.path("visionScore").asInt(), "wardsPlaced", p.path("wardsPlaced").asInt(),
+                "wardsKilled", p.path("wardsKilled").asInt(),
+                "controlWards", p.path("visionWardsBoughtInGame").asInt(p.path("detectorWardsPlaced").asInt()),
+                "multi", List.of(p.path("doubleKills").asInt(), p.path("tripleKills").asInt(),
+                        p.path("quadraKills").asInt(), p.path("pentaKills").asInt()),
+                "soloKills", soloKills, "laneLead", laneLead,
+                "opponent", opponent.isObject() ? Dto.obj("key", opponent.path("championId").asInt(),
+                        "name", opponent.path("championName").asText("")) : null);
     }
 
     /** Queue als Klartext; nicht dokumentierte Queues zeigen Spielmodus und Nummer statt einer geratenen Bezeichnung. */

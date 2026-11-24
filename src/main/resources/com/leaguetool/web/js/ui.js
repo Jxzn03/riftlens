@@ -100,6 +100,16 @@ export function MoreToggle({ open, total, top, onToggle }) {
   </button>`;
 }
 
+/**
+ * Aufklappen in zwei Schritten: erst `step` weitere, beim nächsten Klick der Rest; ganz offen klappt zurück auf `top`.
+ * `shown` ist die Zahl der sichtbaren Einträge.
+ */
+export function StepToggle({ shown, total, top, step, onChange }) {
+  const open = shown >= total;
+  const next = open ? top : shown <= top ? Math.min(total, top + step) : total;
+  return html`<${MoreToggle} open=${open} total=${top + (next - shown)} top=${top} onToggle=${() => onChange(next)} />`;
+}
+
 export function Card({ title, aside, children, cls = '' }) {
   return html`<section class=${`card ${cls}`}>
     ${title ? html`<header class="card-head"><h3>${title}</h3>${aside ? html`<div class="card-aside">${aside}</div>` : null}</header>` : null}
@@ -217,6 +227,60 @@ export function DataGrid({ head, rows, cls = '' }) {
   </table></div>`;
 }
 
+
+/**
+ * Sortierung per Klick auf die Spaltenköpfe: `values[i]` liefert den Sortwert der Spalte i (Zahl oder Text; null =
+ * nicht sortierbar bzw. fehlender Wert, der immer ans Ende kommt). Zahlen sortieren absteigend, Texte aufsteigend;
+ * ein zweiter Klick auf dieselbe Spalte dreht die Richtung, ein dritter hebt die Sortierung auf.
+ */
+export function useSort(items, values) {
+  const [sort, setSort] = useState(null);
+  let sorted = items;
+  if (sort && values[sort.col]) {
+    const value = values[sort.col];
+    sorted = [...items].sort((a, b) => {
+      const x = value(a);
+      const y = value(b);
+      if (x === null || x === undefined) return y === null || y === undefined ? 0 : 1;
+      if (y === null || y === undefined) return -1;
+      const c = typeof x === 'string' ? x.localeCompare(y, 'de') : x - y;
+      return sort.desc ? -c : c;
+    });
+  }
+  const toggle = (col) => {
+    if (sort && sort.col === col) {
+      // Zweiter Klick dreht die Richtung, dritter stellt die gelieferte Reihenfolge wieder her.
+      setSort(sort.flipped ? null : { col, desc: !sort.desc, flipped: true });
+      return;
+    }
+    const sample = items.map(values[col]).find((v) => v !== null && v !== undefined);
+    setSort({ col, desc: typeof sample !== 'string' });
+  };
+  return { sorted, sort, toggle };
+}
+
+/** Spaltenkopf zu {@link useSort}; ohne Sortwert ein normaler Kopf. */
+export function SortTh({ label, tip, col, state, sortable = true }) {
+  if (!sortable) {
+    return html`<th data-tip=${tip || null}>${label}</th>`;
+  }
+  const active = state.sort && state.sort.col === col;
+  return html`<th data-tip=${tip || null} aria-sort=${active ? (state.sort.desc ? 'descending' : 'ascending') : 'none'}>
+    <button type="button" class=${`sort-head${active ? ' active' : ''}`} onClick=${() => state.toggle(col)}>${label}${active ? (state.sort.desc ? ' ▼' : ' ▲') : ''}</button></th>`;
+}
+
+/**
+ * Sortierbare Tabelle: `cells(item)` liefert die Zellen, `values` die Sortwerte je Spalte. `rank` stellt eine Spalte
+ * „#“ mit der Platznummer in der aktuellen Sortierung voran, `limit` zeigt nur die ersten Zeilen (nach dem Sortieren).
+ */
+export function SortGrid({ head, items, cells, values, rank = false, limit, cls = '' }) {
+  const state = useSort(items, values);
+  const shown = limit ? state.sorted.slice(0, limit) : state.sorted;
+  return html`<div class="grid-scroll"><table class=${`data ${cls}`}>
+    <thead><tr>${rank ? html`<th class="rank-col">#</th>` : null}${head.map((h, i) => html`<${SortTh} key=${i} label=${h} col=${i} state=${state} sortable=${Boolean(values[i])} />`)}</tr></thead>
+    <tbody>${shown.map((item, i) => html`<tr key=${i}>${rank ? html`<td class="rank-col">${i + 1}</td>` : null}${cells(item).map((cell, j) => html`<td key=${j}>${cell}</td>`)}</tr>`)}</tbody>
+  </table></div>`;
+}
 /** Winrate als Zahl mit Farbe (über/unter 50 %). */
 export function RateCell({ value, neutral = false, decimals = 1 }) {
   const winRateClass = useWinRateClass();

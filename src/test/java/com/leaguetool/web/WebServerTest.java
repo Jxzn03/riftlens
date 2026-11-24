@@ -535,7 +535,7 @@ class WebServerTest {
                 .respond(PLATFORM + "summoner/v4/summoners/by-puuid/p1", "{\"summonerLevel\":321,\"profileIconId\":29}")
                 .respond(PLATFORM + "league/v4/entries/by-puuid/p1", "[{\"queueType\":\"RANKED_SOLO_5x5\",\"tier\":\"EMERALD\","
                         + "\"rank\":\"II\",\"leaguePoints\":55,\"wins\":60,\"losses\":40},{\"queueType\":\"CHERRY\",\"wins\":1,\"losses\":1}]")
-                .respond(PLATFORM + "champion-mastery/v4/champion-masteries/by-puuid/p1/top?count=10",
+                .respond(PLATFORM + "champion-mastery/v4/champion-masteries/by-puuid/p1",
                         "[{\"championId\":103,\"championLevel\":12,\"championPoints\":250000,\"lastPlayTime\":1700000000000}]")
                 .respond(MATCHES + "by-puuid/p1/ids?start=0&count=3", "[\"EUW1_1\",\"EUW1_2\",\"EUW1_3\"]")
                 .respond(MATCHES + "EUW1_1", match(420, "CLASSIC", true, 1800))
@@ -580,6 +580,68 @@ class WebServerTest {
         long before = fake.requests().stream().filter(u -> u.endsWith("EUW1_1")).count();
         assertEquals(200, get(SUMMONER_URL, true).statusCode());
         assertEquals(before, fake.requests().stream().filter(u -> u.endsWith("EUW1_1")).count());
+    }
+
+    @Test
+    void ownAccountsAreStoredLocallyAndReadByTheDraftWithoutRiotCalls() throws Exception {
+        assertEquals(0, json.readTree(get("/api/summoner/own", true).body()).path("accounts").size());
+        respondSummoner();
+        assertEquals(200, get(SUMMONER_URL, true).statusCode());
+        fake.respond("https://europe.api.riotgames.com/riot/account/v1/accounts/by-riot-id/Zweit/EUW",
+                "{\"puuid\":\"p2\",\"gameName\":\"Zweit\",\"tagLine\":\"EUW\"}");
+
+        HttpResponse<String> saved = send("POST", "/api/summoner/own", "{\"riotId\":\" Test Name#EUW \",\"platform\":\"euw1\"}");
+        assertEquals(200, saved.statusCode(), saved.body());
+        assertEquals("Test Name#EUW", json.readTree(saved.body()).path("accounts").path(0).path("riotId").asText(), "Riot-ID laut Riot, ohne Leerraum");
+        assertFalse(saved.body().contains("p1"), "PUUID bleibt im Backend");
+        send("POST", "/api/summoner/own", "{\"riotId\":\"Zweit#EUW\",\"platform\":\"euw1\"}");
+        send("POST", "/api/summoner/own", "{\"riotId\":\"Test Name#EUW\",\"platform\":\"euw1\"}");
+
+        int before = fake.requests().size();
+        settings.setRiotEnabled(false);
+        JsonNode own = json.readTree(get("/api/summoner/own", true).body());
+        assertEquals(before, fake.requests().size(), "Draft-Abfrage ohne Riot-Aufruf, auch ohne aktivierte Riot-API");
+        assertEquals(List.of("Test Name#EUW", "Zweit#EUW"), List.of(own.path("accounts").path(0).path("riotId").asText(),
+                own.path("accounts").path(1).path("riotId").asText()), "zwei Konten, dasselbe Konto nur einmal");
+        assertTrue(own.path("matchups").path("own").has("103"), "Bilanz über alle Konten");
+
+        assertEquals(200, send("POST", "/api/summoner/own", "{\"riotId\":\"test name#euw\",\"platform\":\"euw1\",\"remove\":true}").statusCode());
+        JsonNode left = json.readTree(get("/api/summoner/own", true).body());
+        assertEquals(1, left.path("accounts").size());
+        assertEquals("Zweit#EUW", left.path("accounts").path(0).path("riotId").asText());
+    }
+
+    @Test
+    void liveGameShowsNamesAndRanksAndLoadsChampionWinRateOnDemand() throws Exception {
+        respondSummoner();
+        String spectator = PLATFORM + "spectator/v5/active-games/by-summoner/p1";
+        fake.respond(spectator, "{\"gameId\":5,\"gameQueueConfigId\":420,\"gameMode\":\"CLASSIC\",\"gameStartTime\":1,"
+                        + "\"participants\":[{\"puuid\":\"p1\",\"teamId\":100,\"championId\":103,\"riotId\":\"Test Name#EUW\",\"spell1Id\":4,\"spell2Id\":14},"
+                        + "{\"puuid\":\"foe\",\"teamId\":200,\"championId\":91,\"riotId\":\"Gegner#X1\",\"spell1Id\":4,\"spell2Id\":12}],"
+                        + "\"bannedChampions\":[{\"championId\":157,\"teamId\":200,\"pickTurn\":1},{\"championId\":-1,\"teamId\":100}]}")
+                .respond(PLATFORM + "league/v4/entries/by-puuid/foe", "[{\"queueType\":\"RANKED_SOLO_5x5\",\"tier\":\"GOLD\","
+                        + "\"rank\":\"I\",\"leaguePoints\":10,\"wins\":5,\"losses\":5}]")
+                .respond(MATCHES + "by-puuid/foe/ids?queue=420&start=0&count=20", "[\"EUW1_F\"]")
+                .respond(MATCHES + "EUW1_F", "{\"info\":{\"gameDuration\":1800,\"gameEndTimestamp\":1,\"participants\":["
+                        + "{\"puuid\":\"foe\",\"championId\":91,\"win\":true}]}}");
+
+        JsonNode live = json.readTree(get("/api/summoner/live?riotId=Test%20Name%23EUW&platform=euw1", true).body());
+        assertTrue(live.path("inGame").asBoolean());
+        JsonNode foe = live.path("teams").path(1).path("players").path(0);
+        assertEquals("Gegner", foe.path("name").asText());
+        assertEquals("Gold", foe.path("solo").path("tier").asText());
+        assertFalse(foe.has("champion"), "Champion-Winrate anderer Spieler nur auf Knopfdruck");
+        assertEquals(List.of(157), json.convertValue(live.path("teams").path(1).path("bans"), List.class));
+        assertFalse(live.toString().contains("\"foe\""), "PUUIDs gehen nicht an die Oberfläche");
+        assertEquals(0, fake.requests().stream().filter(u -> u.contains("by-puuid/foe/ids")).count());
+
+        JsonNode wr = json.readTree(get("/api/summoner/live/" + foe.path("slot").asInt() + "/champion", true).body());
+        assertEquals(1, wr.path("games").asInt());
+        assertEquals(1, wr.path("wins").asInt());
+
+        fake.respond(spectator, new HttpResult(404, new byte[0], Map.of()));
+        assertFalse(json.readTree(get("/api/summoner/live?riotId=Test%20Name%23EUW&platform=euw1", true).body()).path("inGame").asBoolean());
+        assertEquals(409, get("/api/summoner/live/1/champion", true).statusCode(), "nach Spielende kein alter Platz");
     }
 
     @Test
