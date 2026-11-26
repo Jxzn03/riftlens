@@ -14,18 +14,20 @@ import java.util.Map;
  *
  * @param lane     Lane der Picks, wie in {@link LolalyticsPairs#byLane()}
  * @param minGames Mindestzahl an Spielen je Matchup
- * @param best     beste Picks gegen den Champion (höchste Winrate des Picks), ohne Einfluss der Bewertung
- * @param worst    schlechteste Picks gegen den Champion, ohne Einfluss der Bewertung
+ * @param best     beste Picks gegen den Champion nach Pick-WR (Erwartung plus Bewertung), ohne Deltas nach Winrate
+ * @param worst    schlechteste Picks gegen den Champion, gleiche Sortierung
  * @param delta    alle Picks mit genug Spielen, stärkster Counter (Bewertung) zuerst
  */
 public record LolalyticsCounters(String lane, int minGames, List<Line> best, List<Line> worst, List<Line> delta) {
 
     static final int MAX_LISTED = 8;
     /**
-     * Spiele, bei denen die Bewertung nur noch halb zählt: 0,25 / τ² mit der aus den Daten geschätzten Streuung der
-     * Matchup-Effekte τ = 1,89 Prozentpunkte.
+     * Spiele, bei denen die Bewertung nur noch halb zählt: 0,25 / τ² mit τ = 1,34 Prozentpunkten. Innerhalb eines
+     * Rang-Bereichs schätzt sich τ auf 1,67 (k ≈ 900); Matchup-Effekte übertragen sich aber nur zum Teil auf andere
+     * Spiele (Rang-Bereich, Zeitraum), darum stärker gedämpft. Auf disjunkten Spielen getestet, siehe
+     * {@code docs/statistik-counters.md}.
      */
-    static final double GAMES_DAMPING = 700;
+    static final double GAMES_DAMPING = 1400;
     /** Tier-Durchschnitt, wenn kein Matchup Delta-Werte hat. */
     private static final double DEFAULT_TIER_AVERAGE = 0.5;
 
@@ -61,11 +63,20 @@ public record LolalyticsCounters(String lane, int minGames, List<Line> best, Lis
         // Bei wenigen Picks teilen sich beide Listen die Zeilen, damit niemand zugleich gut und schlecht ist.
         int bestCount = Math.min(MAX_LISTED, (lines.size() + 1) / 2);
         int worstCount = Math.min(MAX_LISTED, lines.size() / 2);
-        Comparator<Line> byWinRate = Comparator.comparingDouble(Line::winRate);
+        Comparator<Line> byPick = Comparator.comparingDouble(LolalyticsCounters::listScore);
         return new LolalyticsCounters(lane, minGames,
-                lines.stream().sorted(byWinRate.reversed()).limit(bestCount).toList(),
-                lines.stream().sorted(byWinRate).limit(worstCount).toList(),
+                lines.stream().sorted(byPick.reversed()).limit(bestCount).toList(),
+                lines.stream().sorted(byPick).limit(worstCount).toList(),
                 lines.stream().sorted(Comparator.comparing(Line::rating, Comparator.nullsLast(Comparator.reverseOrder()))).toList());
+    }
+
+    /**
+     * Sortierwert der Listen „Beste/Schlechteste Picks“: Pick-WR, also Erwartung aus der Stärke beider Champions plus
+     * Bewertung. Auf disjunkten Spielen trifft sie die besten und schlechtesten Picks besser als die rohe Winrate; die
+     * Pickrate verbessert nichts zusätzlich (die Spielzahl wirkt schon über die Dämpfung). Ohne Deltas die Winrate.
+     */
+    static double listScore(Line line) {
+        return line.pick() != null ? line.pick() : line.winRate();
     }
 
     /**

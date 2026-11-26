@@ -20,9 +20,11 @@ import com.leaguetool.data.UpdateReport;
 import com.leaguetool.data.itempassives.ItemPassiveUpdater;
 import com.leaguetool.data.lolalytics.LolalyticsBuild;
 import com.leaguetool.data.lolalytics.LolalyticsClient;
+import com.leaguetool.data.lolalytics.LolalyticsCoreBuilds;
 import com.leaguetool.data.lolalytics.LolalyticsCounters;
 import com.leaguetool.data.lolalytics.LolalyticsFullTierList;
 import com.leaguetool.data.lolalytics.LolalyticsLateItems;
+import com.leaguetool.data.lolalytics.LolalyticsRunePages;
 import com.leaguetool.data.wiki.WikiAbility;
 import com.leaguetool.data.wiki.WikiChampionData;
 import com.leaguetool.data.wiki.WikiLeveling;
@@ -43,6 +45,7 @@ import com.leaguetool.stats.ChampionReport;
 import com.leaguetool.stats.RunePageKey;
 import com.leaguetool.stats.SkillPath;
 import com.leaguetool.stats.StatLine;
+import com.leaguetool.stats.SnowballItems;
 import com.leaguetool.stats.StatRanking;
 import com.leaguetool.stats.WinStats;
 import com.leaguetool.util.AppVersion;
@@ -52,6 +55,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -59,6 +63,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
+import java.util.function.IntPredicate;
 import java.util.stream.Collectors;
 
 /** Wandelt Modelle in die JSON-Struktur der Oberfläche um. */
@@ -66,9 +71,9 @@ final class Dto {
 
     /** So viele Einträge zeigt eine Rangliste. */
     private static final int TOP = 3;
-    /** Boots stehen in zwei Spalten, daher doppelt so viele Einträge im selben Platz. */
+    /** Boots, Startitems und erstes/zweites Item stehen in zwei Spalten, daher doppelt so viele Einträge im selben Platz. */
     private static final int TOP_BOOTS = 6;
-    /** Core-Build: drei Builds plus Meistgespielt; steht dieser unter den dreien, rückt der vierte nach. */
+    /** Core-Build: immer vier verschiedene Builds (Lücken ausgegraut aufgefüllt), Meistgespielt an seinem Rang oder statt des vierten. */
     private static final int TOP_CORE = 4;
     private static final List<String> PRIMARY_MODES = List.of("CLASSIC", "ARAM", "URF", "CHERRY");
     private static final int SHORT_MODES = 3;
@@ -600,18 +605,19 @@ final class Dto {
         return m;
     }
 
-    private static Map<String, Object> report(ChampionReport r) {
+    /** @param pageView Darstellung einer Runenseite (mit geschätzten Werten je Rune) */
+    private static Map<String, Object> report(ChampionReport r, Function<RunePageKey, Object> pageView) {
         Map<String, Object> m = win(r);
         m.put("pickRate", r.pickRate());
         m.put("banRate", r.banRate());
-        m.put("coreBuilds", ranking(r.coreBuilds(), ids -> ids, TOP_CORE));
+        m.put("coreBuilds", ranking(r.coreBuilds(), ids -> ids, TOP_CORE, true));
         m.put("boots", ranking(r.boots(), List::of, TOP_BOOTS, true));
-        m.put("starters", ranking(r.starters(), ids -> ids));
+        m.put("starters", ranking(r.starters(), ids -> ids, TOP_BOOTS, true));
         m.put("keystones", ranking(r.keystones(), List::of));
-        m.put("runePages", ranking(r.runePages(), Dto::runePage));
+        m.put("runePages", ranking(r.runePages(), pageView));
         m.put("skillOrders", ranking(r.skillOrders(), Dto::slots));
         m.put("skillStarts", ranking(r.skillStarts(), Dto::slots));
-        m.put("spellCombos", ranking(r.spellCombos(), ids -> ids));
+        m.put("spellCombos", ranking(r.spellCombos(), ids -> ids, TOP, true));
         return m;
     }
 
@@ -627,9 +633,15 @@ final class Dto {
         return SHARD_LABELS.getOrDefault(id, StatShard.nameOf(id));
     }
 
-    private static Map<String, Object> runePage(RunePageKey key) {
-        return obj("primary", key.primaryPerks(), "sub", key.subPerks(), "shardIds", key.shards(),
+    private static Map<String, Object> runePage(RunePageKey key, LolalyticsRunePages.Estimate estimate) {
+        Map<String, Object> m = obj("primary", key.primaryPerks(), "sub", key.subPerks(), "shardIds", key.shards(),
                 "shards", key.shards().stream().map(Dto::shardLabel).collect(Collectors.joining(" / ")));
+        if (estimate != null) {
+            m.put("estimated", estimate.estimated());
+            m.put("runeStats", estimate.runes().stream()
+                    .map(s -> obj("id", s.id(), "winRate", s.winRate(), "games", s.games())).toList());
+        }
+        return m;
     }
 
     /** Bevorzugt die besten Einträge (Bayes-Untergrenze, Mindest-Stichprobe), sonst die häufigsten. */
@@ -724,46 +736,175 @@ final class Dto {
             }
         });
         Map<RunePageKey, StatLine<RunePageKey>> pages = new LinkedHashMap<>();
+        Map<RunePageKey, LolalyticsRunePages.Estimate> estimates = new HashMap<>();
         for (LolalyticsBuild.RunePage p : b.runePages()) {
-            int primary = p.primary().isEmpty() ? 0 : data.rune(p.primary().get(0)).map(Rune::treeId).orElse(0);
-            int sub = p.sub().isEmpty() ? 0 : data.rune(p.sub().get(0)).map(Rune::treeId).orElse(0);
-            RunePageKey key = new RunePageKey(primary, sub, p.primary(), p.sub(), p.shards());
-            pages.putIfAbsent(key, line(key, p.winRate(), p.games(), b.games() == 0 ? 0 : (double) p.games() / b.games()));
+            RunePageKey key = runePageKey(p, data);
+            // Lolalytics liefert je Seite nur die Werte des Keystones; geschätzt aus den Einzelrunen.
+            LolalyticsRunePages.Estimate estimate = LolalyticsRunePages.of(b, p);
+            if (pages.putIfAbsent(key, line(key, estimate.winRate(), estimate.games(),
+                    b.games() == 0 ? 0 : (double) estimate.games() / b.games())) == null) {
+                estimates.put(key, estimate);
+            }
         }
         int min = Math.max(LOLALYTICS_MIN_GAMES, (int) Math.ceil(b.games() * LOLALYTICS_MIN_SHARE));
+        IntPredicate isBoots = id -> data.item(id).filter(Item::isBoots).isPresent();
         ChampionReport report = new ChampionReport(b.games(),
                 (int) Math.min(b.games(), Math.round(b.games() * b.winRate())), b.pickRate(), b.banRate(),
                 ranking(b.starters(), Dto::idList, min),
                 StatRanking.of(boots, min),
-                ranking(b.coreBuilds(), Dto::idList, min),
+                coreBuilds(b, isBoots, min),
                 StatRanking.of(keystones, min),
                 StatRanking.of(pages.values(), min),
                 ranking(b.skillOrders(), Dto::maxOrder, min),
                 ranking(b.skillStarts(), Dto::skillDigits, min),
                 ranking(b.spells(), Dto::idList, min));
-        Map<String, Object> json = report(report);
+        Map<String, Object> json = report(report, key -> runePage(key, estimates.get(key)));
         json.put("winRate", b.winRate());   // exakt wie geliefert, nicht aus gerundeten Siegen zurückgerechnet
         json.put("counters", counters(LolalyticsCounters.of(b.matchups(), opponentLane, min, b.winRate())));
-        json.put("skillPath", slots(bestSkillPath(report)));
+        SkillPathChoice skillPath = bestSkillPath(report, ranking(b.skillPaths(), Dto::skillDigits, min));
+        json.put("skillPath", slots(skillPath.levels()));
+        json.put("skillPathMeasured", skillPath.measured());   // von Lolalytics gemessene Level, Rest abgeleitet
+        recommendedRunePage(b, data, min).ifPresent(page -> ((Map<String, Object>) json.get("runePages")).put("recommended", page));
+        markSnowball(json.get("coreBuilds"));
         json.put("lateItems", lateItems(b, report));
+        json.put("firstItems", earlyItems(b, 1, isBoots, min));
+        json.put("secondItems", earlyItems(b, 2, isBoots, min));
+        json.put("lateItemsMinute", lateItemsMinute(b));
         json.put("minGames", min);   // Mindest-Stichprobe aller Ranglisten, Anzeige im Kartenkopf
         return json;
+    }
+
+    /**
+     * Core-Build nach Legendary-Pfad (Boots zusammengefasst), zuerst der beste Pfad je erstem Item; siehe
+     * {@link LolalyticsCoreBuilds}.
+     */
+    private static StatRanking<List<Integer>> coreBuilds(LolalyticsBuild b, IntPredicate isBoots, int min) {
+        StatRanking<List<Integer>> paths = ranking(LolalyticsCoreBuilds.merge(b.coreBuilds(), isBoots), Dto::idList, min);
+        // Pfade mit Snowballing-Item (z. B. Mejai's) nehmen keinen der vier Plätze, sie folgen dahinter.
+        List<StatLine<List<Integer>>> normal = paths.best().stream().filter(l -> !SnowballItems.anyIn(l.key())).toList();
+        List<StatLine<List<Integer>>> shown = new ArrayList<>(LolalyticsCoreBuilds.forDisplay(normal,
+                paths.top().map(StatLine::key).orElse(null), isBoots, TOP_CORE));
+        paths.best().stream().filter(l -> SnowballItems.anyIn(l.key())).forEach(shown::add);
+        return new StatRanking<>(paths.mostFrequent(), shown, paths.minGames());
+    }
+
+    /**
+     * Erstes oder zweites Item (ohne Boots) als Rangliste wie die übrigen Boxen. Liefert die Seite den Itemplatz nicht
+     * (oder stammt der Cache-Eintrag von vorher), wird er aus den Core-Builds abgeleitet ({@code derived}).
+     */
+    private static Map<String, Object> earlyItems(LolalyticsBuild b, int slot, IntPredicate isBoots, int min) {
+        List<LolalyticsBuild.Entry> entries = b.itemSlots().stream().filter(s -> s.slot() == slot)
+                .flatMap(s -> s.entries().stream()).toList();
+        boolean derived = entries.isEmpty();
+        if (derived) {
+            entries = LolalyticsCoreBuilds.itemAt(b.coreBuilds(), isBoots, slot - 1, b.games());
+        }
+        StatRanking<Integer> items = ranking(entries, Integer::valueOf, min);
+        items = new StatRanking<>(items.mostFrequent(), SnowballItems.lastVisible(items.best(), SnowballItems::is, TOP_BOOTS), items.minGames());
+        Map<String, Object> json = ranking(items, List::of, TOP_BOOTS, true);
+        json.put("derived", derived);
+        markSnowball(json);
+        return json;
+    }
+
+    private static RunePageKey runePageKey(LolalyticsBuild.RunePage p, GameData data) {
+        int primary = p.primary().isEmpty() ? 0 : data.rune(p.primary().get(0)).map(Rune::treeId).orElse(0);
+        int sub = p.sub().isEmpty() ? 0 : data.rune(p.sub().get(0)).map(Rune::treeId).orElse(0);
+        return new RunePageKey(primary, sub, p.primary(), p.sub(), p.shards());
+    }
+
+    /**
+     * Empfohlene Variante der meistgespielten Runenseite ({@link LolalyticsRunePages#recommend}): Seite wie die übrigen,
+     * dazu {@code winRate} (geschätzt), {@code replaced} (neue und ersetzte ID mit beiden Winrates an dieser Stelle) und
+     * {@code delta} gegenüber Meistgespielt.
+     */
+    private static Optional<Map<String, Object>> recommendedRunePage(LolalyticsBuild b, GameData data, int min) {
+        return LolalyticsRunePages.recommend(b, data::rune, min).map(rec -> {
+            LolalyticsRunePages.Estimate estimate = LolalyticsRunePages.of(b, rec.page());
+            Map<String, Object> m = runePage(runePageKey(rec.page(), data), estimate);
+            m.put("winRate", estimate.winRate());
+            List<Map<String, Object>> replaced = new ArrayList<>();
+            for (LolalyticsRunePages.Swap s : rec.swaps()) {
+                replaced.add(obj("id", s.id(), "replaces", s.replaces(), "winRate", s.winRate(),
+                        "replacedWinRate", Double.isNaN(s.replacedWinRate()) ? null : s.replacedWinRate(),
+                        "shardSlot", s.shardSlot() == LolalyticsRunePages.NO_SHARD ? null : s.shardSlot()));
+            }
+            m.put("replaced", replaced);
+            m.put("delta", rec.delta());
+            return m;
+        });
+    }
+
+    /** Markiert Zeilen mit Snowballing-Item ({@code snowball}); die Oberfläche graut sie aus und zeigt einen Hinweis. */
+    @SuppressWarnings("unchecked")
+    private static void markSnowball(Object ranking) {
+        if (!(ranking instanceof Map<?, ?> json)) {
+            return;
+        }
+        List<Object> lines = new ArrayList<>((List<Object>) json.get("lines"));
+        lines.add(json.get("mostPlayed"));
+        for (Object line : lines) {
+            if (line instanceof Map<?, ?> m && m.get("key") instanceof List<?> ids
+                    && ids.stream().anyMatch(id -> id instanceof Integer i && SnowballItems.is(i))) {
+                ((Map<String, Object>) m).put("snowball", true);
+            }
+        }
     }
 
     /** Häufigste Items auf den Itemplätzen nach dem Core-Build; was schon im angezeigten Core-Build steckt, fällt weg. */
     private static List<Map<String, Object>> lateItems(LolalyticsBuild b, ChampionReport r) {
         List<Integer> core = r.coreBuilds().topBest().or(r.coreBuilds()::top).map(StatLine::key).orElse(List.of());
-        return LolalyticsLateItems.of(b.itemSlots(), core, LOLALYTICS_MIN_GAMES, LATE_ITEMS, b.games()).stream()
+        List<LolalyticsBuild.ItemSlot> late = lateSlots(b);
+        return LolalyticsLateItems.of(late, core, LOLALYTICS_MIN_GAMES, LATE_ITEMS, b.games()).stream()
                 .map(l -> obj("item", l.item(), "winRate", l.winRate(), "pickRate", l.pickRate(), "games", l.games(),
+                        "snowball", SnowballItems.is(l.item()),
                         "slots", l.slots().stream().map(s -> obj("slot", s.slot(), "games", s.games())).toList()))
                 .toList();
     }
 
-    /** Dieselben Zeilen, die auch die Ranglisten oben anzeigen. */
-    private static List<AbilitySlot> bestSkillPath(ChampionReport r) {
-        Optional<StatLine<List<AbilitySlot>>> start = r.skillStarts().topBest().or(r.skillStarts()::top);
+    private static List<LolalyticsBuild.ItemSlot> lateSlots(LolalyticsBuild b) {
+        return b.itemSlots().stream().filter(s -> s.slot() >= 3).toList();
+    }
+
+    /**
+     * Durchschnittliche Kaufminute auf den Itemplätzen 3–5 (5. Spalte der Seite), nach Spielen gewichtet, für die
+     * Überschrift von „Items nach dem Core-Build“ (Nutzerwunsch: nicht je Item); {@code null}, wenn keine Liste sie nennt.
+     */
+    private static Integer lateItemsMinute(LolalyticsBuild b) {
+        long weighted = 0;
+        long games = 0;
+        for (LolalyticsBuild.ItemSlot slot : lateSlots(b)) {
+            for (LolalyticsBuild.Entry e : slot.entries()) {
+                if (e.minute() > 0) {
+                    weighted += (long) e.minute() * e.games();
+                    games += e.games();
+                }
+            }
+        }
+        return games == 0 ? null : (int) Math.round((double) weighted / games);
+    }
+
+    /** Skillung aller Level und wie viele davon Lolalytics gemessen hat (der Rest ist abgeleitet). */
+    private record SkillPathChoice(List<AbilitySlot> levels, int measured) {
+    }
+
+    /**
+     * Beste komplette Skillung der ersten 15 Level (gleiche Rangliste wie die übrigen Boxen), Level 16–18 aus der besten
+     * Max-Reihenfolge abgeleitet. Fehlt sie (älterer Cache-Eintrag), wie bisher die besten ersten sechs Punkte.
+     */
+    private static SkillPathChoice bestSkillPath(ChampionReport r, StatRanking<List<AbilitySlot>> paths) {
         Optional<StatLine<List<AbilitySlot>>> order = r.skillOrders().topBest().or(r.skillOrders()::top);
-        return start.isEmpty() || order.isEmpty() ? List.of() : SkillPath.firstLevels(start.get().key(), order.get().key());
+        if (order.isEmpty()) {
+            return new SkillPathChoice(List.of(), 0);
+        }
+        Optional<StatLine<List<AbilitySlot>>> full = paths.topBest().or(paths::top);
+        Optional<StatLine<List<AbilitySlot>>> start = full.isPresent() ? full
+                : r.skillStarts().topBest().or(r.skillStarts()::top);
+        if (start.isEmpty()) {
+            return new SkillPathChoice(List.of(), 0);
+        }
+        List<AbilitySlot> levels = SkillPath.firstLevels(start.get().key(), order.get().key());
+        return new SkillPathChoice(levels, levels.isEmpty() ? 0 : start.get().key().size());
     }
 
     /** Counters aus Sicht des Gegners: beste und schlechteste Picks gegen den Champion (siehe {@link LolalyticsCounters}). */

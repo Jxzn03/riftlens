@@ -68,10 +68,16 @@ public final class LolalyticsPages {
         build.put("itemSets", p.ref(Map.of()));
         build.put("runes", p.ref(Map.of("stats", p.ref(Map.of(
                 "8112", p.ref(List.of(p.list(86.2, 53.0, 499_515))),
-                "5008f", p.ref(List.of(p.list(6.0, 54.0, 34_500))))))));
+                "8226", p.ref(List.of(p.list(0.5, 50.0, 2_900), p.list(41.2, 54.0, 238_800))),
+                "5008f", p.ref(List.of(p.list(6.0, 54.0, 34_500))),
+                "5005", p.ref(List.of(p.list(7.1, 52.0, 41_000))),
+                "5013", p.ref(List.of(p.list(3.8, 53.5, 22_000))))))));
         build.put("startSet", p.ref(List.of(p.list("1056_2003_2003", 53.12, 99.19, 574_940), p.list("", 48.48, 0.01, 66))));
         build.put("builtBootSet3", p.ref(List.of(p.list("3118_3020_4645", 53.66, 17.68, 102_489))));
         build.put("boots", p.ref(List.of(p.list(3020, 53.86, 57.72, 334_594, 13))));
+        // Itemplatz 1 liefert die Seite, Itemplatz 2 fehlt (wird aus den Core-Builds abgeleitet).
+        build.put("item1", p.ref(List.of(p.list(3118, 53.9, 60.0, 347_798, 11), p.list(6655, 52.1, 30.0, 173_899, 11),
+                p.list(3041, 60.0, 10.0, 57_966, 12))));   // Mejai's: beste Winrate, aber Snowballing-Item
         build.put("item3", p.ref(List.of(p.list(3157, 56.67, 20.48, 119_752, 27))));
         // 3118 steckt im Core-Build, 3135 hat zu wenige Spiele.
         build.put("item4", p.ref(List.of(p.list(3118, 60.0, 10.0, 60_000, 31), p.list(3089, 60.79, 7.79, 45_562, 31),
@@ -79,6 +85,8 @@ public final class LolalyticsPages {
         build.put("item5", p.ref(List.of(p.list(3089, 62.15, 1.53, 8_924, 34))));
         build.put("skillOrder", p.ref(List.of(p.list("QWE", 53.4, 91.2, 523_408))));
         build.put("skill6", p.ref(List.of(p.list(213_114, 53.1, 66.8, 386_979))));
+        // Komplette Skillung bis Level 15: ab Level 8 E vor Q (weicht von der Max-Reihenfolge QWE ab).
+        build.put("skill15", p.ref(List.of(p.list(213_114_131_343_322L, 55.9, 61.2, 354_100))));
         build.put("spells", p.ref(List.of(p.list("4_14", 53.52, 70.26, 407_292))));
         build.put("enemy_h", p.list("id", "wr", "d1", "d2", "pr", "n"));
         build.put("enemy", p.ref(Map.of("top", p.ref(List.of(p.list(266, 57.36, 8.88, 3.16, 3.87, 1630))))));

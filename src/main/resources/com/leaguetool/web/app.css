@@ -533,10 +533,20 @@ table.data.compact td { padding: 3px 10px 3px 0; font-size: 12.5px; }
 /* Zwei Spalten (Boots): doppelt so viele Einträge in derselben Höhe, Plätze 1–3 links. */
 .ranking.columns .rank-lines { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: repeat(3, auto); grid-auto-flow: column; column-gap: 14px; }
 .ranking.columns .rank-line { gap: 6px; }
+.ranking.columns .icon-row { flex-wrap: nowrap; }
 .ranking.columns .rank-stats small { font-size: 11px; }
 /* Auffüller unter der Mindest-Stichprobe: deutlich ausgegraut. */
 .rank-line.below-min { opacity: 0.35; filter: grayscale(1); }
 .rank-line.below-min:hover { opacity: 0.6; }
+/* Snowballing-Items (z. B. Mejai's): Winrate überhöht, ausgegraut wie Auffüller. */
+.rank-line.snowball, .late-item.snowball { opacity: 0.45; filter: grayscale(1); }
+.rank-line.snowball:hover, .late-item.snowball:hover { opacity: 0.8; }
+.rank-line.low-wr { opacity: 0.55; }
+.rank-line.low-wr.popular { opacity: 0.8; }
+/* Empfohlene Runenseite: ausgetauschte Runen und Shard hervorgehoben. */
+.icon-link.marked { outline: 2px solid var(--accent); outline-offset: 1px; }
+.marked-text { color: var(--accent); font-weight: 600; }
+.rank-line.low-wr:hover { opacity: 1; }
 .rank-stats { text-align: right; flex: none; display: flex; flex-direction: column; font-variant-numeric: tabular-nums; }
 .rank-stats span { font-weight: 650; }
 .rank-stats small { color: var(--text-3); }
@@ -549,7 +559,9 @@ table.data.compact td { padding: 3px 10px 3px 0; font-size: 12.5px; }
 .counter-delta { grid-column: 1 / -1; margin-top: 8px; padding-top: 14px; border-top: 1px solid var(--line-2, var(--line)); }
 .counter-delta-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
 .icon-row { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 3px; }
-.icon-link { display: block; border-radius: 7px; transition: transform var(--ease); }
+.icon-link { position: relative; display: block; border-radius: 7px; transition: transform var(--ease); }
+/* Anzahl bei mehrfach gekauften Items; Klicks und Tooltip gehen an das Icon darunter. */
+.icon-count { position: absolute; right: -3px; bottom: -3px; min-width: 14px; padding: 0 3px; border-radius: 7px; background: var(--surface-3); color: var(--text); font: 700 10px/14px var(--font-display); text-align: center; pointer-events: none; }
 .icon-link:hover { transform: translateY(-1px) scale(1.06); }
 .rune-page { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
 .skills { display: inline-flex; align-items: center; }

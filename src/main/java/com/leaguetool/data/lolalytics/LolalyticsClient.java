@@ -37,6 +37,13 @@ public final class LolalyticsClient {
     private static final String BUILD_PREFIX = "build_v4_";
     private static final String TEAM_PREFIX = "team_v1_";
     private static final java.util.List<String> CURRENT_PREFIXES = java.util.List.of(TIER_LIST_PREFIX, BUILD_PREFIX, TEAM_PREFIX);
+    /**
+     * Build-Einträge von vorher haben keine komplette Skillung bis Level 15 ({@code skill15}; davor auch keine
+     * Itemplätze 1–2). Statt eines neuen Präfixes (würde den ganzen Cache verwerfen) gelten sie als veraltet: Mit
+     * {@code staleOk} erscheinen sie sofort und werden einmal im Hintergrund erneuert, sonst wie nach einem Patchwechsel
+     * neu geholt. Keine zusätzlichen Anfragen über die normale Erneuerung hinaus, nur früher.
+     */
+    static final java.time.Instant BUILD_FORMAT_SINCE = java.time.Instant.parse("2026-11-26T14:35:00Z");
     /** Ältere Einträge löscht {@link #pruneCache}; sie gelten nach Patchwechsel und 12 h ohnehin als veraltet. */
     public static final Duration CACHE_RETENTION = Duration.ofDays(30);
 
@@ -198,7 +205,8 @@ public final class LolalyticsClient {
         String key = CACHE_DIR + "/" + BUILD_PREFIX + slug + "_" + t + "_" + (l == null ? "main" : l) + "_" + period.cacheSuffix() + ".json";
         String url = "https://lolalytics.com/lol/" + slug + "/build/?tier=" + t + (l == null ? "" : "&lane=" + l)
                 + patchQuery(period);
-        return new Source(key, url, notBefore.get(), LolalyticsState::extractBuild);
+        java.time.Instant boundary = notBefore.get();
+        return new Source(key, url, boundary.isAfter(BUILD_FORMAT_SINCE) ? boundary : BUILD_FORMAT_SINCE, LolalyticsState::extractBuild);
     }
 
     /**

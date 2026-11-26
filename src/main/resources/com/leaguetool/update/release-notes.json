@@ -1,5 +1,32 @@
 [
   {
+    "version": "2.4.0",
+    "date": "2026-11-26",
+    "title": "Feature-Update: Champions, Counters & Items",
+    "sections": [
+      {
+        "kind": "new",
+        "items": [
+          "Champions: Boxen „Erstes Item“ und „Zweites Item“",
+          "Champions: Empfohlene Runenseite mit geschätzter Winrate und Unterschied zur meistgespielten Seite",
+          "Champions: Mejai's als „Snowballing“ markiert und nachrangig gezeigt",
+          "Champions: Durchschnittliche Kaufminute bei den Items nach dem Core-Build"
+        ]
+      },
+      {
+        "kind": "improved",
+        "items": [
+          "Champions: Core-Build zeigt vier verschiedene Builds nach Rang, der meistgespielte ist immer dabei",
+          "Champions: Sechs Startitems und Boots in zwei Spalten, drei Beschwörerzauber, schwache Winrates ausgegraut",
+          "Champions: Winrate und Spiele je Runenseite aus den einzelnen Runen und Shards geschätzt",
+          "Champions: Skillung bis Level 15 aus der besten kompletten Skillung laut Lolalytics",
+          "Counters: Beste und schlechteste Picks nach Pick-WR mit stärker gedämpftem Matchup-Effekt",
+          "Items: Mehrfach vorhandene Items erscheinen als ein Icon mit Anzahl"
+        ]
+      }
+    ]
+  },
+  {
     "version": "2.3.0",
     "date": "2026-11-24",
     "title": "Summoners",

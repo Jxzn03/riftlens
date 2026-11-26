@@ -18,8 +18,8 @@ class TeamProfileTest {
     private static final int PRIOR = 1000;
 
     private static LolalyticsBuild champion(double physical, double magic, LengthBucket... buckets) {
-        return new LolalyticsBuild(1000, 0.5, 0.1, 0.1, List.of(), List.of(), List.of(), Map.of(), List.of(), List.of(), List.of(),
-                List.of(), new LolalyticsPairs(Map.of()), new Damage(physical, magic, 0), List.of(buckets), List.of());
+        return new LolalyticsBuild(1000, 0.5, 0.1, 0.1, List.of(), List.of(), List.of(), Map.of(), Map.of(), List.of(), List.of(), List.of(), List.of(),
+                List.of(), new LolalyticsPairs(Map.of()), new Damage(physical, magic, 0), List.of(buckets), List.of(), List.of());
     }
 
     @Test

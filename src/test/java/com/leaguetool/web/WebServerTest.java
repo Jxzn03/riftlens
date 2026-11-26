@@ -357,8 +357,10 @@ class WebServerTest {
             assertTrue(mostPlayed.path("games").asInt() >= line.path("games").asInt(), "mostPlayed hat die meisten Spiele");
         }
         assertEquals("Q", r.path("skillOrders").path("lines").path(0).path("key").path(0).asText());
-        assertEquals(List.of("W", "Q", "E", "Q", "Q", "R", "Q", "W", "Q", "W", "R", "W", "W", "E", "E", "R", "E", "E"),
-                json.convertValue(r.path("skillPath"), new TypeReference<List<String>>() { }));
+        assertEquals(List.of("W", "Q", "E", "Q", "Q", "R", "Q", "E", "Q", "E", "R", "E", "E", "W", "W", "R", "W", "W"),
+                json.convertValue(r.path("skillPath"), new TypeReference<List<String>>() { }),
+                "Level 1–15 aus der kompletten Skillung, 16–18 abgeleitet");
+        assertEquals(15, r.path("skillPathMeasured").asInt());
         JsonNode counters = r.path("counters");
         assertEquals("Mid", counters.path("lane").asText(), "ohne Rollenfilter gilt die Hauptlane");
         assertEquals(5797, counters.path("minGames").asInt(), "1 % der Spiele des Champions");
@@ -368,8 +370,22 @@ class WebServerTest {
         JsonNode lateItems = r.path("lateItems");
         assertEquals(2, lateItems.size(), "Core-Item und zu seltene Items fallen weg (lateItems)");
         assertEquals(3157, lateItems.path(0).path("item").asInt());
+        // Platz 3: 119 752 Spiele in Minute 27, Platz 4: 105 612 in Minute 31, Platz 5: 8 924 in Minute 34.
+        assertEquals(29, r.path("lateItemsMinute").asInt(), "Kaufminute über Platz 3–5, nach Spielen gewichtet");
+        assertFalse(lateItems.path(0).has("minute"), "nicht je Item (Nutzerwunsch)");
         assertEquals(3089, lateItems.path(1).path("item").asInt());
         assertEquals(45_562 + 8_924, lateItems.path(1).path("games").asInt(), "lateItems: Spiele über alle Plätze");
+        JsonNode first = r.path("firstItems");
+        assertFalse(first.path("derived").asBoolean(), "Itemplatz 1 kommt von der Seite");
+        assertEquals(3118, first.path("lines").path(0).path("key").path(0).asInt());
+        assertEquals(3, first.path("lines").size(), "alle Einträge der Seite");
+        assertEquals(3041, first.path("lines").path(2).path("key").path(0).asInt(), "Mejai's trotz bester Winrate am Ende");
+        assertTrue(first.path("lines").path(2).path("snowball").asBoolean());
+        assertFalse(first.path("lines").path(0).has("snowball"));
+        JsonNode second = r.path("secondItems");
+        assertTrue(second.path("derived").asBoolean(), "ohne Itemplatz 2 aus den Core-Builds");
+        assertEquals(4645, second.path("lines").path(0).path("key").path(0).asInt(), "Boots (3020) zählen nicht als Item");
+        assertEquals(102_489, second.path("lines").path(0).path("games").asInt());
         assertEquals(5, lateItems.path(1).path("slots").path(1).path("slot").asInt(), "lateItems: Aufteilung je Platz");
     }
 

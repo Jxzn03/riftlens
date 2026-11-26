@@ -35,29 +35,32 @@ class LolalyticsCountersTest {
     }
 
     @Test
-    void bestAndWorstPicksFollowOnlyTheMirroredWinRateWhileDeltaFollowsTheRating() {
-        // Gegen 3 verliert der Champion am häufigsten: 3 ist der beste Pick. Die Deltas zeigen bewusst in die andere Richtung.
+    void bestAndWorstPicksFollowThePickWinRateWhileDeltaFollowsTheRating() {
+        // Je 1000 Spiele, Dämpfung 1400: Delta 2 zählt zu 1000 / 2400. Durchschnitt 50 %, Pick-WR = 1 − WR + Delta 2 × 1400 / 2400.
+        // 1: roh bester Pick (53 %), aber nur durch einen gedämpften Matchup-Effekt bei schwacher Erwartung → 49,5 %.
+        // 2: allgemein starker Pick (Erwartung 53 %), roh 51 % → 52,2 %. 3: neutral 50 %. 4: neutral 45 %.
         LolalyticsCounters counters = LolalyticsCounters.of(top(Map.of(
-                1, stat(0.56, -0.03, -0.03),
-                2, stat(0.50, 0.00, 0.00),
-                3, stat(0.44, 0.03, 0.03),
-                4, stat(0.47, 0.01, 0.01))), "top", 100, OWN_WIN_RATE);
+                1, stat(0.47, -0.06, -0.06),
+                2, stat(0.49, 0.02, 0.02),
+                3, stat(0.50, 0.00, 0.00),
+                4, stat(0.55, 0.00, 0.00))), "top", 100, OWN_WIN_RATE);
 
-        assertEquals(List.of(3, 4), champions(counters.best()));
-        assertEquals(List.of(1, 2), champions(counters.worst()));
-        assertEquals(0.56, counters.best().get(0).winRate(), 1e-12, "Winrate des Picks = 1 − Matchup-Winrate bei 50 % Durchschnitt");
-        assertEquals(List.of(1, 2, 4, 3), champions(counters.delta()), "stärkster Counter laut Bewertung zuerst");
+        assertEquals(List.of(2, 3), champions(counters.best()), "nach Pick-WR, nicht nach roher Winrate (die 1 vorn hätte)");
+        assertEquals(0.53 - 0.06 * 1400 / 2400, line(counters, 1).pick(), 1e-12);
+        assertEquals(List.of(4, 1), champions(counters.worst()));
+        assertEquals(0.51, counters.best().get(0).winRate(), 1e-12, "angezeigte Winrate bleibt die gespiegelte Matchup-Winrate");
+        assertEquals(List.of(1, 3, 4, 2), champions(counters.delta()), "stärkster Counter laut Bewertung zuerst");
     }
 
     @Test
     void valuesAreMirroredToThePicksView() {
         // Durchschnitt = 1 + 0,04 + 0,02 − 0,51 = 0,55; Winrate des Picks = 1,10 − 0,48 = 0,62.
         LolalyticsCounters.Line l = LolalyticsCounters.of(top(Map.of(
-                1, new LolalyticsPairs.Stat(0.48, 700, 0.04, -0.02))), "top", 100, 0.51).delta().get(0);
+                1, new LolalyticsPairs.Stat(0.48, 1400, 0.04, -0.02))), "top", 100, 0.51).delta().get(0);
         assertEquals(0.62, l.winRate(), 1e-12);
         assertEquals(0.62 - 0.49, l.delta1(), 1e-12, "Winrate des Picks minus (1 − Winrate des Champions)");
         assertEquals(0.02, l.delta2(), 1e-12, "Matchup-Effekt mit umgekehrtem Vorzeichen");
-        assertEquals(0.01, l.rating(), 1e-12, "bei 700 Spielen zählt die Hälfte von Delta 2");
+        assertEquals(0.01, l.rating(), 1e-12, "bei 1400 Spielen zählt die Hälfte von Delta 2");
         // Gedämpfte Matchup-WR = 0,48 + 0,02 × 0,5 = 0,49; Pick = 1,10 − 0,49.
         assertEquals(0.61, l.pick(), 1e-12);
     }
@@ -76,7 +79,7 @@ class LolalyticsCountersTest {
     @Test
     void ratingNeedsOnlyDeltaTwo() {
         LolalyticsCounters.Line onlyDeltaTwo = LolalyticsCounters.of(top(Map.of(
-                1, new LolalyticsPairs.Stat(0.5, 700, null, 0.04))), "top", 100, OWN_WIN_RATE).delta().get(0);
+                1, new LolalyticsPairs.Stat(0.5, 1400, null, 0.04))), "top", 100, OWN_WIN_RATE).delta().get(0);
         assertEquals(-0.02, onlyDeltaTwo.rating(), 1e-12);
 
         LolalyticsCounters.Line noDeltaTwo = LolalyticsCounters.of(top(Map.of(

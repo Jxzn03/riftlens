@@ -486,20 +486,28 @@ export function MasterDetail({ name, master, detail, detailKey, initial = 0.5, m
 
 // ------------------------------------------------------------------ Verweise auf Spieldaten
 
+/** Ein mehrfach vorhandenes Item (z. B. zwei Control Wards) erscheint nur einmal, die Anzahl steht klein rechts unten. */
 export function ItemIcons({ data, ids, size = 30 }) {
-  return html`<span class="icon-row">${ids.map((id, i) => {
+  const shown = [...new Set(ids)];
+  return html`<span class="icon-row">${shown.map((id, i) => {
     const item = data.itemById.get(id);
+    const count = ids.filter((other) => other === id).length;
     return item
-      ? html`<button key=${i} type="button" class="icon-link" onClick=${() => go('items', id)}><${Img} src=${item.icon} size=${size} tip=${`${item.name} · ${item.gold.total} Gold`} /></button>`
-      : html`<span key=${i} class="muted">Item ${id}</span>`;
+      ? html`<button key=${i} type="button" class="icon-link" onClick=${() => go('items', id)}><${Img} src=${item.icon} size=${size} tip=${`${count > 1 ? `${count}× ` : ''}${item.name} · ${item.gold.total} Gold`} />${count > 1 ? html`<span class="icon-count">${count}</span>` : null}</button>`
+      : html`<span key=${i} class="muted">${count > 1 ? `${count}× ` : ''}Item ${id}</span>`;
   })}</span>`;
 }
 
-export function RuneIcons({ data, ids, size = 30 }) {
+/**
+ * {@code details}: Zusatz je Runen-ID für den Tooltip (z. B. Winrate und Spiele); {@code marked}: IDs, die hervorgehoben
+ * werden (z. B. ausgetauschte Runen einer Empfehlung).
+ */
+export function RuneIcons({ data, ids, size = 30, details = null, marked = null }) {
   return html`<span class="icon-row">${ids.map((id, i) => {
     const rune = data.runeById.get(id);
     if (rune) {
-      return html`<button key=${i} type="button" class="icon-link" onClick=${() => go('runes', id)}><${Img} src=${rune.icon} size=${size} tip=${rune.name} /></button>`;
+      const tip = details && details[id] ? `${rune.name} · ${details[id]}` : rune.name;
+      return html`<button key=${i} type="button" class=${`icon-link ${marked && marked.has(id) ? 'marked' : ''}`} onClick=${() => go('runes', id)}><${Img} src=${rune.icon} size=${size} tip=${tip} /></button>`;
     }
     const tree = data.treeById.get(id);
     if (tree) {

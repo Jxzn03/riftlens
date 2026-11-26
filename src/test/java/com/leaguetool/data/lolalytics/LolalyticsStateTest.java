@@ -10,6 +10,7 @@ import java.nio.file.Path;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -62,10 +63,21 @@ class LolalyticsStateTest {
         assertEquals(0.1768, build.coreBuilds().get(0).pickRate(), 1e-9);
         assertEquals("QWE", build.skillOrders().get(0).key());
         assertEquals("213114", build.skillStarts().get(0).key());
+        assertEquals("213114131343322", build.skillPaths().get(0).key(), "komplette Skillung bis Level 15");
+        assertEquals(27, build.itemSlots().stream().filter(s -> s.slot() == 3).findFirst().orElseThrow().entries().get(0)
+                .minute(), "5. Spalte der Itemplätze ist die Kaufminute");
         assertEquals("4_14", build.spells().get(0).key());
         assertEquals(0.53, build.runes().get(8112).winRate(), 1e-9);
         assertEquals(499_515, build.runes().get(8112).games());
-        assertEquals(1, build.runes().size(), "Shard-Varianten wie 5008f sind keine Runen-IDs");
+        assertEquals(2, build.runes().size(), "Shard-Varianten wie 5008f sind keine Runen-IDs");
+        assertEquals(0.54, build.subRunes().get(8226).winRate(), 1e-9, "zweiter Eintrag gilt im Sekundärbaum");
+        assertEquals(238_800, build.subRunes().get(8226).games());
+        assertFalse(build.subRunes().containsKey(8112), "Keystones haben keinen Eintrag im Sekundärbaum");
+        assertEquals(34_500, build.shardRow(1).get(5008).games(), "5008f ist der Flex-Shard 5008");
+        assertEquals(41_000, build.shardRow(0).get(5005).games(), "5005 ohne Endung: Offensive");
+        assertEquals(22_000, build.shardRow(2).get(5013).games(), "5013 ohne Endung: Defensive");
+        assertFalse(build.runes().containsKey(5005), "Shards sind keine Runen");
+        assertTrue(build.runePages().get(0).mostPlayed());
         assertEquals(List.of(8112, 8139), build.runePages().get(0).primary());
         assertEquals(List.of(5005, 5008, 5001), build.runePages().get(0).shards());
     }
@@ -85,10 +97,13 @@ class LolalyticsStateTest {
     }
 
     @Test
-    void itemSlotsThreeToFiveAreParsed() throws IOException {
+    void itemSlotsOneToFiveAreParsed() throws IOException {
         List<LolalyticsBuild.ItemSlot> slots = LolalyticsState.parseBuild(LolalyticsState.extractBuild(LolalyticsPages.build())).itemSlots();
-        assertEquals(List.of(3, 4, 5), slots.stream().map(LolalyticsBuild.ItemSlot::slot).toList());
-        LolalyticsBuild.Entry third = slots.get(0).entries().get(0);
+        assertEquals(List.of(1, 2, 3, 4, 5), slots.stream().map(LolalyticsBuild.ItemSlot::slot).toList());
+        assertEquals("3118", slots.get(0).entries().get(0).key());
+        assertEquals(347_798, slots.get(0).entries().get(0).games());
+        assertTrue(slots.get(1).entries().isEmpty(), "fehlender Itemplatz bleibt leer");
+        LolalyticsBuild.Entry third = slots.get(2).entries().get(0);
         assertEquals("3157", third.key());
         assertEquals(0.5667, third.winRate(), 1e-9);
         assertEquals(0.2048, third.pickRate(), 1e-9);
@@ -97,7 +112,7 @@ class LolalyticsStateTest {
 
     @Test
     void missingItemSlotListsKeepTheBuildUsable() throws IOException {
-        String page = LolalyticsPages.build().replace("\"item3\"", "\"x3\"").replace("\"item4\"", "\"x4\"").replace("\"item5\"", "\"x5\"");
+        String page = LolalyticsPages.build().replace("\"item1\"", "\"x1\"").replace("\"item3\"", "\"x3\"").replace("\"item4\"", "\"x4\"").replace("\"item5\"", "\"x5\"");
         LolalyticsBuild build = LolalyticsState.parseBuild(LolalyticsState.extractBuild(page));
         assertEquals(579_664, build.games());
         assertTrue(build.itemSlots().stream().allMatch(slot -> slot.entries().isEmpty()));

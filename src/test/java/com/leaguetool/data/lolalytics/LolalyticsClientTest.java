@@ -15,6 +15,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class LolalyticsClientTest {
@@ -71,6 +72,22 @@ class LolalyticsClientTest {
                 assertTrue(gapMs >= INTERVAL.toMillis() - 5, "Abstand " + i + ": " + gapMs + " ms");
             }
         }
+    }
+
+    @Test
+    void buildEntriesFromBeforeTheItemSlotFormatCountAsStale() throws Exception {
+        FakeHttpFetcher fake = new FakeHttpFetcher().respond(buildUrl("zed"), LolalyticsPages.build());
+        FileCache cache = new FileCache(tmp);
+        LolalyticsClient client = new LolalyticsClient(fake, cache, INTERVAL);
+        client.build("zed", "emerald_plus", null, LolalyticsPeriod.LAST_30_DAYS);
+        Path file = cache.pathFor(FileCache.GLOBAL, "lolalytics/build_v4_zed_emerald_plus_main_30d.json");
+        assertTrue(client.buildIfCached("zed", "emerald_plus", null, LolalyticsPeriod.LAST_30_DAYS, false) != null, "neuer Eintrag ist frisch");
+
+        Files.setLastModifiedTime(file, FileTime.from(LolalyticsClient.BUILD_FORMAT_SINCE.minusSeconds(60)));
+        assertNull(client.buildIfCached("zed", "emerald_plus", null, LolalyticsPeriod.LAST_30_DAYS, false),
+                "Eintrag ohne Itemplätze 1–2 gilt als veraltet");
+        assertTrue(client.buildIfCached("zed", "emerald_plus", null, LolalyticsPeriod.LAST_30_DAYS, true) != null,
+                "mit staleOk weiter sofort sichtbar");
     }
 
     @Test

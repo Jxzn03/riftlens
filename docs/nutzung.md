@@ -66,8 +66,33 @@ Ablauf frisch geholt. Abrufe, auf die du wartest, haben dabei Vorrang.
 
 - Ranglisten berücksichtigen nur Einträge mit mindestens 1 % der Spiele des Champions, damit keine Nischen-Builds
   aus ohnehin gewonnenen Spielen oben stehen.
-- Beim Core-Build steht unter den drei besten zusätzlich der meistgespielte Build, unabhängig von der Winrate
-  (Markierung „Meistgespielt“; ist er schon unter den besten, wird nur diese Zeile markiert).
+- Core-Builds mit denselben zwei Items in derselben Reihenfolge zählen als ein Build, egal mit welchen Boots (gezeigt
+  mit den häufigsten Boots). Ausgewählt wird möglichst je ein Build pro erstem Item, damit verschiedene Starts
+  sichtbar sind; angezeigt werden sie nach Rang.
+- „Erstes Item“ und „Zweites Item“ zeigen je sechs Items in zwei Spalten, ohne Boots.
+- Mejai's Soulstealer ist als „Snowballing“ markiert und ausgegraut: Es wird meist nur mit Vorsprung gekauft, seine
+  Winrate ist dadurch überhöht. Es steht hinter den übrigen Items und nimmt keinen Platz im Core-Build.
+- Der Core-Build zeigt immer vier verschiedene Builds nach Rang. Der meistgespielte ist immer dabei: an seinem Rang oder,
+  falls er nicht unter den ersten vier steht, statt des vierten, unabhängig von der
+  Winrate (Markierung „Meistgespielt“).
+- Boots und Startitems zeigen sechs Einträge in zwei Spalten, Beschwörerzauber drei (z. B. beim Jungler auch Smite +
+  Ignite). Freie Plätze füllen die häufigsten Einträge unter der Mindest-Stichprobe, deutlich ausgegraut.
+- Runenseiten: Lolalytics nennt je Seite nur die Werte des Keystones. Die Winrate ist deshalb aus den einzelnen Runen
+  und Shards geschätzt (die drei Shards zählen zusammen so viel wie eine Rune), die Spiele sind die kleinste
+  Spielzahl davon. Winrate und Spiele jeder Rune stehen im Tooltip ihres Icons.
+- Die dritte Zeile ist eine Empfehlung: die meistgespielte Seite, in der einzelne Runen oder Shards durch eine klar
+  bessere Wahl derselben Reihe ersetzt sind. Keystone und Bäume bleiben gleich. Dort steht die geschätzte Winrate, in
+  Klammern der Unterschied zur meistgespielten Seite in Prozentpunkten, z. B. „53.36 % (+0.38 %)“. Ausgetauschte Runen
+  sind umrandet, ausgetauschte Shards farbig; was ersetzt wurde, zeigt der Tooltip bei „Show Advanced Tooltips“. Gleicht
+  die Empfehlung einer der beiden anderen Seiten, entfällt sie.
+- Die Skillung zeigt Level 1–15 aus der besten kompletten Skillung laut Lolalytics; Level 16–18 sind aus der besten
+  Max-Reihenfolge ergänzt.
+- Die Überschrift von „Items nach dem Core-Build“ nennt die durchschnittliche Kaufminute auf den Itemplätzen 3–5
+  (z. B. „⌀ Min. 29“). Späte Items haben hohe Winrates vor allem, weil sie erst in gut laufenden Spielen gekauft
+  werden.
+- Einträge mit einer Winrate unter 48,5 % sind leicht ausgegraut, bei hoher Pickrate (ab 15 %) nur schwach.
+- Counters: „Beste/Schlechteste Picks dagegen“ sortieren nach Pick-WR, der geschätzten Winrate des Picks aus seiner
+  allgemeinen Stärke plus dem gedämpften Matchup-Effekt (Bewertung); darunter steht die Anzahl der Spiele.
 - Grün oder Rot bei Winrates: mindestens 1 Punkt über bzw. mehr als 1 Punkt unter dem Durchschnitt des gewählten
   Datensatzes.
 

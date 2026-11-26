@@ -14,6 +14,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -91,9 +92,12 @@ final class LolalyticsState {
     // ------------------------------------------------------------------ Champion-Seite
 
     private static final List<String> BUILD_LISTS = List.of("startSet", "builtBootSet3", "boots", "skillOrder", "skill6",
-            "spells");
-    /** Itemplätze nach dem Core-Build. Optional, damit eine geänderte Seite nur diese Anzeige kostet. */
-    private static final List<Integer> ITEM_SLOTS = List.of(3, 4, 5);
+            "skill15", "spells");
+    /**
+     * Itemplätze (Boots zählen nicht mit): 1–2 für „Erstes/Zweites Item“, 3–5 für „Items nach dem Core-Build“. Optional,
+     * damit eine geänderte Seite nur diese Anzeige kostet; ältere Cache-Einträge ohne 1–2 bleiben gültig.
+     */
+    private static final List<Integer> ITEM_SLOTS = List.of(1, 2, 3, 4, 5);
 
     static String extractBuild(String html) throws IOException {
         JsonNode objects = objects(html);
@@ -219,13 +223,31 @@ final class LolalyticsState {
     static LolalyticsBuild parseBuild(String json) throws IOException {
         JsonNode root = Json.MAPPER.readTree(json);
         Map<Integer, LolalyticsBuild.Entry> runes = new HashMap<>();
+        Map<Integer, LolalyticsBuild.Entry> subRunes = new HashMap<>();
+        List<Map<Integer, LolalyticsBuild.Entry>> shardRows = new ArrayList<>();
+        for (int row = 0; row < LolalyticsBuild.SHARD_ROWS; row++) {
+            shardRows.add(new HashMap<>());
+        }
         for (Map.Entry<String, JsonNode> e : root.path("runes").properties()) {
-            // Je Rune: [Pickrate, Winrate, Spiele]; der erste Eintrag ist die Position in der Hauptreihe.
-            // Schlüssel mit Buchstaben (z. B. 5008f) sind Shard-Varianten je Reihe und keine Runen-IDs.
+            // Je Rune: [Pickrate, Winrate, Spiele]; der erste Eintrag gilt im Hauptbaum, der zweite im Sekundärbaum
+            // (Keystones haben nur den ersten). Shards (IDs 5000–5999) stehen im selben Block: die mittlere Reihe mit
+            // Endung f (z. B. 5010f), Offensive und Defensive als reine Zahl (z. B. 5005, 5013).
+            String key = e.getKey();
+            if (key.matches("5\\d{3}f?") && e.getValue().path(0).isArray()) {
+                String id = key.substring(0, 4);
+                shardRows.get(shardRow(key)).put(Integer.valueOf(id), runeEntry(id, e.getValue().path(0)));
+                continue;
+            }
+            if (!key.matches("\\d+")) {
+                continue;
+            }
             JsonNode first = e.getValue().path(0);
-            if (first.isArray() && e.getKey().matches("\\d+")) {
-                runes.put(Integer.valueOf(e.getKey()), new LolalyticsBuild.Entry(e.getKey(),
-                        first.path(1).asDouble() / 100.0, first.path(0).asDouble() / 100.0, first.path(2).asInt()));
+            if (first.isArray()) {
+                runes.put(Integer.valueOf(e.getKey()), runeEntry(e.getKey(), first));
+            }
+            JsonNode second = e.getValue().path(1);
+            if (second.isArray()) {
+                subRunes.put(Integer.valueOf(e.getKey()), runeEntry(e.getKey(), second));
             }
         }
         List<LolalyticsBuild.RunePage> pages = new ArrayList<>();
@@ -234,18 +256,38 @@ final class LolalyticsState {
             if (page.path("set").isObject()) {
                 pages.add(new LolalyticsBuild.RunePage(ints(page.path("set").path("pri")),
                         ints(page.path("set").path("sec")), ints(page.path("set").path("mod")),
-                        page.path("wr").asDouble() / 100.0, page.path("n").asInt()));
+                        page.path("wr").asDouble() / 100.0, page.path("n").asInt(), "pagePick".equals(name)));
             }
         }
         return new LolalyticsBuild(root.path("n").asInt(), root.path("wr").asDouble() / 100.0,
                 root.path("pr").asDouble() / 100.0, root.path("br").asDouble() / 100.0,
                 entries(root.path("startSet")), entries(root.path("builtBootSet3")), entries(root.path("boots")),
-                runes, pages, entries(root.path("skillOrder")), entries(root.path("skill6")),
+                runes, subRunes, shardRows, pages, entries(root.path("skillOrder")), entries(root.path("skill6")),
                 entries(root.path("spells")), pairs(root.path("enemy")),
                 new LolalyticsBuild.Damage(root.path("damage").path("physical").asDouble(),
                         root.path("damage").path("magic").asDouble(), root.path("damage").path("true").asDouble()),
                 gameLength(root.path("time"), root.path("timeWin")),
-                ITEM_SLOTS.stream().map(slot -> new LolalyticsBuild.ItemSlot(slot, entries(root.path("item" + slot)))).toList());
+                ITEM_SLOTS.stream().map(slot -> new LolalyticsBuild.ItemSlot(slot, entries(root.path("item" + slot)))).toList(),
+                entries(root.path("skill15")));
+    }
+
+    /** Shards der Offensive als reine Zahl (Aatrox: 5008 92 %, 5005 7 %, 5007 1,1 %, zusammen 100 %). */
+    private static final Set<String> OFFENSE_SHARDS = Set.of("5005", "5007", "5008");
+
+    /**
+     * Reihe eines Shard-Schlüssels: Endung f ist die mittlere Reihe (Flex), die Offensiv-Shards als reine Zahl die obere,
+     * alle übrigen reinen Zahlen die untere (Defensive; 5001, 5011, 5013).
+     */
+    static int shardRow(String key) {
+        if (key.endsWith("f")) {
+            return 1;
+        }
+        return OFFENSE_SHARDS.contains(key) ? 0 : 2;
+    }
+
+    /** Eintrag einer Rune aus {@code [Pickrate, Winrate, Spiele]} (Prozent). */
+    private static LolalyticsBuild.Entry runeEntry(String key, JsonNode stat) {
+        return new LolalyticsBuild.Entry(key, stat.path(1).asDouble() / 100.0, stat.path(0).asDouble() / 100.0, stat.path(2).asInt());
     }
 
     /** Listen der Form {@code [Schlüssel, Winrate, Pickrate, Spiele, …]}. Leere Schlüssel fallen weg. */
@@ -254,8 +296,9 @@ final class LolalyticsState {
         for (JsonNode e : list) {
             String key = e.path(0).asText("");
             if (!key.isEmpty()) {
+                // Item-Listen haben als 5. Spalte die durchschnittliche Kaufminute.
                 entries.add(new LolalyticsBuild.Entry(key, e.path(1).asDouble() / 100.0, e.path(2).asDouble() / 100.0,
-                        e.path(3).asInt()));
+                        e.path(3).asInt(), e.path(4).asInt(0)));
             }
         }
         return entries;
