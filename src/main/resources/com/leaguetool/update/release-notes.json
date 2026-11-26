@@ -1,5 +1,19 @@
 [
   {
+    "version": "2.4.1",
+    "date": "2026-11-26",
+    "title": "Draft: Eigene Bilanz direkt an den Picks",
+    "sections": [
+      {
+        "kind": "improved",
+        "items": [
+          "Draft: Deine Bilanz gegen den direkten Lane-Gegner steht unter dem Gegner auf deiner Rolle statt in einer eigenen Karte",
+          "Draft: Vorschläge für dein Team zeigen deine Bilanz mit dem Champion gegen den Lane-Gegner („Du 4:1“), in „Weitere Picks“ als sortierbare Spalte"
+        ]
+      }
+    ]
+  },
+  {
     "version": "2.4.0",
     "date": "2026-11-26",
     "title": "Feature-Update: Champions, Counters & Items",

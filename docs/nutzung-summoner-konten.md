@@ -20,8 +20,15 @@ Neustart erhalten. Das Live-Spiel gibt es nur je Konto.
 
 ## Deine Bilanz im Draft
 
-Mit festgelegtem eigenen Konto zeigt der Draft-Tab (Beste Picks und Draft-Analyse) je Gegner-Pick deine Bilanz gegen
-diesen Champion als Lane-Gegner und deine drei häufigsten Champions dagegen. Ist über den Client-Abgleich bekannt, welcher
-Platz deiner ist, kommen dein Champion, seine Bilanz und die Lane-Zeile dazu. Die Werte stammen nur aus den gespeicherten
+Mit festgelegtem eigenen Konto zeigt der Draft-Tab deine Bilanz gegen deinen direkten Lane-Gegner an zwei Stellen:
+
+- **Am Platz des Gegners** auf deiner Rolle steht unter dem Namen „Deine Bilanz 5:7“; der Tooltip nennt deine drei
+  häufigsten Champions gegen ihn. Deine Rolle kommt aus dem Client-Abgleich (dein Platz) oder, ohne ihn, aus der unter
+  „Beste Picks“ gewählten Rolle fürs eigene Team.
+- **In „Beste Picks“** (nur für dein Team) zeigt jeder Vorschlag „Du 4:1“, deine Bilanz mit diesem Champion gegen den
+  Gegner auf seiner Rolle; die Tabelle „Weitere Picks“ hat dafür die sortierbare Spalte „Du“. Ist deine Rolle bekannt,
+  gilt das nur für sie.
+
+Die Werte stammen nur aus den gespeicherten
 Matches deines Kontos (neue Spiele kommen mit der nächsten Abfrage im Summoner-Tab dazu); der Draft fragt dafür weder
 Riot noch den League-Client ab und zeigt keine Daten anderer Spieler.

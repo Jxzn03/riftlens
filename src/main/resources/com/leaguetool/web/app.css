@@ -784,12 +784,11 @@ table.data .matchup-row > td { background: var(--surface-2); padding: 4px 12px 1
 .live-player { display: grid; grid-template-columns: 38px 40px minmax(140px, 1.2fr) minmax(170px, 1.4fr) minmax(140px, 1fr); gap: 10px; align-items: center; padding: 5px 8px; border-radius: var(--radius-s); background: var(--surface-2); font-variant-numeric: tabular-nums; }
 .live-player.self { outline: 1px solid var(--accent); }
 .live-name, .live-rank { display: flex; flex-direction: column; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.draft-own-card table.data td { vertical-align: middle; }
-.draft-own-card { margin-bottom: 12px; }
-.own-line { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; }
-.own-enemy, .own-champs { display: inline-flex; align-items: center; gap: 8px; }
-.own-champ { display: inline-flex; align-items: center; gap: 3px; font-variant-numeric: tabular-nums; }
-tr.own-lane td { background: var(--accent-soft); }
+/* Eigene Bilanz gegen den Lane-Gegner (Draft: Gegner-Platz, Vorschläge) */
+.own-record { font-size: 12px; font-weight: 400; color: var(--text-2); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.own-record b { font-weight: 600; color: var(--text); }
+.own-record b.good { color: var(--good); }
+.own-record b.bad { color: var(--bad); }
 @media (max-width: 1040px) {
   .report-head.six { grid-template-columns: repeat(3, 1fr); }
   .live-player { grid-template-columns: 38px 40px minmax(0, 1fr); }

@@ -857,6 +857,9 @@ export function DraftView() {
     const cs = client.champSelect;
     return cs ? { ally: cs.ally.map((m) => m), enemy: cs.enemy.map((m) => m) } : { ally: [], enemy: [] };
   }, [client.champSelect]);
+  // Eigene Bilanz gegen den Lane-Gegner: am Platz des Gegners und an den Vorschlägen für dein Team.
+  const ownLane = useMemo(() => ownLaneOf(ownMatchups, view, loading ? null : result, hints.ally),
+    [ownMatchups, view.ally, view.enemy, view.side, view.role, loading, result, hints.ally]);
 
   const used = useMemo(() => new Set([...view.ally, ...view.enemy].filter(Boolean).map((s) => s.champion).concat(view.bans)),
     [view.ally, view.enemy, view.bans]);
@@ -960,7 +963,7 @@ export function DraftView() {
         </div>
       </div>
       <${TeamColumn} title="Gegner" team="enemy" slots=${view.enemy} result=${result} data=${data} pending=${pendingRole} hints=${hints.enemy}
-        onPick=${(index) => setView({ picker: { team: 'enemy', index } })} onRole=${setSlotRole} onClear=${clearSlot} />
+        ownLane=${ownLane} onPick=${(index) => setView({ picker: { team: 'enemy', index } })} onRole=${setSlotRole} onClear=${clearSlot} />
     </section>
     <${FearlessPanel} fearless=${fearless} form=${fearlessForm} setForm=${setFearlessForm} view=${view} setView=${setView} data=${data} locked=${locked} draftResult=${result}
       boardComplete=${picks === 2 * TEAM_SIZE} lcuStatus=${client.lcu?.status} conflicts=${client.champSelect ? lockedOnBoard : NO_LOCKS} />
@@ -978,11 +981,11 @@ export function DraftView() {
       ${view.tab === 'archive' ? null : html`<${ActiveOptions} view=${view} setView=${setView} />`}
     </div>
 
-    ${view.tab !== 'archive' ? html`<${OwnMatchupCard} own=${ownMatchups} view=${view} result=${loading ? null : result} hints=${hints.ally} data=${data} />` : null}
     ${view.tab === 'archive' ? html`<${Archive} data=${data} view=${view} setView=${setView} />`
       : !result ? (loading ? null : html`<${Empty} title="Noch keine Daten" />`)
       : view.tab === 'picks'
-        ? html`<${Suggestions} result=${result} data=${data} view=${view} setView=${setView} onTake=${takeSuggestion} busy=${loading} owned=${owned} />`
+        ? html`<${Suggestions} result=${result} data=${data} view=${view} setView=${setView} onTake=${takeSuggestion} busy=${loading} owned=${owned}
+          ownLane=${ownLane} />`
         : html`<${Analysis} result=${result} data=${data} picks=${picks} />`}
 
     ${view.picker ? html`<${ChampionPicker} data=${data} used=${used} locked=${locked} markAvoid=${view.picker.team === 'ally'}
@@ -1277,7 +1280,7 @@ function RolePicker({ champion, slot, prediction, shares, pending, onChoose }) {
   </div>`;
 }
 
-function TeamColumn({ title, team, slots, result, data, pending, hints = [], onPick, onRole, onClear }) {
+function TeamColumn({ title, team, slots, result, data, pending, hints = [], ownLane = null, onPick, onRole, onClear }) {
   const predicted = new Map((result?.slots[team] || []).map((s) => [s.champion, s]));
   const favorites = useFavorites();
   const practice = usePractice();
@@ -1314,6 +1317,8 @@ function TeamColumn({ title, team, slots, result, data, pending, hints = [], onP
       const practicing = favorite && practice.has(slot.champion);
       const unusual = favorite && offMeta.has(slot.champion);
       const tagged = avoided || practicing || unusual;
+      // Gegner auf deiner Rolle: deine Bilanz gegen ihn.
+      const laneEnemy = !ally && ownLane && ownLane.role && ownLane.enemyByRole.get(ownLane.role) === slot.champion;
       return html`<div key=${index} class=${`draft-slot ${favorite ? 'favorite' : ''} ${practicing ? 'practice' : ''} ${unusual ? 'offmeta' : ''} ${avoided ? 'avoid' : ''}`}>
         <button type="button" class="icon-link draft-slot-icon" onClick=${() => openChampion(champion, ally ? 'stats' : 'counters', role)}
           aria-label=${`${champion.name}: ${ally ? 'Match-Statistik' : 'Counters'} öffnen`}
@@ -1321,8 +1326,9 @@ function TeamColumn({ title, team, slots, result, data, pending, hints = [], onP
           <${Img} src=${champion.icon} size=${40} />
         </button>
         <button type="button" class="draft-slot-champion" onClick=${() => onPick(index)} data-tip=${advancedTips ? 'Champion ändern' : undefined}>
-          ${tagged ? html`<span class="draft-name-stack"><span class="draft-name">${champion.name}</span>
-              <span class="draft-tag-row">${avoided ? html`<${AvoidTag} />` : null}<${FavTags} practice=${practicing} offMeta=${unusual} /></span></span>`
+          ${tagged || laneEnemy ? html`<span class="draft-name-stack"><span class="draft-name">${champion.name}</span>
+              ${tagged ? html`<span class="draft-tag-row">${avoided ? html`<${AvoidTag} />` : null}<${FavTags} practice=${practicing} offMeta=${unusual} /></span>` : null}
+              ${laneEnemy ? html`<${OwnLaneRecord} ownLane=${ownLane} champion=${slot.champion} data=${data} />` : null}</span>`
             : html`<span class="draft-name">${champion.name}</span>`}
           ${favorite ? html`<${FavMark} size=${14} practice=${practicing} />` : null}
         </button>
@@ -1470,7 +1476,10 @@ function Part({ label, rating, question, tip }) {
 // ------------------------------------------------------------------ Vorschläge
 
 /** Spalten der Tabelle „Weitere Picks“; Klick auf den Kopf sortiert, Zahlen zuerst absteigend. */
-function suggestionColumns(data) {
+function suggestionColumns(data, ownLane) {
+  const ownMatch = (s) => ownLaneMatch(ownLane, s.champion, s.role)?.mine;
+  const own = ownLane ? [{ key: 'own', title: 'Du', tip: 'Deine Bilanz mit diesem Champion gegen den Lane-Gegner auf dieser Rolle (eigene Konten)',
+    value: (s) => { const m = ownMatch(s); return m ? m.wins / m.games + m.games / 1000 : -1; } }] : [];
   return [
     { key: 'rank', title: '#', firstDir: 1, tip: 'Rang in der Gesamtwertung', value: (s) => s.rank },
     { key: 'name', title: 'Champion', firstDir: 1, value: (s) => data.championByKey.get(s.champion)?.name ?? String(s.champion) },
@@ -1482,10 +1491,13 @@ function suggestionColumns(data) {
     { key: 'matchupRating', title: 'Matchups', tip: `${PART_QUESTIONS.matchup} Beitrag der Matchups gegen den Gegner.`, value: (s) => s.matchupRating },
     { key: 'pickRate', title: 'Pickrate', tip: 'Pickrate auf dieser Rolle in den letzten 30 Tagen', value: (s) => s.pickRate },
     { key: 'games', title: 'Spiele', tip: 'Spiele auf dieser Rolle in den letzten 30 Tagen', value: (s) => s.games },
+    ...own,
   ];
 }
 
-function Suggestions({ result, data, view, setView, onTake, busy, owned }) {
+function Suggestions({ result, data, view, setView, onTake, busy, owned, ownLane: ownLaneAll = null }) {
+  // Deine Bilanz nur an Vorschlägen für dein Team: Gegner-Picks spielst nicht du.
+  const ownLane = result.side === 'ally' ? ownLaneAll : null;
   const openRoles = ROLES.filter((r) => result.openRoles.includes(r.value));
   const role = view.role && result.openRoles.includes(view.role) ? view.role : '';
   // Aus dem Client bekannt, welche Champions der eigene Account spielen darf; gilt nur für Vorschläge ans eigene Team.
@@ -1504,7 +1516,7 @@ function Suggestions({ result, data, view, setView, onTake, busy, owned }) {
       && (!roles || roles.length === 0 || roles.includes(s.role)) && (!favoritesOnly || favorites.has(s.champion));
   }), [result, role, ownedOnly, owned, ally, favorites, favoriteInfo, favoritesOnly]);
   const top = rows.slice(0, TOP_PICKS);
-  const columns = useMemo(() => suggestionColumns(data), [data]);
+  const columns = useMemo(() => suggestionColumns(data, ownLane), [data, ownLane]);
   const sort = activeSort(columns, { key: view.restSort || 'rank', dir: view.restDir || 1 });
   // Sortiert werden alle übrigen Vorschläge, angezeigt die ersten; der Rang bleibt der aus der Gesamtwertung.
   const rest = useMemo(() => sortRows(rows.slice(TOP_PICKS).map((s, i) => ({ ...s, rank: i + TOP_PICKS + 1 })), columns, sort)
@@ -1542,7 +1554,8 @@ function Suggestions({ result, data, view, setView, onTake, busy, owned }) {
       <h3 class="draft-section-title">Top ${top.length} für ${sideText}${role ? ` auf ${roleLabel(role)}` : ''}</h3>
       <div class="draft-top">
         ${top.map((s, i) => html`<${TopCard} key=${`${s.champion}-${s.role}`} rank=${i + 1} suggestion=${s} data=${data} onTake=${onTake} baseText=${baseText}
-          favorite=${favorites.has(s.champion)} practicing=${practice.has(s.champion)} unusual=${offMeta.has(s.champion)} avoided=${avoid.has(s.champion)} />`)}
+          favorite=${favorites.has(s.champion)} practicing=${practice.has(s.champion)} unusual=${offMeta.has(s.champion)} avoided=${avoid.has(s.champion)}
+          ownMatch=${ownLaneMatch(ownLane, s.champion, s.role)} />`)}
       </div>
       ${rest.length ? html`<${Card} title="Weitere Picks">
         <div class="grid-scroll"><table class="data draft-table">
@@ -1563,6 +1576,7 @@ function Suggestions({ result, data, view, setView, onTake, busy, owned }) {
               <td class=${toneOf(impact(s.matchupRating))}>${impactText(s.matchupRating)}</td>
               <td class="muted" data-tip=${advancedTips ? `${percent(s.laneShare)} der Spiele von ${champion?.name || s.champion} auf dieser Rolle` : undefined}>${percent(s.pickRate, 2)}</td>
               <td class="muted">${count(s.games)}</td>
+              ${ownLane ? html`<td><${OwnPickRecord} match=${ownLaneMatch(ownLane, s.champion, s.role)} champion=${s.champion} data=${data} empty="–" /></td>` : null}
             </tr>`;
           })}</tbody>
         </table></div>
@@ -1570,7 +1584,7 @@ function Suggestions({ result, data, view, setView, onTake, busy, owned }) {
   </div>`;
 }
 
-function TopCard({ rank, suggestion: s, data, onTake, baseText, favorite, practicing = false, unusual = false, avoided = false }) {
+function TopCard({ rank, suggestion: s, data, onTake, baseText, favorite, practicing = false, unusual = false, avoided = false, ownMatch = null }) {
   const advancedTips = useStore((st) => Boolean(st.prefs.advancedTips));
   const champion = data.championByKey.get(s.champion);
   const favorites = useFavorites();
@@ -1583,6 +1597,7 @@ function TopCard({ rank, suggestion: s, data, onTake, baseText, favorite, practi
     <span class="draft-top-head">
       ${champion ? html`<${Img} src=${champion.icon} size=${48} />` : null}
       <span class="draft-top-name"><strong>${champion?.name || s.champion}${favorite ? html` <${FavMark} size=${14} practice=${practice} />` : null}</strong><${Tag} kind="soft">${roleLabel(s.role)}<//>
+        <${OwnPickRecord} match=${ownMatch} champion=${s.champion} data=${data} />
         ${practice || offMeta || avoided ? html`<span class="draft-tag-row"><${FavTags} practice=${practice} offMeta=${offMeta} />${avoided ? html`<${AvoidTag} />` : null}</span>` : null}</span>
     </span>
     <span class="draft-top-value">${percent(s.winRate)}<small class=${toneOf(s.delta * 100)}>${signed(s.delta * 100)}</small></span>
@@ -1714,58 +1729,81 @@ function useOwnMatchups() {
 
 const OWN_TOP_CHAMPIONS = 3;
 
+const OWN_SOURCE = "Gezählt werden Spiele auf Summoner's Rift gegen den direkten Lane-Gegner, ohne Remakes; "
+  + 'neue Spiele kommen mit der nächsten Abfrage im Summoner-Tab dazu.';
+
 function record(games, wins) {
   return games ? `${wins}S ${games - wins}N` : '–';
 }
 
-function OwnRecord({ games, wins }) {
-  if (!games) {
-    return html`<span class="muted">keine Spiele</span>`;
-  }
-  const wr = wins / games;
-  return html`<span><strong class=${wr >= 0.52 ? 'good' : wr < 0.48 ? 'bad' : ''}>${percent(wr, 0)}</strong> <span class="muted">${record(games, wins)}</span></span>`;
+function ownTone(games, wins) {
+  const wr = games ? wins / games : 0.5;
+  return wr >= 0.52 ? 'good' : wr < 0.48 ? 'bad' : '';
 }
 
-function OwnMatchupCard({ own, view, result, hints, data }) {
+/**
+ * Kontext für die eigene Bilanz am Brett und an den Vorschlägen, oder null ohne eigenes Konto. Die eigene Rolle kommt
+ * aus dem Client-Abgleich (eigener Platz), sonst aus der unter „Beste Picks“ gewählten Rolle fürs eigene Team.
+ */
+function ownLaneOf(own, view, result, hints) {
   if (!own || !own.accounts || own.accounts.length === 0 || !own.matchups) {
     return null;
   }
-  const { matchups, accounts } = own;
-  const accountLabel = accounts.length === 1 ? accounts[0].riotId : `${accounts.length} Konten`;
   const roleOf = (team, slot) => slot && (slot.role || (result?.slots[team] || []).find((s) => s.champion === slot.champion)?.role) || null;
   const localIndex = hints.findIndex((h) => h && h.local);
   const mySlot = localIndex >= 0 ? view.ally[localIndex] : null;
-  const myChampion = mySlot ? mySlot.champion : localIndex >= 0 ? hints[localIndex].intent || null : null;
-  const myRole = roleOf('ally', mySlot);
-  const enemies = view.enemy.filter(Boolean).map((slot) => ({ slot, role: roleOf('enemy', slot) }));
-  const label = (key) => data.championByKey.get(key)?.name || `Champion ${key}`;
-  const icon = (key, size = 26) => {
-    const c = data.championByKey.get(key);
-    return c ? html`<${Img} src=${c.icon} size=${size} cls="round" tip=${c.name} />` : html`<span>${label(key)}</span>`;
-  };
-  const ownTotal = myChampion ? matchups.own[myChampion] : null;
-  return html`<${Card} cls="draft-own-card" title="Deine Bilanz"
-    aside=${html`<span class="muted" data-tip=${`Aus den gespeicherten Matches deiner eigenen Konten (Summoner-Tab), alle zusammengezählt: ${accounts.map((a) => a.riotId).join(', ')}. Gezählt werden Spiele auf Summoner's Rift gegen den direkten Lane-Gegner, ohne Remakes. Neue Spiele kommen mit der nächsten Abfrage im Summoner-Tab dazu.`}>
-      ${accountLabel} · ${matchups.games} Spiele mit Lane-Gegner</span>`}>
-    ${myChampion ? html`<p class="own-line">${icon(myChampion, 22)} <span>Du mit <strong>${label(myChampion)}</strong>${myRole ? ` (${roleLabel(myRole)})` : ''}:</span>
-      ${ownTotal ? html`<${OwnRecord} games=${ownTotal.games} wins=${ownTotal.wins} />` : html`<span class="muted">noch keine Spiele</span>`}</p>` : null}
-    ${enemies.length === 0 ? html`<p class="muted small">Sobald Gegner gewählt sind, steht hier deine Bilanz gegen jeden von ihnen.</p>` : html`<table class="data compact">
-      <thead><tr><th>Gegner</th><th>Deine Bilanz dagegen</th>${myChampion ? html`<th>mit ${label(myChampion)}</th>` : null}<th>Deine Champions dagegen</th></tr></thead>
-      <tbody>${enemies.map(({ slot, role }) => {
-        const vs = matchups.vs[slot.champion];
-        const lane = myRole && role === myRole;
-        const mine = vs && myChampion ? vs.champions.find((c) => c.key === myChampion) : null;
-        return html`<tr key=${slot.champion} class=${lane ? 'own-lane' : ''}>
-          <td><span class="own-enemy">${icon(slot.champion)}<span>${label(slot.champion)}${role ? html`<small class="muted"> ${roleLabel(role)}</small>` : null}${lane ? html` <${Tag}>Lane<//>` : null}</span></span></td>
-          <td><${OwnRecord} games=${vs ? vs.games : 0} wins=${vs ? vs.wins : 0} /></td>
-          ${myChampion ? html`<td>${mine ? html`<${OwnRecord} games=${mine.games} wins=${mine.wins} />` : html`<span class="muted">–</span>`}</td>` : null}
-          <td><span class="own-champs">${vs ? vs.champions.slice(0, OWN_TOP_CHAMPIONS).map((c) => html`<span key=${c.key} class="own-champ"
-            data-tip=${`${label(c.key)} gegen ${label(slot.champion)}: ${record(c.games, c.wins)}, KDA ${c.deaths ? ((c.kills + c.assists) / c.deaths).toFixed(2) : 'Perfekt'}`}>
-            ${icon(c.key, 20)}<small class=${c.wins / c.games >= 0.52 ? 'good' : c.wins / c.games < 0.48 ? 'bad' : ''}>${c.wins}:${c.games - c.wins}</small></span>`) : html`<span class="muted">–</span>`}</span></td>
-        </tr>`;
-      })}</tbody>
-    </table>`}
-  <//>`;
+  const role = roleOf('ally', mySlot) || (view.side === 'ally' && view.role) || null;
+  const enemyByRole = new Map();
+  view.enemy.forEach((slot) => {
+    const r = roleOf('enemy', slot);
+    if (r) {
+      enemyByRole.set(r, slot.champion);
+    }
+  });
+  return { role, enemyByRole, vs: own.matchups.vs, accounts: own.accounts.map((a) => a.riotId).join(', ') };
+}
+
+/**
+ * Eigene Bilanz mit `champion` gegen den Gegner auf `role`, oder null ohne Gegner dort. Ist die eigene Rolle bekannt,
+ * zählt nur sie.
+ */
+function ownLaneMatch(ownLane, champion, role) {
+  if (!ownLane || (ownLane.role && role !== ownLane.role)) {
+    return null;
+  }
+  const enemy = ownLane.enemyByRole.get(role);
+  if (!enemy) {
+    return null;
+  }
+  const vs = ownLane.vs[enemy];
+  return { enemy, mine: vs ? vs.champions.find((c) => c.key === champion) || null : null };
+}
+
+/** Kurze Bilanz eines Vorschlags gegen seinen Lane-Gegner („Du 4:1“); `empty` steht ohne eigene Spiele. */
+function OwnPickRecord({ match, champion, data, empty = null }) {
+  if (!match) {
+    return empty;
+  }
+  const name = (key) => data.championByKey.get(key)?.name || `Champion ${key}`;
+  const { mine, enemy } = match;
+  if (!mine) {
+    return empty && html`<span class="muted" data-tip=${`Noch keine eigenen Spiele mit ${name(champion)} gegen ${name(enemy)}`}>${empty}</span>`;
+  }
+  const kda = mine.deaths ? ((mine.kills + mine.assists) / mine.deaths).toFixed(2) : 'Perfekt';
+  return html`<span class="own-record" data-tip=${`Deine Bilanz mit ${name(champion)} gegen ${name(enemy)}: ${record(mine.games, mine.wins)} (${percent(mine.wins / mine.games, 0)}), KDA ${kda}. ${OWN_SOURCE}`}>
+    Du <b class=${ownTone(mine.games, mine.wins)}>${mine.wins}:${mine.games - mine.wins}</b></span>`;
+}
+
+/** Gesamtbilanz gegen den eigenen Lane-Gegner am Platz des Gegners, im Tooltip die häufigsten eigenen Champions dagegen. */
+function OwnLaneRecord({ ownLane, champion, data }) {
+  const name = (key) => data.championByKey.get(key)?.name || `Champion ${key}`;
+  const vs = ownLane.vs[champion];
+  if (!vs || !vs.games) {
+    return html`<span class="own-record muted" data-tip=${`Noch keine eigenen Spiele gegen ${name(champion)} als Lane-Gegner (Konten: ${ownLane.accounts})`}>Deine Bilanz –</span>`;
+  }
+  const top = vs.champions.slice(0, OWN_TOP_CHAMPIONS).map((c) => `${name(c.key)} ${c.wins}:${c.games - c.wins}`).join(', ');
+  return html`<span class="own-record" data-tip=${`Deine Bilanz gegen ${name(champion)} als Lane-Gegner: ${record(vs.games, vs.wins)} (${percent(vs.wins / vs.games, 0)})${top ? `. Deine häufigsten Champions dagegen: ${top}` : ''}. Konten: ${ownLane.accounts}. ${OWN_SOURCE}`}>
+    Deine Bilanz <b class=${ownTone(vs.games, vs.wins)}>${vs.wins}:${vs.games - vs.wins}</b></span>`;
 }
 
 function Section({ title, storeKey, defaultOpen = false, children }) {
