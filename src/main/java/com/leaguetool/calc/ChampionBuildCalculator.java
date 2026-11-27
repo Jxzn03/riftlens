@@ -36,7 +36,7 @@ public final class ChampionBuildCalculator {
     /** Größte Angriffsreichweite eines Nahkämpfers. */
     private static final double MELEE_MAX_RANGE = 325;
     /** Bonus-AD je Punkt adaptiver Kraft; als AP zählt ein Punkt voll. */
-    private static final double ADAPTIVE_TO_AD = 0.6;
+    static final double ADAPTIVE_TO_AD = 0.6;
 
     private ChampionBuildCalculator() {
     }

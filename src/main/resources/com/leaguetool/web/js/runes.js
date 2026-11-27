@@ -1,7 +1,7 @@
 // Ansicht "Runen": Runenseite für den Build-Rechner, Bäume mit Keystones und Reihen, Suche über alle Runen, Shards.
 import { html, useMemo } from '/vendor/htm-preact.js';
 import {
-  useStore, useViewState, select, go, normalize, setRunePage, runePageRunes, EMPTY_RUNE_PAGE, store, useBuildItems, gamePatch,
+  useStore, useViewState, select, go, normalize, setRunePage, runePageRunes, EMPTY_RUNE_PAGE, store, useBuildItems, gamePatch, useFetch, JACK_RUNE, jackText,
 } from './core.js';
 import { Img, Card, SearchInput, DataGrid, MasterDetail, Empty, Tag, Button, Slider, Switch, Icon } from './ui.js';
 
@@ -190,6 +190,7 @@ function RuneEffectsCard({ data, page, build }) {
   const shards = page.shards.map((id, i) => (id === null ? null : { id, row: i })).filter(Boolean);
   const setStacks = (id, value) => setRunePage({ stacks: { ...store.get().runePage.stacks, [id]: value } });
   const complete = shards.length === 3;
+  const totals = useFetch(build.length ? `/api/build?items=${build.join(',')}` : null, { keep: true }).data;
 
   return html`<${Card} title="Verrechnete Werte" aside=${html`<${Button} icon="arrow" kind="ghost"
       onClick=${() => go('champions')}>Werte mit Build ansehen<//>`}>
@@ -204,9 +205,12 @@ function RuneEffectsCard({ data, page, build }) {
             <strong>${r.name}</strong>
             <small class="muted">${effect ? effect.summary : 'keine dauerhaften Werte, nicht verrechnet'}</small>
           </div>
-          ${effect && effect.kind === 'stacks' ? html`<div class="rune-effect-control">
+          ${r.id === JACK_RUNE ? html`<div class="rune-effect-control">
+            <span class="control-label">Aus den Items: <strong>${jackText(build.length ? totals : null)}</strong></span>
+          </div>` : null}
+          ${effect && effect.kind === 'stacks' && r.id !== JACK_RUNE ? html`<div class="rune-effect-control">
             <span class="control-label">${effect.stackLabel}: <strong>${stacks}</strong> / ${effect.maxStacks}</span>
-            <${Slider} label=${`${r.name} Stapel`} value=${stacks} min=${0} max=${effect.maxStacks} onInput=${(v) => setStacks(r.id, v)} />
+            <${Slider} label=${`${r.name} Stacks`} value=${stacks} min=${0} max=${effect.maxStacks} onInput=${(v) => setStacks(r.id, v)} />
           </div>` : null}
           ${effect && effect.kind === 'toggle' ? html`<div class="rune-effect-control">
             <${Switch} checked=${stacks > 0} onChange=${(on) => setStacks(r.id, on ? 1 : 0)}>${effect.stackLabel}<//>

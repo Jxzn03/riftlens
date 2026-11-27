@@ -7,7 +7,9 @@ import com.leaguetool.calc.BuildCalculator;
 import com.leaguetool.calc.BuildTotals;
 import com.leaguetool.calc.ChampionBuildCalculator;
 import com.leaguetool.calc.FinalStats;
+import com.leaguetool.calc.JackStacks;
 import com.leaguetool.calc.RuneEffects;
+import com.leaguetool.calc.StatType;
 import com.leaguetool.calc.StatBlock;
 import com.leaguetool.calc.StatCalculator;
 import com.leaguetool.config.AppSettings;
@@ -98,7 +100,7 @@ final class ApiRoutes {
             case "POST settings" -> saveSettings(body);
             case "GET ui-state" -> readUiState();
             case "PUT ui-state" -> writeUiState(body);
-            case "GET build" -> Dto.buildTotals(BuildCalculator.totals(items(params)));
+            case "GET build" -> buildTotals(items(params));
             case "POST verify" -> verify();
             case "GET summoner", "POST summoner" -> summoner(method, path, params, body);
             case "GET stats" -> stats(path, params);
@@ -295,9 +297,17 @@ final class ApiRoutes {
                 abilityIcons(data, lines));
     }
 
+    private static Object buildTotals(List<Item> build) {
+        int stacks = JackStacks.count(build);
+        // Bonus mit den aktuell gültigen Runenwerten, vom Level unabhängig.
+        double adaptive = RuneEffects.stats(List.of(JackStacks.RUNE_ID), List.of(), Map.of(JackStacks.RUNE_ID, stacks), 1)
+                .get(StatType.ADAPTIVE_FORCE);
+        return Dto.buildTotals(BuildCalculator.totals(build), stacks, adaptive);
+    }
+
     private Object levels(Champion champion, Map<String, String> params) {
         BuildTotals totals = BuildCalculator.totals(items(params));
-        RunePage runes = runePage(params);
+        RunePage runes = runePage(params, items(params));
         double asRatio = doubleParam(params, "asRatio", champion.stats().attackSpeed());
         AdaptiveType adaptiveType = adaptiveType(champion);
         List<List<Map<String, Object>>> finals = new ArrayList<>();
@@ -330,7 +340,7 @@ final class ApiRoutes {
     private Object insights(Champion champion, Map<String, String> params) throws IOException {
         Optional<WikiClient> wiki = ctx.wiki();
         List<Item> build = items(params);
-        RunePage runes = runePage(params);
+        RunePage runes = runePage(params, build);
         int level = StatCalculator.clampLevel((int) doubleParam(params, "level", 11));
         StatBlock bonus = BuildCalculator.totals(build).stats().plus(runes.at(level));
         List<WikiAbility> abilities = wiki.isEmpty() ? List.of() : wiki.get().abilities(champion.id());
@@ -348,7 +358,7 @@ final class ApiRoutes {
                 "staticCooldowns", Dto.staticCooldownSlots(abilities));
     }
 
-    /** Runenseite des Build-Rechners: {@code runes=8010,9111}, {@code shards=5008,5008,5001}, {@code stacks=9105:10}. */
+    /** Runenseite des Build-Rechners: {@code runes=8010,9111}, {@code shards=5008,5008,5001}, {@code stacks=9105:10}; Jack of All Trades zählt aus den Items. */
     private record RunePage(List<Integer> runes, List<Integer> shards, Map<Integer, Integer> stacks) {
 
         StatBlock at(int level) {
@@ -363,20 +373,23 @@ final class ApiRoutes {
     private static final int MAX_RUNES = 6;
     private static final int MAX_SHARDS = 3;
 
-    private static RunePage runePage(Map<String, String> params) {
+    private static RunePage runePage(Map<String, String> params, List<Item> build) {
         List<Integer> runes = ints(params.get("runes"), "Runen-ID").stream().distinct().limit(MAX_RUNES).toList();
         List<Integer> shards = ints(params.get("shards"), "Shard-ID").stream().limit(MAX_SHARDS).toList();
         Map<Integer, Integer> stacks = new HashMap<>();
         String raw = params.getOrDefault("stacks", "");
         for (String part : raw.isBlank() ? new String[0] : raw.split(",")) {
             String[] kv = part.split(":");
-            List<Integer> pair = kv.length == 2 ? ints(kv[0] + "," + kv[1], "Stapel") : List.of();
+            List<Integer> pair = kv.length == 2 ? ints(kv[0] + "," + kv[1], "Stacks") : List.of();
             if (pair.size() != 2) {
-                throw new ApiException(400, "Ungültige Stapel-Angabe: " + part);
+                throw new ApiException(400, "Ungültige Stack-Angabe: " + part);
             }
             if (runes.contains(pair.get(0))) {
                 stacks.put(pair.get(0), pair.get(1));
             }
+        }
+        if (runes.contains(JackStacks.RUNE_ID)) {
+            stacks.put(JackStacks.RUNE_ID, JackStacks.count(build));
         }
         return new RunePage(runes, shards, stacks);
     }

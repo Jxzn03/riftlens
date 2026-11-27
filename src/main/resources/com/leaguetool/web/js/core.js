@@ -820,6 +820,14 @@ export function importRunePage(lines, champion) {
   toast(champion ? `Runenseite und ${champion.name} in den Build-Rechner übernommen` : 'Runenseite in den Build-Rechner übernommen');
 }
 
+/** Rune, deren Stapel das Backend aus den Items zählt (calc.JackStacks). */
+export const JACK_RUNE = 8316;
+/** 1 Punkt adaptive Kraft = 0,6 AD oder 1 AP (wie calc.ChampionBuildCalculator); AD wird ganzzahlig angezeigt. */
+const ADAPTIVE_TO_AD = 0.6;
+
+/** „5 Stacks (+5 AD | 8 AP)“ aus der Antwort von {@code /api/build}; ohne Bonus nur die Stacks. */
+export const jackText = (totals) => (totals ? `${totals.jackStacks} Stacks${totals.jackAdaptive > 0 ? ` (+${Math.round(totals.jackAdaptive * ADAPTIVE_TO_AD)} AD | ${totals.jackAdaptive} AP)` : ''}` : '0 Stacks');
+
 /** Abfrage für Build-Endpunkte: Items plus Runenseite ({@code runes}, {@code shards}, {@code stacks}). */
 export function buildQuery(build, page) {
   const runes = runePageRunes(page);

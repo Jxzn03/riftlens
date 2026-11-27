@@ -105,7 +105,7 @@ class RuneEffectUpdaterTest {
         changed.put(9105, "Gain 2 basic ability haste for every Legend stack (max 10 stacks).");
 
         UpdateReport first = new RuneEffectUpdater(cache).update(data("16.23.1", changed), null, true);
-        assertEquals(List.of("Legend: Haste: +1.5 Fähigkeitstempo für Grundfähigkeiten je Stapel → +2 Fähigkeitstempo für Grundfähigkeiten je Stapel"),
+        assertEquals(List.of("Legend: Haste: +1.5 Fähigkeitstempo für Grundfähigkeiten je Stack → +2 Fähigkeitstempo für Grundfähigkeiten je Stack"),
                 first.changes());
         assertEquals(20, RuneEffects.stats(List.of(9105), List.of(), Map.of(9105, 10), 11).get(StatType.BASIC_ABILITY_HASTE), 1e-9);
 

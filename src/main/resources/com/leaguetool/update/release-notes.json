@@ -1,5 +1,33 @@
 [
   {
+    "version": "2.4.2",
+    "date": "2026-11-27",
+    "title": "Items: Baupfad und Jack of All Trades",
+    "sections": [
+      {
+        "kind": "new",
+        "items": [
+          "Items: Icons aus „Baut aus“ lassen sich in den Build-Rechner ziehen",
+          "Items: Der Build-Rechner zeigt die Stacks von Jack of All Trades samt Bonus, gezählt aus den Items"
+        ]
+      },
+      {
+        "kind": "improved",
+        "items": [
+          "Items: Tooltips im Baupfad nennen Name und Stats der Komponente, das betrachtete Item hat keinen mehr",
+          "Runen: Beschreibungen von Jack of All Trades und Triple Tonic um die genauen Werte ergänzt",
+          "Runen: „Stacks“ statt „Stapel“"
+        ]
+      },
+      {
+        "kind": "fixed",
+        "items": [
+          "Items: Senkrechter Scrollbalken ohne Funktion neben „Baut aus“ entfernt"
+        ]
+      }
+    ]
+  },
+  {
     "version": "2.4.1",
     "date": "2026-11-26",
     "title": "Draft: Eigene Bilanz direkt an den Picks",

@@ -106,30 +106,30 @@ public final class RuneEffects {
                     fixed(TENACITY, 0), fixed(SLOW_RESIST, 0)),
 
             // ---- Precision
-            new Definition(9104, "Legend: Alacrity", Kind.STACKS, "Legend-Stapel", new double[] {3, 1.5, 10},
+            new Definition(9104, "Legend: Alacrity", Kind.STACKS, "Legend-Stacks", new double[] {3, 1.5, 10},
                     source("Gain " + N + "% attack speed plus an additional " + N + "% for every Legend stack \\(max " + N + " stacks\\)"),
-                    p -> (int) p[2], p -> "+" + n(p[0]) + " % Angriffstempo, +" + n(p[1]) + " % je Stapel",
+                    p -> (int) p[2], p -> "+" + n(p[0]) + " % Angriffstempo, +" + n(p[1]) + " % je Stack",
                     List.of(new Effect(ATTACK_SPEED, (level, s, p) -> p[0] + p[1] * s))),
-            new Definition(9105, "Legend: Haste", Kind.STACKS, "Legend-Stapel", new double[] {1.5, 10},
+            new Definition(9105, "Legend: Haste", Kind.STACKS, "Legend-Stacks", new double[] {1.5, 10},
                     source("Gain " + N + " basic ability haste for every Legend stack \\(max " + N + " stacks\\)"),
-                    p -> (int) p[1], p -> "+" + n(p[0]) + " Fähigkeitstempo für Grundfähigkeiten je Stapel",
+                    p -> (int) p[1], p -> "+" + n(p[0]) + " Fähigkeitstempo für Grundfähigkeiten je Stack",
                     List.of(new Effect(BASIC_ABILITY_HASTE, (level, s, p) -> p[0] * s))),
-            new Definition(9103, "Legend: Bloodline", Kind.STACKS, "Legend-Stapel", new double[] {0.45, 15, 85},
+            new Definition(9103, "Legend: Bloodline", Kind.STACKS, "Legend-Stacks", new double[] {0.45, 15, 85},
                     source("Gain " + N + "% Life Steal for every Legend stack \\(max " + N + " stacks\\)\\. At maximum Legend stacks, gain " + N + " max health"),
-                    p -> (int) p[1], p -> "+" + n(p[0]) + " % Lebensraub je Stapel, bei " + n(p[1]) + " Stapeln +" + n(p[2]) + " Leben",
+                    p -> (int) p[1], p -> "+" + n(p[0]) + " % Lebensraub je Stack, bei " + n(p[1]) + " Stacks +" + n(p[2]) + " Leben",
                     List.of(new Effect(LIFE_STEAL, (level, s, p) -> p[0] * s),
                             new Effect(RUNE_HEALTH, (level, s, p) -> s >= p[1] ? p[2] : 0))),
 
             // ---- Domination
-            new Definition(8106, "Ultimate Hunter", Kind.STACKS, "Bounty-Hunter-Stapel (je Gegner einmal)", new double[] {6, 5},
+            new Definition(8106, "Ultimate Hunter", Kind.STACKS, "Bounty-Hunter-Stacks (je Gegner einmal)", new double[] {6, 5},
                     source("Your ultimate gains " + N + " Ability Haste, plus an additional " + N + " Ability Haste per Bounty Hunter stack"),
-                    p -> 5, p -> "+" + n(p[0]) + " Fähigkeitstempo für die Ultimate, +" + n(p[1]) + " je Stapel",
+                    p -> 5, p -> "+" + n(p[0]) + " Fähigkeitstempo für die Ultimate, +" + n(p[1]) + " je Stack",
                     List.of(new Effect(ULTIMATE_HASTE, (level, s, p) -> p[0] + p[1] * s))),
 
             // ---- Sorcery
             new Definition(8226, "Manaflow Band", Kind.STACKS, "Treffer mit Mana-Bonus", new double[] {25, 250},
                     source("permanently increases your maximum mana by " + N + ", up to " + N + " mana"),
-                    p -> (int) Math.round(p[1] / p[0]), p -> "+" + n(p[0]) + " Mana je Stapel, höchstens " + n(p[1]),
+                    p -> (int) Math.round(p[1] / p[0]), p -> "+" + n(p[0]) + " Mana je Stack, höchstens " + n(p[1]),
                     List.of(new Effect(MANA, (level, s, p) -> p[0] * s))),
             new Definition(8210, "Transcendence", Kind.ALWAYS, "", new double[] {5, 5, 8, 5},
                     source("Level " + N + ": \\+" + N + " Ability Haste.*?Level " + N + ": \\+" + N + " Ability Haste"),
@@ -160,7 +160,7 @@ public final class RuneEffects {
                     p -> 1, p -> "nach " + n(p[0]) + " Minuten +" + n(p[1]) + " Rüstung und +" + n(p[2]) + " Magieresistenz, danach +" + n(p[3]) + " %",
                     List.of(new Effect(ARMOR, (level, s, p) -> p[1]), new Effect(MAGIC_RESIST, (level, s, p) -> p[2]),
                             new Effect(RESIST_PERCENT, (level, s, p) -> p[3]))),
-            new Definition(8451, "Overgrowth", Kind.STACKS, "Stapel je Vasallen/Monster-Paket", new double[] {3, 8, 120, 3.5},
+            new Definition(8451, "Overgrowth", Kind.STACKS, "Stacks je Vasallen/Monster-Paket", new double[] {3, 8, 120, 3.5},
                     source("gaining " + N + " maximum health for every " + N + "\\..*?absorbed " + N + " monsters or enemy minions, gain an additional " + N + "% maximum health"),
                     p -> (int) Math.round(p[2] / p[1]), p -> "+" + n(p[0]) + " Leben je " + n(p[1]) + " Vasallen/Monster, bei " + n(p[2]) + " +" + n(p[3]) + " % Leben",
                     List.of(new Effect(RUNE_HEALTH, (level, s, p) -> p[0] * s),
@@ -175,9 +175,9 @@ public final class RuneEffects {
                     source("\\+" + N + " Summoner Spell Haste"),
                     p -> 0, p -> "+" + n(p[0]) + " Beschwörerzauber-Tempo (Item Haste nicht verrechnet)",
                     List.of(new Effect(SUMMONER_SPELL_HASTE, (level, s, p) -> p[0]))),
-            new Definition(8316, "Jack Of All Trades", Kind.STACKS, "verschiedene Werte aus Items", new double[] {1, 8, 20, 5, 10},
+            new Definition(JackStacks.RUNE_ID, "Jack Of All Trades", Kind.STACKS, "verschiedene Werte aus Items", new double[] {1, 8, 20, 5, 10},
                     source("Each stack grants you " + N + " Ability Haste.*?Gain " + N + " or " + N + " bonus Adaptive Force at " + N + " and " + N + " stacks"),
-                    p -> 15, p -> "+" + n(p[0]) + " Fähigkeitstempo je Stapel, +" + n(p[1]) + " / +" + n(p[2]) + " adaptive Kraft ab " + n(p[3]) + " / " + n(p[4]) + " Stapeln",
+                    p -> 15, RuneEffects::jackSummary,
                     List.of(new Effect(ABILITY_HASTE, (level, s, p) -> p[0] * s),
                             new Effect(ADAPTIVE_FORCE, (level, s, p) -> s >= p[4] ? p[2] : s >= p[3] ? p[1] : 0))));
 
@@ -292,6 +292,19 @@ public final class RuneEffects {
     static double byLevel(double from, double to, int level) {
         int lvl = StatCalculator.clampLevel(level);
         return from + (to - from) * (lvl - 1) / (MAX_LEVEL - 1);
+    }
+
+    /** Jack of All Trades wie im Wiki: Herkunft der Stacks und die Boni auch als AD bzw. AP. */
+    private static String jackSummary(double[] p) {
+        return "1 Stack je verschiedener Werteart aus Items, je Stack +" + n(p[0]) + " Fähigkeitstempo. Ab " + n(p[3])
+                + " Stacks " + adaptive(p[1]) + "; ab " + n(p[4]) + " Stacks zusätzlich " + adaptive(p[2] - p[1])
+                + ", zusammen " + adaptive(p[2]) + " (adaptiv)";
+    }
+
+    private static String adaptive(double force) {
+        // Auf eine Nachkommastelle, sonst Gleitkomma-Reste wie 7.199999
+        double ad = Math.round(force * ChampionBuildCalculator.ADAPTIVE_TO_AD * 10) / 10.0;
+        return "+" + n(ad) + " AD oder +" + n(force) + " AP";
     }
 
     private static String n(double v) {

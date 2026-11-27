@@ -216,12 +216,23 @@ final class Dto {
                 "slots", t.slots().stream().map(row -> row.stream().map(Dto::rune).toList()).toList());
     }
 
+    /** Data Dragon nennt bei Triple Tonic nur die Namen der Elixiere; Wirkung laut Wiki (Stand Patch 16.23). */
+    private static final Map<Integer, String> RUNE_EXTRA_TEXT = Map.of(8313, """
+            Elixir of Avarice: 60 Sekunden lang 5 absoluter Bonusschaden je Treffer gegen Vasallen, beim Auslaufen 60 Gold.
+            Elixir of Force: 60 Sekunden lang +15 AD oder +25 AP (adaptiv).
+            Elixir of Skill: 1 Fähigkeitspunkt.""");
+
     private static Map<String, Object> rune(Rune r) {
         String longText = Text.htmlToPlain(r.longDesc());
         String shortText = Text.htmlToPlain(r.shortDesc());
         return obj("id", r.id(), "key", r.key(), "name", r.name(), "short", shortText,
-                "text", longText.isBlank() ? shortText : longText, "icon", runeIcon(r.icon()),
+                "text", withExtraText(r.id(), longText.isBlank() ? shortText : longText), "icon", runeIcon(r.icon()),
                 "treeId", r.treeId(), "slot", r.slot());
+    }
+
+    private static String withExtraText(int runeId, String text) {
+        String extra = RUNE_EXTRA_TEXT.get(runeId);
+        return extra == null ? text : text.strip() + "\n\n" + extra;
     }
 
     private static Map<String, Object> spell(SummonerSpell s, String patch) {
@@ -528,9 +539,10 @@ final class Dto {
         return obj("label", label, "total", total, "bonus", bonus);
     }
 
-    static Map<String, Object> buildTotals(BuildTotals totals) {
+    static Map<String, Object> buildTotals(BuildTotals totals, int jackStacks, double jackAdaptive) {
         return obj("itemCount", totals.itemCount(), "gold", totals.totalGold(),
-                "stats", statRows(totals.stats()), "unparsed", totals.unparsed());
+                "stats", statRows(totals.stats()), "unparsed", totals.unparsed(),
+                "jackStacks", jackStacks, "jackAdaptive", jackAdaptive);
     }
 
     // ------------------------------------------------------------------ Wiki-Fähigkeiten und Schadensvorschau

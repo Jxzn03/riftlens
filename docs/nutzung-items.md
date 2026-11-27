@@ -45,10 +45,14 @@ einer Runenseite im Champions-Tab übernimmt auch den Champion, „Champion entf
 beide Knöpfe und die Auswahl „Kein Champion“ stellen die Rolle auf Top. Mit Champion lassen sich
 Support-Items nur in der Rolle Support hinzufügen, bei einer anderen Rolle werden sie entfernt.
 
+Ist die Rune **Jack of All Trades** gewählt, nennt der Build-Rechner die aktuellen Stacks (ab 5 bzw. 10 mit dem Bonus, z. B. „5 Stacks (+5 AD | 8 AP)“, AD gerundet): einer je verschiedener
+Werteart aus den Items (laut Wiki). Die Rechnung nutzt dieselbe Zahl, ein Regler auf der Runenseite entfällt.
+
 ## Baupfad, Goldwert und Goldeffizienz
 
-Im Detail eines Items zeigt „Baut aus“ den Baupfad wie im Spiel als Baum von oben nach unten bis zu den Basis-Items, je Item mit Gesamtpreis (Name und
-Kombinationskosten im Tooltip, Klick auf eine Komponente öffnet sie). Darunter stehen der Goldwert der Stats und die Goldeffizienz
+Im Detail eines Items zeigt „Baut aus“ den Baupfad wie im Spiel als Baum von oben nach unten bis zu den Basis-Items, je Item mit Gesamtpreis. Der Tooltip
+einer Komponente nennt den Namen und in Klammern die Stats in Kurzform (mit „Show Advanced Tooltips“ auch Preis und Kombinationskosten), ein Klick öffnet
+sie; das betrachtete Item oben hat keinen Tooltip. Darunter stehen der Goldwert der Stats und die Goldeffizienz
 (Goldwert ÷ Preis, Passiven nicht eingerechnet). Der Goldwert je Stat-Einheit wird wie im League-Wiki aus den
 Komponenten abgeleitet: aus dem billigsten Basis-Item mit nur diesem Stat (z. B. Long Sword für Angriffsschaden),
 sonst per Abzug aus dem billigsten gebauten Item, bei dem nur dieser Stat fehlt; mit „Show Advanced Tooltips“ nennt ein Tooltip die Quelle. Stats
@@ -58,7 +62,7 @@ Immer aktive Passiven, die sich in Stats umrechnen lassen, zählen zusätzlich a
 Annahme, dass man nur dieses Item besitzt, wie das Wiki bei Rabadon's Deathcap (130 AP × 30 % = +39 AP, 96,57 %).
 Bezug sind die Stats des Items selbst (z. B. Warmog's: Leben des Items, Awe: Mana des Items, Endless Hunger: Wert für
 Nahkämpfer). Die Spalten „Goldwert“ und „Effizienz“ der Liste enthalten diese Passiven. Passiven mit Bedingungen,
-Stapeln, Champion-Bezug (Sterak's, Swiftmarch) oder Haste nur für einzelne Fähigkeiten bleiben unbewertet.
+Stacks, Champion-Bezug (Sterak's, Swiftmarch) oder Haste nur für einzelne Fähigkeiten bleiben unbewertet.
 
 Unter „Werte und Beschreibung“ steht bei jeder Passive und Aktive die Abklingzeit laut League-Wiki (Feld `cd` von
 `Module:ItemData` oder „… second cooldown“ im Wiki-Text), z. B. Spellblade 1,5 s. Ohne Wiki-Zugriff fehlt sie.

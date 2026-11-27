@@ -642,6 +642,7 @@ table.data.compact td { padding: 3px 10px 3px 0; font-size: 12.5px; }
 .rune-effect-text { flex: 1; min-width: 200px; display: flex; flex-direction: column; }
 .rune-effect-control { min-width: 220px; display: flex; flex-direction: column; gap: 2px; }
 .shard-dot { width: 32px; height: 32px; display: grid; place-items: center; border-radius: 50%; background: var(--accent-soft); color: var(--accent); font-weight: 700; flex: none; }
+.build-jack { display: flex; align-items: center; gap: 6px; margin: 8px 0 0; color: var(--text-2); }
 .build-runes { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
 .rune-btn .img, .tree-btn .img, .rune-effect .img, .rune-detail .img { background: transparent; }
 
@@ -1269,7 +1270,8 @@ button.tag.fearless:hover, button.tag.fearless:focus-visible { background: color
 .tag.fearless .tag-fixed { flex: none; white-space: nowrap; }
 
 /* Baupfad als Baum (Items-Detail „Baut aus“) mit Goldwert und Goldeffizienz */
-.recipe-tree { overflow-x: auto; padding: 0; }
+/* Nur seitlich scrollen: overflow-x allein macht auch senkrecht „auto“ (Leiste ohne Funktion bei Rundungsresten). */
+.recipe-tree { overflow-x: auto; overflow-y: hidden; flex-shrink: 0; padding: 0 0 2px; }
 .recipe-tree ul { display: flex; justify-content: center; margin: 0; padding: 12px 0 0; position: relative; list-style: none; }
 .recipe-tree > ul { padding-top: 0; }
 .recipe-tree li { position: relative; padding: 12px 6px 0; text-align: center; }

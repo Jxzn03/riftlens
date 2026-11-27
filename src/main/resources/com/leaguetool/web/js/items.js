@@ -2,7 +2,7 @@
 import { html, useMemo, useEffect, useState, useRef } from '/vendor/htm-preact.js';
 import {
   useStore, useViewState, useFetch, select, go, normalize, sortRows, addToBuild, removeFromBuild, moveInBuild, store,
-  MAX_BUILD, runePageRunes, useBuildItems, canAddToBuild, setBuildMode, isBoots, isJunglePet, isSupportItem, supportLocked, upgradedBootsLocked, api, useStatsUrl, useChampionRole,
+  MAX_BUILD, runePageRunes, useBuildItems, canAddToBuild, setBuildMode, isBoots, isJunglePet, isSupportItem, supportLocked, upgradedBootsLocked, api, JACK_RUNE, jackText, useStatsUrl, useChampionRole,
   applyBuildRole, BUILD_ROLES, modeForRole, roleForMode,
 } from './core.js';
 import {
@@ -134,25 +134,26 @@ export function ItemsView({ id }) {
 
   const item = itemId !== null ? data.itemById.get(itemId) : null;
 
-  // Ziehen im Build-Rechner: from = Platz des gezogenen Items oder 'list' (aus der Liste, dazu id), over = Ziel
+  // Ziehen im Build-Rechner: from = Platz des gezogenen Items oder 'list' (aus Liste oder „Baut aus“, dazu id), over = Ziel
   // (Platznummer, 'boots' oder 'table'). Ablegen auf der Liste entfernt nur Items aus dem Build.
   const [drag, setDrag] = useState(null);
   const fromBuild = Boolean(drag) && drag.from !== 'list';
-  // Zeilen der Liste lassen sich in den Build ziehen; passt das Item nicht (mehr) hinein, startet kein Ziehen.
+  // Zeilen der Liste und Icons in „Baut aus“ lassen sich in den Build ziehen; passt das Item nicht, startet kein Ziehen.
   // Kostet kaum etwas: nur die sichtbaren Zeilen sind im DOM, geprüft wird erst beim Start des Ziehens.
-  const listDragProps = (r) => ({
+  const itemDragProps = (dragged) => ({
     draggable: 'true',
     onDragStart: (e) => {
-      if (!canAddToBuild(store.get(), r.item)) {
+      if (!canAddToBuild(store.get(), dragged)) {
         e.preventDefault();
         return;
       }
       e.dataTransfer.effectAllowed = 'copy';
-      e.dataTransfer.setData('text/plain', String(r.item.id));
-      setDrag({ from: 'list', id: r.item.id, over: null });
+      e.dataTransfer.setData('text/plain', String(dragged.id));
+      setDrag({ from: 'list', id: dragged.id, over: null });
     },
     onDragEnd: () => setDrag(null),
   });
+  const listDragProps = (r) => itemDragProps(r.item);
   const overTable = (e) => {
     if (fromBuild) {
       e.preventDefault();
@@ -203,7 +204,7 @@ export function ItemsView({ id }) {
   </div>`;
 
   return html`<${MasterDetail} name="items" detailKey=${id} initial=${0.5} master=${master}
-    detail=${item ? html`<${ItemDetail} key=${item.id} item=${item} data=${data} />`
+    detail=${item ? html`<${ItemDetail} key=${item.id} item=${item} data=${data} dragProps=${itemDragProps} />`
       : html`<${Empty} title="Item auswählen">Wähle links ein Item für Werte, Beschreibung und Baupfad.<//>`} />`;
 }
 
@@ -404,6 +405,8 @@ function BuildPanel({ data, selected, drag, setDrag }) {
     </div>
     ${picker ? html`<${ItemPicker} data=${data} query=${picker.query} onClose=${() => setPicker(null)} />` : null}
     ${all.length === 0 ? html`<p class="muted small">Leer – Items über „+“, per Ziehen aus der Liste oder im Detail über „Zum Build hinzufügen“ ergänzen.${adc ? ' Als ADC kommen Boots auf den eigenen 7. Platz.' : ''}</p>` : null}
+    ${runes.includes(JACK_RUNE) ? html`<p class="build-jack small"><${Img} src=${(data.runeById.get(JACK_RUNE) || {}).icon} size=${20} />
+      Jack of All Trades: <strong>${jackText(all.length ? totals : null)}</strong></p>` : null}
     <div class="build-runes">
       ${runes.length ? html`<${RuneIcons} data=${data} ids=${runes} size=${26} />` : html`<span class="muted small">Keine Runenseite</span>`}
       <${Button} kind="ghost" onClick=${() => go('runes', 'page')}>${runes.length ? 'Runen bearbeiten' : 'Runen wählen'}<//>
@@ -573,24 +576,30 @@ const percentText = (ratio, digits = 1) => `${(ratio * 100).toLocaleString('de-D
 
 /**
  * Baupfad als Baum wie im Spiel: das Item oben, seine Komponenten nebeneinander darunter, verbunden durch Linien.
- * Unter jedem Icon der Gesamtpreis; Name und Kombinationskosten im Tooltip. Komponenten öffnen sich per Klick.
+ * Unter jedem Icon der Gesamtpreis. Komponenten öffnen sich per Klick und zeigen im Tooltip „Name (Stats in Kurzform)“
+ * (Preis und Kombinationskosten nur bei „Show Advanced Tooltips“); das betrachtete Item selbst hat keinen Tooltip.
+ * Alle Icons lassen sich in den Build-Rechner ziehen (`dragProps` aus {@link ItemsView}).
  */
-function RecipeNode({ item, data, root, depth = 0 }) {
+function RecipeNode({ item, data, root, dragProps, depth = 0 }) {
+  const advancedTips = useStore((s) => Boolean(s.prefs.advancedTips));
   const children = depth < 4 ? item.from.map((id) => data.itemById.get(id)).filter((i) => i && (!item.rift || i.rift)) : [];
-  const tip = `${item.name} – ${goldText(item.gold.total)} Gold${children.length ? ` (Kombination ${goldText(item.gold.base)})` : ''}`;
+  const details = ` – ${goldText(item.gold.total)} Gold${children.length ? ` (Kombination ${goldText(item.gold.base)})` : ''}`;
+  const stats = item.stats.map((s) => `${s.value} ${statName(data.statNames, s).short}`).join(', ');
+  const tip = root ? undefined : `${item.name}${stats ? ` (${stats})` : ''}${advancedTips ? details : ''}`;
   const icon = html`<${Img} src=${item.icon} size=${34} />`;
   const node = html`<li>
     <div class=${`recipe-item ${root ? 'root' : ''}`} data-tip=${tip}>
-      ${root ? icon : html`<button type="button" class="icon-link" aria-label=${item.name} onClick=${() => go('items', item.id)}>${icon}</button>`}
+      ${root ? html`<span ...${dragProps(item)}>${icon}</span>`
+        : html`<button type="button" class="icon-link" aria-label=${item.name} onClick=${() => go('items', item.id)} ...${dragProps(item)}>${icon}</button>`}
       <span class="gold">${goldText(item.gold.total)}</span>
     </div>
-    ${children.length ? html`<ul>${children.map((c, i) => html`<${RecipeNode} key=${`${c.id}-${i}`} item=${c} data=${data} depth=${depth + 1} />`)}</ul>` : null}
+    ${children.length ? html`<ul>${children.map((c, i) => html`<${RecipeNode} key=${`${c.id}-${i}`} item=${c} data=${data} dragProps=${dragProps} depth=${depth + 1} />`)}</ul>` : null}
   </li>`;
   return root ? html`<div class="recipe-tree"><ul>${node}</ul></div>` : node;
 }
 
 /** Block „Baut aus“: Baum, Goldwert der Stats und Goldeffizienz. */
-function RecipeCard({ item, data, from }) {
+function RecipeCard({ item, data, from, dragProps }) {
   // Herleitung des Goldwerts nur bei „Show Advanced Tooltips“ (Nutzerwunsch).
   const advancedTips = useStore((s) => Boolean(s.prefs.advancedTips));
   const value = useMemo(() => goldValueOf(data, item), [data, item]);
@@ -600,7 +609,7 @@ function RecipeCard({ item, data, from }) {
     return null;
   }
   return html`<${Card} title=${from.length ? 'Baut aus' : 'Goldwert'}>
-    ${from.length ? html`<${RecipeNode} item=${item} data=${data} root=${true} />` : null}
+    ${from.length ? html`<${RecipeNode} item=${item} data=${data} root=${true} dragProps=${dragProps} />` : null}
     ${rated.length ? html`<div class=${from.length ? 'cost-analysis' : 'cost-analysis no-tree'}>
       ${from.length ? html`<h4>Goldwert</h4>` : null}
       <ul>
@@ -622,7 +631,7 @@ function RecipeCard({ item, data, from }) {
         goldeffizient${unrated.length ? ' (ohne nicht bewertete Stats und Passiven)' : ' (ohne Passiven)'}.</p>
       ${value.passiveEfficiency !== null ? html`<p>Mit Passiven (nur dieses Item im Besitz):
         <strong class=${value.passiveEfficiency >= 1 ? 'good' : 'bad'}>${percentText(value.passiveEfficiency, 2)}.</strong></p>`
-        : passiveText(item) ? html`<p class="muted">Passiven mit Bedingungen, Stapeln oder Champion-Bezug sind nicht bewertbar.</p>` : null}
+        : passiveText(item) ? html`<p class="muted">Passiven mit Bedingungen, Stacks oder Champion-Bezug sind nicht bewertbar.</p>` : null}
     </div>` : null}
   <//>`;
 }
@@ -705,7 +714,7 @@ function PassiveBlocks({ item }) {
   })}</div>`;
 }
 
-function ItemDetail({ item, data }) {
+function ItemDetail({ item, data, dragProps }) {
   const canAdd = useStore((s) => canAddToBuild(s, item));
   const toBootsSlot = useStore((s) => s.buildMode === 'adc' && isBoots(item));
   const petLocked = useStore((s) => s.buildMode !== 'jungle' && isJunglePet(item));
@@ -733,7 +742,7 @@ function ItemDetail({ item, data }) {
       ${item.stats.length ? html`<${DataGrid} cls="compact" rows=${item.stats.map((s) => [s.label, html`<strong>${s.value}</strong>`])} />` : null}
       <${PassiveBlocks} item=${item} />
     <//>
-    <${RecipeCard} item=${item} data=${data} from=${from} />
+    <${RecipeCard} item=${item} data=${data} from=${from} dragProps=${dragProps} />
     ${into.length ? html`<${Card} title="Baut zu"><${ItemLinks} ids=${into} data=${data} /><//>` : null}
   </div>`;
 }

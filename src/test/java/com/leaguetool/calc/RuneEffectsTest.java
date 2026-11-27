@@ -89,4 +89,11 @@ class RuneEffectsTest {
         assertTrue(runes(11, Map.of(), 8010, 8112).isEmpty(), "Conqueror und Electrocute geben keine Werte");
         assertEquals(18, runes(11, Map.of(), 8347, 8347).get(StatType.SUMMONER_SPELL_HASTE), EPS, "doppelt zählt einmal");
     }
+
+    @Test
+    void jackBeschreibungNenntAdUndAp() {
+        String summary = RuneEffects.all().stream().filter(e -> e.id() == JackStacks.RUNE_ID).findFirst().orElseThrow().summary();
+        assertTrue(summary.contains("Ab 5 Stacks +4.8 AD oder +8 AP"), summary);
+        assertTrue(summary.contains("zusätzlich +7.2 AD oder +12 AP, zusammen +12 AD oder +20 AP"), summary);
+    }
 }
